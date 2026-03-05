@@ -314,6 +314,56 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
 .pb-info      { background: #dbeafe; color: #1d4ed8; }
 .pb-important { background: #fef3c7; color: #d97706; }
 .pb-urgent    { background: #fee2e2; color: #dc2626; }
+
+/* ── PET PICKER ── */
+#pet-btn {
+  position: fixed; bottom: 70px; right: 20px;
+  background: #fff; border: 2px solid #e0e0e0; border-radius: 50%;
+  width: 42px; height: 42px; font-size: 18px; cursor: pointer;
+  display: none; z-index: 50; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+#pet-btn:hover { transform: scale(1.15); box-shadow: 0 6px 18px rgba(0,0,0,0.2); }
+#pet-picker {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  display: none; align-items: center; justify-content: center; z-index: 300;
+  backdrop-filter: blur(3px);
+}
+.pet-picker-card {
+  background: #fff; border-radius: 20px; padding: 24px 28px;
+  width: 340px; box-shadow: 0 20px 60px rgba(0,0,0,0.35); text-align: center;
+}
+.pet-picker-card h3 { font-size: 17px; font-weight: 700; color: #1a1a2e; margin-bottom: 6px; }
+.pet-picker-card p  { font-size: 12px; color: #888; margin-bottom: 18px; }
+.pet-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+.pet-option {
+  padding: 12px 6px; border-radius: 14px; border: 2.5px solid #f0f0f0;
+  cursor: pointer; transition: all 0.15s; background: #fafafa;
+  font-size: 28px; text-align: center;
+}
+.pet-option:hover { border-color: #a5b4fc; background: #eef2ff; transform: scale(1.06); }
+.pet-option.selected { border-color: #4f46e5; background: #eef2ff; }
+.pet-label { display: block; font-size: 11px; color: #666; margin-top: 4px; }
+.pet-close { font-size: 12px; color: #999; cursor: pointer; background: none; border: none; font-family: inherit; }
+.btn-remove-pet { padding: 6px 14px; background: #fee2e2; color: #dc2626; border: none; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; margin-right: 8px; }
+.btn-remove-pet:hover { background: #fecaca; }
+
+/* ── PET TOOLTIP ── */
+#pet-tooltip {
+  position: fixed; background: rgba(20,20,40,0.85); color: #fff;
+  padding: 5px 10px; border-radius: 8px; font-size: 12px; font-weight: 600;
+  pointer-events: none; display: none; z-index: 500; white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+/* ── DOG MESSAGE TOAST ── */
+#dog-msg {
+  position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+  background: #1a1a2e; color: #fff; padding: 12px 22px; border-radius: 20px;
+  font-size: 14px; font-weight: 600; display: none; z-index: 500;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.4); transition: opacity 0.4s;
+  pointer-events: none;
+}
 </style>
 </head>
 <body>
@@ -485,6 +535,26 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
   <div class="toolbar-divider"></div>
   <button id="toolbar-unclaim-btn" onclick="unclaimCurrentOffice()">Unclaim</button>
 </div>
+<button id="pet-btn" onclick="openPetPicker()" title="Choose Office Pet">🐾</button>
+
+<!-- PET PICKER -->
+<div id="pet-picker">
+  <div class="pet-picker-card">
+    <h3>Choose Your Office Pet</h3>
+    <p>Your pet will wander around your office for everyone to see!</p>
+    <div class="pet-grid" id="pet-grid"></div>
+    <div>
+      <button class="btn-remove-pet" onclick="savePet(null)">Remove Pet</button>
+      <button class="pet-close" onclick="closePetPicker()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- PET TOOLTIP -->
+<div id="pet-tooltip"></div>
+<!-- DOG MESSAGE TOAST -->
+<div id="dog-msg"></div>
+
 <button id="board-btn" onclick="openAnnouncePanel()">📋 View Notice Board</button>
 
 <!-- STICKY NOTE POPUP -->
@@ -589,6 +659,29 @@ const NOTE_COLORS = ['#FEF08A','#FBCFE8','#BAE6FD','#BBF7D0'];
 const NOTE_W = 60, NOTE_H = 50;
 // Notice board world-coords (sits in HALL1: y=252–340, right side)
 const BOARD_X = 855, BOARD_Y = 259, BOARD_W = 256, BOARD_H = 68;
+
+const PET_OPTIONS = [
+  { emoji: '🐱', label: 'Cat'     },
+  { emoji: '🐶', label: 'Dog'     },
+  { emoji: '🐠', label: 'Fish'    },
+  { emoji: '🤖', label: 'Robot'   },
+  { emoji: '🐹', label: 'Hamster' },
+  { emoji: '🦜', label: 'Parrot'  },
+];
+const PET_LABEL  = Object.fromEntries(PET_OPTIONS.map(p => [p.emoji, p.label]));
+const PET_SPEED  = 0.6;
+const DOG_MSGS   = [
+  'Woof! Good work today team 🐾',
+  'Someone get me a treat 🦴',
+  'Bork bork! Stay hydrated 💧',
+  'Have you hugged a dog today? 🤗',
+  'Great meeting everyone! *tail wags* 🐾',
+  'I love this office! 🐶',
+  'Is it lunch time yet? 👀',
+];
+
+let activePets    = [];  // live pet state objects
+let dogMsgTimeout = null;
 
 let stickyNotes      = [];
 let announcements    = [];
@@ -716,6 +809,7 @@ async function doLogout() {
   document.getElementById('claim-btn').style.display     = 'none';
   document.getElementById('office-toolbar').style.display = 'none';
   document.getElementById('board-btn').style.display     = 'none';
+  document.getElementById('pet-btn').style.display       = 'none';
   showScreen('login');
 }
 
@@ -821,7 +915,8 @@ async function loadAnnouncements() {
 }
 
 async function resync() {
-  await Promise.all([loadStickyNotes(), loadAnnouncements()]);
+  await loadOffices();
+  await Promise.all([loadStickyNotes(), loadAnnouncements(), loadPets()]);
   if (document.getElementById('announce-panel').style.display === 'flex') renderAnnounceList();
 }
 
@@ -882,14 +977,16 @@ function updateClaimUI() {
   const r = currentOfficeRoom();
   const claimBtn = document.getElementById('claim-btn');
   const toolbar  = document.getElementById('office-toolbar');
-  if (!r || !currentUser) { claimBtn.style.display = 'none'; toolbar.style.display = 'none'; return; }
+  if (!r || !currentUser) { claimBtn.style.display = 'none'; toolbar.style.display = 'none'; document.getElementById('pet-btn').style.display = 'none'; return; }
   const oData = officeData[r.id];
   if (!oData) {
     claimBtn.style.display = 'block';
     toolbar.style.display  = 'none';
+    document.getElementById('pet-btn').style.display = 'none';
   } else if (oData.owner_user_id === currentUser.id) {
     claimBtn.style.display = 'none';
     toolbar.style.display  = 'flex';
+    document.getElementById('pet-btn').style.display = 'block';
     // highlight active swatches
     document.querySelectorAll('#wall-swatches .toolbar-swatch').forEach(el => {
       el.classList.toggle('tsactive', el.dataset.c === oData.wall_color);
@@ -900,6 +997,7 @@ function updateClaimUI() {
   } else {
     claimBtn.style.display = 'none';
     toolbar.style.display  = 'none';
+    document.getElementById('pet-btn').style.display = 'none';
   }
 }
 
@@ -1022,6 +1120,125 @@ async function postAnnouncement() {
   document.getElementById('ann-title').value = '';
   document.getElementById('ann-message').value = '';
   renderAnnounceList();
+}
+
+// ══════════════════════════════════════════════
+// OFFICE PETS
+// ══════════════════════════════════════════════
+function makePetState(emoji, ownerName, room, isShared = false) {
+  const margin = 28;
+  return {
+    emoji, ownerName, room, isShared,
+    x: room.x + margin + Math.random() * (room.w - margin*2),
+    y: room.y + margin + Math.random() * (room.h - margin*2),
+    vx: (Math.random() - 0.5) * PET_SPEED,
+    vy: (Math.random() - 0.5) * PET_SPEED,
+    changeIn: Math.floor(Math.random() * 150) + 60,
+    bobPhase: Math.random() * Math.PI * 2,
+  };
+}
+
+async function loadPets() {
+  // Fetch all profiles that have a pet set
+  const { data: profiles } = await sb.from('profiles').select('user_id, name, pet').not('pet', 'is', null);
+  const petMap = {};
+  for (const p of (profiles || [])) petMap[p.user_id] = { name: p.name, emoji: p.pet };
+
+  // Preserve positions of pets that still exist (avoid resetting wandering state on resync)
+  const existingById = {};
+  for (const p of activePets) {
+    const key = p.isShared ? '__games__' : p.ownerName + '|' + p.room.id;
+    existingById[key] = p;
+  }
+
+  activePets = [];
+  // Office pets — match claimed offices to their owner's pet
+  for (const [roomId, office] of Object.entries(officeData)) {
+    if (!office?.owner_user_id) continue;
+    const petInfo = petMap[office.owner_user_id];
+    if (!petInfo) continue;
+    const room = ROOMS.find(r => r.id === roomId);
+    if (!room) continue;
+    const key = petInfo.name + '|' + room.id;
+    activePets.push(existingById[key] || makePetState(petInfo.emoji, petInfo.name, room, false));
+  }
+  // Shared Games Room dog (always present)
+  const gamesRoom = ROOMS.find(r => r.id === 'games');
+  if (gamesRoom) {
+    activePets.push(existingById['__games__'] || makePetState('🐶', 'Team', gamesRoom, true));
+  }
+}
+
+function updatePets() {
+  for (const pet of activePets) {
+    pet.changeIn--;
+    if (pet.changeIn <= 0) {
+      const angle = Math.random() * Math.PI * 2;
+      const spd   = Math.random() * PET_SPEED;
+      pet.vx = Math.cos(angle) * spd;
+      pet.vy = Math.sin(angle) * spd;
+      pet.changeIn = Math.floor(Math.random() * 200) + 80;
+    }
+    const margin = 22;
+    const r = pet.room;
+    let nx = pet.x + pet.vx;
+    let ny = pet.y + pet.vy;
+    if (nx < r.x + margin)       { nx = r.x + margin;       pet.vx =  Math.abs(pet.vx); }
+    if (nx > r.x + r.w - margin) { nx = r.x + r.w - margin; pet.vx = -Math.abs(pet.vx); }
+    if (ny < r.y + margin)       { ny = r.y + margin;       pet.vy =  Math.abs(pet.vy); }
+    if (ny > r.y + r.h - margin) { ny = r.y + r.h - margin; pet.vy = -Math.abs(pet.vy); }
+    pet.x = nx; pet.y = ny;
+    pet.bobPhase += 0.055;
+  }
+}
+
+function drawPets(ctx) {
+  ctx.textAlign = 'center';
+  for (const pet of activePets) {
+    const bobY = Math.sin(pet.bobPhase) * 2.2;
+    ctx.font = '24px serif';
+    ctx.fillText(pet.emoji, pet.x, pet.y + bobY);
+  }
+}
+
+// Pet picker UI
+function openPetPicker() {
+  // Build grid
+  const grid = document.getElementById('pet-grid');
+  const current = currentProfile?.pet;
+  grid.innerHTML = PET_OPTIONS.map(p => `
+    <div class="pet-option ${p.emoji === current ? 'selected' : ''}"
+         onclick="savePet('${p.emoji}')">
+      ${p.emoji}
+      <span class="pet-label">${p.label}</span>
+    </div>
+  `).join('');
+  document.getElementById('pet-picker').style.display = 'flex';
+}
+
+function closePetPicker() {
+  document.getElementById('pet-picker').style.display = 'none';
+}
+
+async function savePet(emoji) {
+  closePetPicker();
+  await sb.from('profiles').update({ pet: emoji }).eq('user_id', currentUser.id);
+  currentProfile.pet = emoji;
+  await loadPets();
+}
+
+// Games Room dog interaction
+function showDogMessage() {
+  const msg = DOG_MSGS[Math.floor(Math.random() * DOG_MSGS.length)];
+  const el  = document.getElementById('dog-msg');
+  el.textContent = msg;
+  el.style.opacity = '1';
+  el.style.display = 'block';
+  clearTimeout(dogMsgTimeout);
+  dogMsgTimeout = setTimeout(() => {
+    el.style.opacity = '0';
+    setTimeout(() => { el.style.display = 'none'; }, 400);
+  }, 3000);
 }
 
 // ══════════════════════════════════════════════
@@ -1156,7 +1373,8 @@ async function enterGame() {
   if (currentProfile.role === 'admin') document.getElementById('hud-admin-btn').style.display = 'block';
   playerCfg = { name: currentProfile.name, skin: currentProfile.skin, outfit: currentProfile.outfit };
   initOfficeToolbar();
-  await Promise.all([loadOffices(), loadStickyNotes(), loadAnnouncements()]);
+  await loadOffices();
+  await Promise.all([loadStickyNotes(), loadAnnouncements(), loadPets()]);
   setupRealtime();
   startIdleDetection();
   updateHUD();
@@ -1459,6 +1677,28 @@ function drawWorld(ctx) {
 const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
 let scale = 1, offX = 0, offY = 0;
 
+canvas.addEventListener('mousemove', e => {
+  if (!gameRunning) return;
+  const rect = canvas.getBoundingClientRect();
+  const wx = (e.clientX - rect.left - offX) / scale;
+  const wy = (e.clientY - rect.top  - offY) / scale;
+  const tip = document.getElementById('pet-tooltip');
+  let found = null;
+  for (const pet of activePets) {
+    const dx = wx - pet.x, dy = wy - pet.y;
+    if (dx*dx + dy*dy < 22*22) { found = pet; break; }
+  }
+  if (found) {
+    const label = found.isShared ? 'Team Dog' : `${found.ownerName}'s ${PET_LABEL[found.emoji] || 'Pet'}`;
+    tip.textContent = label;
+    tip.style.display = 'block';
+    tip.style.left = (e.clientX + 14) + 'px';
+    tip.style.top  = (e.clientY - 10) + 'px';
+  } else {
+    tip.style.display = 'none';
+  }
+});
+
 canvas.addEventListener('click', e => {
   if (!currentUser) return;
   const rect = canvas.getBoundingClientRect();
@@ -1500,7 +1740,14 @@ window.addEventListener('keydown', e => {
     e.preventDefault();
     if (gameRunning) openStickyPopup();
   }
-  if (e.key === 'Escape') { closeStickyPopup(); closeAnnouncePanel(); }
+  if (e.key === 'Escape') { closeStickyPopup(); closeAnnouncePanel(); closePetPicker(); }
+  if ((e.key === 'e' || e.key === 'E') && tag !== 'INPUT' && tag !== 'TEXTAREA') {
+    const dog = activePets.find(p => p.isShared);
+    if (dog) {
+      const dx = player.x - dog.x, dy = player.y - dog.y;
+      if (dx*dx + dy*dy < 72*72) showDogMessage();
+    }
+  }
 });
 window.addEventListener('keyup', e => { keys[e.key] = false; });
 
@@ -1576,6 +1823,8 @@ function loop() {
 
   if (frame % 30 === 0) updateHUD();
 
+  updatePets();
+
   // Notice board proximity
   const dBx = player.x - (BOARD_X + BOARD_W/2), dBy = player.y - (BOARD_Y + BOARD_H/2);
   document.getElementById('board-btn').style.display = (dBx*dBx + dBy*dBy < 95*95) ? 'block' : 'none';
@@ -1587,6 +1836,8 @@ function loop() {
   ctx.scale(scale, scale);
   drawWorld(ctx);
 
+  // Pets (drawn under players)
+  drawPets(ctx);
   // Other players
   for (const p of Object.values(otherPlayers)) {
     drawChar(ctx, p.x, p.y, p.skin, p.outfit, p.name, p.status || 'active');
