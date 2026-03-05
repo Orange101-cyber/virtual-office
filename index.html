@@ -364,6 +364,72 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
   box-shadow: 0 6px 20px rgba(0,0,0,0.4); transition: opacity 0.4s;
   pointer-events: none;
 }
+
+/* ── WHITEBOARD ── */
+#wb-open-btn {
+  position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
+  background: #6366f1; color: #fff; padding: 10px 24px; border-radius: 30px;
+  font-size: 13px; font-weight: 700; border: none; cursor: pointer;
+  display: none; z-index: 50; box-shadow: 0 4px 16px rgba(99,102,241,0.45);
+  transition: background 0.2s;
+}
+#wb-open-btn:hover { background: #4f46e5; }
+#wb-overlay {
+  position: fixed; inset: 0; background: #fff; z-index: 600; display: none;
+  flex-direction: column;
+}
+#wb-toolbar {
+  display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+  background: #1a1a2e; flex-shrink: 0; flex-wrap: wrap;
+}
+#wb-toolbar .wb-label { color: #aaa; font-size: 11px; font-weight: 700; text-transform: uppercase; margin-right: 2px; }
+.wb-tool-btn {
+  padding: 6px 14px; border-radius: 20px; border: 2px solid transparent;
+  font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.15s;
+  background: rgba(255,255,255,0.1); color: #fff; font-family: inherit;
+}
+.wb-tool-btn:hover { background: rgba(255,255,255,0.2); }
+.wb-tool-btn.active { border-color: #a5b4fc; background: rgba(165,180,252,0.2); }
+.wb-color-dot {
+  width: 26px; height: 26px; border-radius: 50%; cursor: pointer;
+  border: 3px solid transparent; transition: transform 0.12s, border-color 0.12s;
+  flex-shrink: 0;
+}
+.wb-color-dot:hover { transform: scale(1.15); }
+.wb-color-dot.active { border-color: #fff; transform: scale(1.18); }
+#wb-size { width: 80px; accent-color: #6366f1; cursor: pointer; }
+#wb-canvas { flex: 1; cursor: crosshair; display: block; touch-action: none; }
+#wb-close-btn {
+  padding: 6px 16px; background: #ef4444; color: #fff; border: none;
+  border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer;
+  font-family: inherit; margin-left: auto;
+}
+#wb-close-btn:hover { background: #dc2626; }
+#wb-clear-btn {
+  padding: 6px 14px; background: rgba(239,68,68,0.15); color: #fca5a5; border: none;
+  border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit;
+}
+#wb-clear-btn:hover { background: rgba(239,68,68,0.3); }
+
+/* ── MOOD SELECTOR ── */
+.mood-section { margin-top: 10px; }
+.mood-section label { display: block; font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+#mood-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.mood-opt {
+  padding: 5px 3px; border-radius: 8px; border: 2px solid #f0f0f0;
+  cursor: pointer; transition: all 0.15s; background: #fafafa;
+  font-size: 16px; text-align: center; line-height: 1.3;
+}
+.mood-opt:hover { border-color: #a5b4fc; background: #eef2ff; transform: scale(1.05); }
+.mood-opt.selected { border-color: #4f46e5; background: #eef2ff; }
+.mood-opt-label { display: block; font-size: 9px; color: #666; margin-top: 1px; }
+
+/* ── VIBE BADGE ── */
+#vibe-badge {
+  display: inline-block; margin-left: 8px; padding: 1px 8px;
+  background: rgba(99,102,241,0.18); color: #6366f1; border-radius: 10px;
+  font-size: 11px; font-weight: 700;
+}
 </style>
 </head>
 <body>
@@ -513,11 +579,22 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
       <option value="dnd">🔴 Do Not Disturb</option>
     </select>
   </div>
+  <div class="mood-section">
+    <label>Your Mood</label>
+    <div id="mood-grid">
+      <div class="mood-opt" data-mood="energised" onclick="setMood('energised')">☀️<span class="mood-opt-label">Energised</span></div>
+      <div class="mood-opt" data-mood="focused"   onclick="setMood('focused')"  >🎯<span class="mood-opt-label">Focused</span></div>
+      <div class="mood-opt" data-mood="flowing"   onclick="setMood('flowing')"  >🌊<span class="mood-opt-label">Flowing</span></div>
+      <div class="mood-opt" data-mood="tired"     onclick="setMood('tired')"    >😴<span class="mood-opt-label">Tired</span></div>
+      <div class="mood-opt" data-mood="excited"   onclick="setMood('excited')"  >🎉<span class="mood-opt-label">Excited</span></div>
+      <div class="mood-opt" data-mood="thinking"  onclick="setMood('thinking')" >🤔<span class="mood-opt-label">Thinking</span></div>
+    </div>
+  </div>
   <button class="admin-btn" id="hud-admin-btn" style="display:none" onclick="openAdmin()">⚙️ Admin Panel</button>
   <button class="logout-btn" onclick="doLogout()">Sign Out</button>
 </div>
 
-<div id="room-tag" style="display:none">Hallway</div>
+<div id="room-tag" style="display:none">Hallway<span id="vibe-badge" style="display:none"></span></div>
 <div id="hint" style="display:none">⬆ ⬇ ⬅ ➡  Arrow keys to move<br>WASD also works</div>
 <div id="nearby-badge"></div>
 <button id="discord-btn" onclick="openDiscord()">🎙️ Join Voice Chat</button>
@@ -554,6 +631,25 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
 <div id="pet-tooltip"></div>
 <!-- DOG MESSAGE TOAST -->
 <div id="dog-msg"></div>
+
+<!-- WHITEBOARD OPEN BUTTON -->
+<button id="wb-open-btn" onclick="openWhiteboard()">✏️ Open Whiteboard</button>
+
+<!-- WHITEBOARD OVERLAY -->
+<div id="wb-overlay">
+  <div id="wb-toolbar">
+    <span class="wb-label">Tool</span>
+    <button class="wb-tool-btn active" id="wb-pen-btn"    onclick="wbSetTool('pen')">✏️ Pen</button>
+    <button class="wb-tool-btn"        id="wb-eraser-btn" onclick="wbSetTool('eraser')">🧹 Eraser</button>
+    <span class="wb-label" style="margin-left:8px">Size</span>
+    <input type="range" id="wb-size" min="2" max="40" value="6">
+    <span class="wb-label" style="margin-left:8px">Colour</span>
+    <div id="wb-colors" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    <button id="wb-clear-btn" style="margin-left:8px" onclick="wbClear()">🗑️ Clear</button>
+    <button id="wb-close-btn" onclick="closeWhiteboard()">✕ Close</button>
+  </div>
+  <canvas id="wb-canvas"></canvas>
+</div>
 
 <button id="board-btn" onclick="openAnnouncePanel()">📋 View Notice Board</button>
 
@@ -616,7 +712,7 @@ const DISCORD_CHANNELS = {
   'Office 7':  'https://discord.com/channels/1042249264123879454/1119058808073879602',
   'Office 8':  'https://discord.com/channels/1042249264123879454/1119058808073879602',
   'Office 9':  'https://discord.com/channels/1042249264123879454/1119058808073879602',
-  'Office 10': 'https://discord.com/channels/1042249264123879454/1119058808073879602',
+  '🎨 Whiteboard': 'https://discord.com/channels/1042249264123879454/1119058808073879602',
   '🍕 Lunch Room': 'https://discord.com/channels/1042249264123879454/1119058808073879602',
   '🎮 Games Room': 'https://discord.com/channels/1042249264123879454/1119058808073879602',
   'Hallway':   'https://discord.com/channels/1042249264123879454/1119058808073879602',
@@ -810,6 +906,8 @@ async function doLogout() {
   document.getElementById('office-toolbar').style.display = 'none';
   document.getElementById('board-btn').style.display     = 'none';
   document.getElementById('pet-btn').style.display       = 'none';
+  document.getElementById('wb-open-btn').style.display   = 'none';
+  document.getElementById('wb-overlay').style.display    = 'none';
   showScreen('login');
 }
 
@@ -916,8 +1014,18 @@ async function loadAnnouncements() {
 
 async function resync() {
   await loadOffices();
-  await Promise.all([loadStickyNotes(), loadAnnouncements(), loadPets()]);
+  await Promise.all([loadStickyNotes(), loadAnnouncements(), loadPets(), syncMoods()]);
   if (document.getElementById('announce-panel').style.display === 'flex') renderAnnounceList();
+}
+
+async function syncMoods() {
+  // Refresh moods of all known other players from profiles
+  const ids = Object.keys(otherPlayers);
+  if (!ids.length) return;
+  const { data } = await sb.from('profiles').select('user_id, mood').in('user_id', ids);
+  for (const row of (data || [])) {
+    if (otherPlayers[row.user_id]) otherPlayers[row.user_id].mood = row.mood ?? null;
+  }
 }
 
 function currentOfficeRoom() {
@@ -1020,6 +1128,204 @@ function initOfficeToolbar() {
     el.addEventListener('click', () => saveOfficeColor('desk_color', c));
     deskEl.appendChild(el);
   });
+}
+
+// ══════════════════════════════════════════════
+// WHITEBOARD
+// ══════════════════════════════════════════════
+const WB_COLORS = [
+  '#000000','#ffffff','#ef4444','#f97316','#eab308',
+  '#22c55e','#3b82f6','#8b5cf6','#ec4899','#6b7280',
+  '#92400e','#164e63',
+];
+let wbTool     = 'pen';
+let wbColor    = '#000000';
+let wbSize     = 6;
+let wbDrawing  = false;
+let wbSaveTimer = null;
+let wbLastX    = 0, wbLastY = 0;
+
+function initWhiteboardUI() {
+  // Build colour swatches
+  const colEl = document.getElementById('wb-colors');
+  colEl.innerHTML = '';
+  WB_COLORS.forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'wb-color-dot' + (c === wbColor ? ' active' : '');
+    d.style.background = c;
+    d.style.boxShadow = c === '#ffffff' ? 'inset 0 0 0 1px #ccc' : 'none';
+    d.title = c;
+    d.addEventListener('click', () => {
+      wbColor = c; wbTool = 'pen';
+      document.querySelectorAll('.wb-color-dot').forEach(el => el.classList.remove('active'));
+      d.classList.add('active');
+      document.getElementById('wb-pen-btn').classList.add('active');
+      document.getElementById('wb-eraser-btn').classList.remove('active');
+    });
+    colEl.appendChild(d);
+  });
+  document.getElementById('wb-size').value = wbSize;
+  document.getElementById('wb-size').oninput = e => { wbSize = +e.target.value; };
+}
+
+function wbSetTool(t) {
+  wbTool = t;
+  document.getElementById('wb-pen-btn').classList.toggle('active', t === 'pen');
+  document.getElementById('wb-eraser-btn').classList.toggle('active', t === 'eraser');
+}
+
+async function openWhiteboard() {
+  document.getElementById('wb-overlay').style.display = 'flex';
+  initWhiteboardUI();
+  const wbc = document.getElementById('wb-canvas');
+  wbc.width  = window.innerWidth;
+  wbc.height = window.innerHeight - wbc.offsetTop;
+  // Load saved state
+  await loadWhiteboardData();
+  attachWbEvents();
+}
+
+function closeWhiteboard() {
+  document.getElementById('wb-overlay').style.display = 'none';
+  clearTimeout(wbSaveTimer);
+  saveWhiteboardData(); // final save on close
+}
+
+async function loadWhiteboardData() {
+  const { data } = await sb.from('whiteboard').select('canvas_data').eq('id', 1).single();
+  if (data?.canvas_data) {
+    const img = new Image();
+    img.onload = () => {
+      const wbc = document.getElementById('wb-canvas');
+      const ctx2 = wbc.getContext('2d');
+      ctx2.drawImage(img, 0, 0);
+    };
+    img.src = data.canvas_data;
+  }
+}
+
+async function saveWhiteboardData() {
+  const wbc = document.getElementById('wb-canvas');
+  if (!wbc) return;
+  const dataUrl = wbc.toDataURL('image/png');
+  await sb.from('whiteboard').update({ canvas_data: dataUrl, updated_at: new Date().toISOString() }).eq('id', 1);
+}
+
+function scheduleSave() {
+  clearTimeout(wbSaveTimer);
+  wbSaveTimer = setTimeout(saveWhiteboardData, 10000);
+}
+
+function wbClear() {
+  if (!confirm('Clear the whiteboard for everyone?')) return;
+  const wbc = document.getElementById('wb-canvas');
+  wbc.getContext('2d').clearRect(0, 0, wbc.width, wbc.height);
+  saveWhiteboardData();
+}
+
+function attachWbEvents() {
+  const wbc    = document.getElementById('wb-canvas');
+  const ctx2   = wbc.getContext('2d');
+
+  function getPos(e) {
+    const rect = wbc.getBoundingClientRect();
+    const src  = e.touches ? e.touches[0] : e;
+    return { x: src.clientX - rect.left, y: src.clientY - rect.top };
+  }
+
+  function startDraw(e) {
+    e.preventDefault();
+    wbDrawing = true;
+    const { x, y } = getPos(e);
+    wbLastX = x; wbLastY = y;
+  }
+
+  function doDraw(e) {
+    if (!wbDrawing) return;
+    e.preventDefault();
+    const { x, y } = getPos(e);
+    ctx2.beginPath();
+    ctx2.moveTo(wbLastX, wbLastY);
+    ctx2.lineTo(x, y);
+    ctx2.strokeStyle = wbTool === 'eraser' ? '#ffffff' : wbColor;
+    ctx2.lineWidth   = wbTool === 'eraser' ? wbSize * 4 : wbSize;
+    ctx2.lineCap     = 'round';
+    ctx2.lineJoin    = 'round';
+    ctx2.globalCompositeOperation = wbTool === 'eraser' ? 'destination-out' : 'source-over';
+    ctx2.stroke();
+    wbLastX = x; wbLastY = y;
+    scheduleSave();
+  }
+
+  function endDraw() { wbDrawing = false; ctx2.globalCompositeOperation = 'source-over'; }
+
+  // Remove old listeners by cloning the canvas element
+  const fresh = wbc.cloneNode(true);
+  wbc.parentNode.replaceChild(fresh, wbc);
+  fresh.addEventListener('mousedown',  startDraw);
+  fresh.addEventListener('mousemove',  doDraw);
+  fresh.addEventListener('mouseup',    endDraw);
+  fresh.addEventListener('mouseleave', endDraw);
+  fresh.addEventListener('touchstart', startDraw, { passive: false });
+  fresh.addEventListener('touchmove',  doDraw,    { passive: false });
+  fresh.addEventListener('touchend',   endDraw);
+}
+
+// ══════════════════════════════════════════════
+// MOOD / VIBE
+// ══════════════════════════════════════════════
+const MOOD_EMOJI = {
+  energised: '☀️', focused: '🎯', flowing: '🌊',
+  tired: '😴', excited: '🎉', thinking: '🤔',
+};
+const MOOD_LABEL = {
+  energised: 'Energised', focused: 'Focused', flowing: 'Flowing',
+  tired: 'Tired', excited: 'Excited', thinking: 'Thinking',
+};
+// Mood for other players: otherPlayers already has per-player state.
+// We'll also store mood on currentProfile and broadcast via realtime.
+
+async function setMood(mood) {
+  // Toggle off if already selected
+  const next = currentProfile.mood === mood ? null : mood;
+  await sb.from('profiles').update({ mood: next }).eq('user_id', currentUser.id);
+  currentProfile.mood = next;
+  refreshMoodUI();
+  // Broadcast mood change to others via realtime
+  if (realtimeChannel) {
+    realtimeChannel.send({ type: 'broadcast', event: 'mood_update',
+      payload: { user_id: currentUser.id, mood: next } });
+  }
+}
+
+function refreshMoodUI() {
+  document.querySelectorAll('.mood-opt').forEach(el => {
+    el.classList.toggle('selected', el.dataset.mood === currentProfile?.mood);
+  });
+}
+
+function updateRoomVibe() {
+  const tag   = document.getElementById('room-tag');
+  const badge = document.getElementById('vibe-badge');
+  if (!badge) return;
+  // Collect moods of all players in the same room
+  const myRoom = roomAt(player.x, player.y);
+  const moods  = [];
+  if (currentProfile?.mood) moods.push(currentProfile.mood);
+  for (const p of Object.values(otherPlayers)) {
+    if (p.mood && roomAt(p.x, p.y) === myRoom) moods.push(p.mood);
+  }
+  if (moods.length < 2) { badge.style.display = 'none'; return; }
+  // Find majority mood
+  const counts = {};
+  moods.forEach(m => { counts[m] = (counts[m] || 0) + 1; });
+  const top = Object.entries(counts).sort((a,b) => b[1]-a[1])[0];
+  if (top[1] / moods.length >= 0.5) {
+    badge.textContent = `${MOOD_EMOJI[top[0]]} ${MOOD_LABEL[top[0]]} Room`;
+    badge.style.display = 'inline-block';
+  } else {
+    badge.style.display = 'none';
+  }
 }
 
 // ══════════════════════════════════════════════
@@ -1309,6 +1615,7 @@ function setupRealtime() {
         skin:   p.skin,
         outfit: p.outfit,
         status: p.status || 'active',
+        mood:   p.mood   ?? null,
       };
     }
     otherPlayers = updated;
@@ -1331,6 +1638,14 @@ function setupRealtime() {
     updateClaimUI();
   });
 
+  // Broadcast: mood update
+  realtimeChannel.on('broadcast', { event: 'mood_update' }, ({ payload }) => {
+    if (payload.user_id === currentUser.id) return;
+    if (otherPlayers[payload.user_id]) {
+      otherPlayers[payload.user_id].mood = payload.mood;
+    }
+  });
+
   realtimeChannel.subscribe(async status => {
     if (status === 'SUBSCRIBED') {
       await realtimeChannel.track({
@@ -1339,6 +1654,7 @@ function setupRealtime() {
         skin:    currentProfile.skin,
         outfit:  currentProfile.outfit,
         status:  myStatus,
+        mood:    currentProfile.mood ?? null,
       });
     }
   });
@@ -1379,6 +1695,7 @@ async function enterGame() {
   startIdleDetection();
   updateHUD();
   updateClaimUI();
+  refreshMoodUI();
   syncInterval = setInterval(resync, 30000);
   if (!gameRunning) { gameRunning = true; loop(); }
 }
@@ -1407,7 +1724,8 @@ const OFF_COLORS = [
   ['#FDF2F8','#FBCFE8'],
 ];
 for (let i = 0; i < 5; i++) ROOMS.push({ id:`office${i+1}`, name:`Office ${i+1}`, x:COL[i], y:ROW_TOP[0], w:COL[i+1]-COL[i], h:ROW_TOP[1]-ROW_TOP[0], floor:OFF_COLORS[i][0], accent:OFF_COLORS[i][1], type:'office' });
-for (let i = 0; i < 5; i++) ROOMS.push({ id:`office${i+6}`, name:`Office ${i+6}`, x:COL[i], y:ROW_MID[0], w:COL[i+1]-COL[i], h:ROW_MID[1]-ROW_MID[0], floor:OFF_COLORS[i+5][0], accent:OFF_COLORS[i+5][1], type:'office' });
+for (let i = 0; i < 4; i++) ROOMS.push({ id:`office${i+6}`, name:`Office ${i+6}`, x:COL[i], y:ROW_MID[0], w:COL[i+1]-COL[i], h:ROW_MID[1]-ROW_MID[0], floor:OFF_COLORS[i+5][0], accent:OFF_COLORS[i+5][1], type:'office' });
+ROOMS.push({ id:'whiteboard', name:'🎨 Whiteboard', x:COL[4], y:ROW_MID[0], w:COL[5]-COL[4], h:ROW_MID[1]-ROW_MID[0], floor:'#F0F4FF', accent:'#6366f1', type:'whiteboard' });
 ROOMS.push({ id:'lunch', name:'🍕 Lunch Room', x:54,  y:ROW_BOT[0], w:490, h:ROW_BOT[1]-ROW_BOT[0], floor:'#FFFDE7', accent:'#F9A825', type:'lunch' });
 ROOMS.push({ id:'games', name:'🎮 Games Room', x:544, y:ROW_BOT[0], w:600, h:ROW_BOT[1]-ROW_BOT[0], floor:'#E8F5E9', accent:'#43A047', type:'games' });
 
@@ -1477,6 +1795,32 @@ function drawGamesFurniture(ctx,r) {
   ctx.fillStyle='#37474F';ctx.fillRect(r.x+r.w-140,r.y+120,120,12);
   ctx.fillStyle='#333';ctx.fillRect(r.x+r.w-130,r.y+112,28,10);ctx.fillRect(r.x+r.w-94,r.y+112,28,10);
   ctx.fillStyle='rgba(255,255,255,0.5)';ctx.font='10px Segoe UI';ctx.textAlign='center';ctx.fillText('PING PONG',tx+90,ty+115);
+}
+
+function drawWhiteboardRoom(ctx, r) {
+  // Large white drawing area on the back wall
+  const bx = r.x + 18, by = r.y + 20, bw = r.w - 36, bh = r.h - 55;
+  // Frame
+  ctx.fillStyle = '#888'; ctx.fillRect(bx - 4, by - 4, bw + 8, bh + 8);
+  // Board surface
+  ctx.fillStyle = '#FAFAFA'; ctx.fillRect(bx, by, bw, bh);
+  // Subtle grid lines
+  ctx.strokeStyle = 'rgba(200,210,240,0.5)'; ctx.lineWidth = 0.5;
+  for (let gx = bx + 20; gx < bx + bw; gx += 20) {
+    ctx.beginPath(); ctx.moveTo(gx, by); ctx.lineTo(gx, by + bh); ctx.stroke();
+  }
+  for (let gy = by + 20; gy < by + bh; gy += 20) {
+    ctx.beginPath(); ctx.moveTo(bx, gy); ctx.lineTo(bx + bw, gy); ctx.stroke();
+  }
+  // Label
+  ctx.fillStyle = 'rgba(99,102,241,0.5)'; ctx.font = 'bold 13px Segoe UI'; ctx.textAlign = 'center';
+  ctx.fillText('✏️ Shared Whiteboard', r.x + r.w/2, r.y + r.h - 18);
+  // Tray at bottom of board
+  ctx.fillStyle = '#ccc'; ctx.fillRect(bx, by + bh, bw, 6);
+  // Marker dots on tray
+  ['#e74c3c','#2980b9','#27ae60','#000'].forEach((c, i) => {
+    ctx.fillStyle = c; ctx.fillRect(bx + 12 + i*14, by + bh + 1, 8, 4);
+  });
 }
 
 function drawStickyNotes(ctx) {
@@ -1594,7 +1938,7 @@ function drawDoorLabels(ctx) {
   });
 }
 
-function drawChar(ctx, x, y, skin, outfit, name, status, isPlayer=false, isMoving=false) {
+function drawChar(ctx, x, y, skin, outfit, name, status, isPlayer=false, isMoving=false, mood=null) {
   // Shadow
   ctx.fillStyle = 'rgba(0,0,0,0.12)';
   ctx.beginPath(); ctx.ellipse(x+2,y+PR+1,PR*0.75,PR*0.32,0,0,Math.PI*2); ctx.fill();
@@ -1634,6 +1978,11 @@ function drawChar(ctx, x, y, skin, outfit, name, status, isPlayer=false, isMovin
   const sc = STATUS[status] ? STATUS[status].color : '#22c55e';
   ctx.fillStyle = sc;
   ctx.beginPath(); ctx.arc(tagX + tagW - 7, tagY + tagH/2, 4, 0, Math.PI*2); ctx.fill();
+  // Mood emoji floating above name tag
+  if (mood && MOOD_EMOJI[mood]) {
+    ctx.font = '13px serif'; ctx.textAlign = 'center';
+    ctx.fillText(MOOD_EMOJI[mood], x + tagW/2 - 6, tagY - 4);
+  }
 }
 
 function rrect(ctx,x,y,w,h,r) {
@@ -1660,8 +2009,9 @@ function drawWorld(ctx) {
     ctx.fillStyle = 'rgba(60,60,80,0.55)'; ctx.font = 'bold 12px Segoe UI'; ctx.textAlign = 'center';
     ctx.fillText(r.name, r.x+r.w/2, r.y+WT/2+16);
     if (r.type==='office') drawOfficeFurniture(ctx,r,oData?.desk_color);
-    if (r.type==='lunch')  drawLunchFurniture(ctx,r);
-    if (r.type==='games')  drawGamesFurniture(ctx,r);
+    if (r.type==='lunch')       drawLunchFurniture(ctx,r);
+    if (r.type==='games')       drawGamesFurniture(ctx,r);
+    if (r.type==='whiteboard')  drawWhiteboardRoom(ctx,r);
     if (oData && r.type==='office') drawOfficeNameplate(ctx, r, oData.owner_name);
   });
   drawDoorLabels(ctx);
@@ -1731,7 +2081,22 @@ function resize() {
   offX  = (window.innerWidth  - WW * scale) / 2;
   offY  = (window.innerHeight - WH * scale) / 2;
 }
-window.addEventListener('resize', resize);
+window.addEventListener('resize', () => {
+  resize();
+  // Resize wb-canvas if overlay is open (preserve drawing by copying to temp)
+  const wbOverlay = document.getElementById('wb-overlay');
+  if (wbOverlay.style.display === 'flex') {
+    const wbc = document.getElementById('wb-canvas');
+    if (wbc) {
+      const tmp = document.createElement('canvas');
+      tmp.width = wbc.width; tmp.height = wbc.height;
+      tmp.getContext('2d').drawImage(wbc, 0, 0);
+      wbc.width = window.innerWidth;
+      wbc.height = window.innerHeight - wbc.offsetTop;
+      wbc.getContext('2d').drawImage(tmp, 0, 0);
+    }
+  }
+});
 window.addEventListener('keydown', e => {
   keys[e.key] = true;
   if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
@@ -1740,7 +2105,7 @@ window.addEventListener('keydown', e => {
     e.preventDefault();
     if (gameRunning) openStickyPopup();
   }
-  if (e.key === 'Escape') { closeStickyPopup(); closeAnnouncePanel(); closePetPicker(); }
+  if (e.key === 'Escape') { closeStickyPopup(); closeAnnouncePanel(); closePetPicker(); closeWhiteboard(); }
   if ((e.key === 'e' || e.key === 'E') && tag !== 'INPUT' && tag !== 'TEXTAREA') {
     const dog = activePets.find(p => p.isShared);
     if (dog) {
@@ -1829,6 +2194,13 @@ function loop() {
   const dBx = player.x - (BOARD_X + BOARD_W/2), dBy = player.y - (BOARD_Y + BOARD_H/2);
   document.getElementById('board-btn').style.display = (dBx*dBx + dBy*dBy < 95*95) ? 'block' : 'none';
 
+  // Whiteboard room button
+  document.getElementById('wb-open-btn').style.display =
+    (currentRoom === '🎨 Whiteboard') ? 'block' : 'none';
+
+  // Room vibe indicator
+  if (frame % 60 === 0) updateRoomVibe();
+
   // Draw
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.save();
@@ -1840,10 +2212,10 @@ function loop() {
   drawPets(ctx);
   // Other players
   for (const p of Object.values(otherPlayers)) {
-    drawChar(ctx, p.x, p.y, p.skin, p.outfit, p.name, p.status || 'active');
+    drawChar(ctx, p.x, p.y, p.skin, p.outfit, p.name, p.status || 'active', false, false, p.mood);
   }
   // Local player
-  drawChar(ctx, player.x, player.y, playerCfg.skin, playerCfg.outfit, playerCfg.name, myStatus, true, isMoving);
+  drawChar(ctx, player.x, player.y, playerCfg.skin, playerCfg.outfit, playerCfg.name, myStatus, true, isMoving, currentProfile?.mood);
 
   ctx.restore();
   requestAnimationFrame(loop);
