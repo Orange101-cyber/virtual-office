@@ -240,6 +240,80 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
   font-weight: 700; cursor: pointer; white-space: nowrap;
 }
 #toolbar-unclaim-btn:hover { background: #fee2e2; }
+
+/* ── STICKY NOTE POPUP ── */
+#sticky-popup {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; z-index: 200;
+  backdrop-filter: blur(3px);
+}
+.sticky-card {
+  width: 270px; padding: 16px; border-radius: 2px;
+  box-shadow: 5px 5px 20px rgba(0,0,0,0.3), -2px -2px 8px rgba(0,0,0,0.08);
+}
+.sticky-card h3 { font-size: 13px; font-weight: 700; margin-bottom: 10px; color: #444; }
+.sticky-card textarea {
+  width: 100%; height: 78px; border: none; background: transparent;
+  font-size: 13px; resize: none; font-family: 'Segoe UI', Tahoma, sans-serif;
+  outline: none; color: #333; line-height: 1.5; box-sizing: border-box;
+}
+.sticky-char { font-size: 10px; color: rgba(0,0,0,0.4); text-align: right; margin-bottom: 8px; }
+.sticky-footer { display: flex; justify-content: flex-end; gap: 8px; }
+.sticky-cancel { padding: 6px 14px; background: transparent; border: 1px solid rgba(0,0,0,0.2); border-radius: 6px; font-size: 12px; cursor: pointer; font-family: inherit; }
+.sticky-submit { padding: 6px 14px; background: rgba(0,0,0,0.15); border: none; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.sticky-submit:hover { background: rgba(0,0,0,0.25); }
+
+/* ── NOTICE BOARD BUTTON ── */
+#board-btn {
+  position: fixed; bottom: 120px; left: 50%; transform: translateX(-50%);
+  background: #78350f; color: #FEF9C3; padding: 10px 22px;
+  border-radius: 30px; font-size: 13px; font-weight: 700;
+  border: none; cursor: pointer; display: none; z-index: 50;
+  box-shadow: 0 4px 16px rgba(120,53,15,0.4); transition: background 0.2s;
+}
+#board-btn:hover { background: #92400e; }
+
+/* ── ANNOUNCEMENT PANEL ── */
+#announce-panel {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 400;
+  backdrop-filter: blur(4px);
+}
+.announce-card {
+  background: #fff; border-radius: 20px; padding: 28px 32px;
+  width: 560px; max-height: 82vh; overflow-y: auto;
+  box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+}
+.announce-card h2 { font-size: 20px; color: #1a1a2e; margin-bottom: 4px; }
+.announce-card .subtitle { color: #888; font-size: 13px; margin-bottom: 20px; }
+.announce-close { float: right; background: none; border: none; font-size: 22px; cursor: pointer; color: #888; margin-top: -8px; }
+.announce-form { background: #f9f9f9; border-radius: 12px; padding: 14px 16px; margin-bottom: 18px; }
+.announce-form h3 { font-size: 13px; font-weight: 700; color: #444; margin-bottom: 10px; }
+.announce-input {
+  width: 100%; padding: 8px 12px; border: 1.5px solid #e8e8e8; border-radius: 8px;
+  font-size: 13px; margin-bottom: 8px; outline: none; font-family: inherit; box-sizing: border-box;
+}
+.announce-input:focus { border-color: #4f46e5; }
+.announce-priority-row { display: flex; gap: 6px; margin-bottom: 10px; }
+.priority-opt {
+  padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700;
+  cursor: pointer; border: 2px solid transparent; transition: all 0.15s; font-family: inherit;
+}
+.priority-opt.selected { border-color: #1a1a2e; }
+.p-info     { background: #dbeafe; color: #1d4ed8; }
+.p-important{ background: #fef3c7; color: #d97706; }
+.p-urgent   { background: #fee2e2; color: #dc2626; }
+.btn-post { padding: 8px 18px; background: #4f46e5; color: white; border: none; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.btn-post:hover { background: #4338ca; }
+.announce-item { border: 1px solid #f0f0f0; border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+.announce-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.announce-title-text { font-size: 15px; font-weight: 700; color: #1a1a2e; flex: 1; }
+.announce-msg { font-size: 13px; color: #555; line-height: 1.5; white-space: pre-wrap; }
+.announce-date { font-size: 11px; color: #aaa; margin-top: 6px; }
+.priority-badge { padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; flex-shrink: 0; }
+.pb-info      { background: #dbeafe; color: #1d4ed8; }
+.pb-important { background: #fef3c7; color: #d97706; }
+.pb-urgent    { background: #fee2e2; color: #dc2626; }
 </style>
 </head>
 <body>
@@ -411,6 +485,43 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
   <div class="toolbar-divider"></div>
   <button id="toolbar-unclaim-btn" onclick="unclaimCurrentOffice()">Unclaim</button>
 </div>
+<button id="board-btn" onclick="openAnnouncePanel()">📋 View Notice Board</button>
+
+<!-- STICKY NOTE POPUP -->
+<div id="sticky-popup">
+  <div class="sticky-card" id="sticky-card-inner">
+    <h3>📌 Sticky Note</h3>
+    <textarea id="sticky-text" maxlength="80" placeholder="Write your note… (80 chars max)"
+      oninput="document.getElementById('sticky-char-left').textContent=80-this.value.length"></textarea>
+    <div class="sticky-char"><span id="sticky-char-left">80</span> characters left</div>
+    <div class="sticky-footer">
+      <button class="sticky-cancel" onclick="closeStickyPopup()">Cancel</button>
+      <button class="sticky-submit" onclick="submitStickyNote()">Pin it!</button>
+    </div>
+  </div>
+</div>
+
+<!-- ANNOUNCEMENT PANEL -->
+<div id="announce-panel">
+  <div class="announce-card">
+    <button class="announce-close" onclick="closeAnnouncePanel()">✕</button>
+    <h2>📋 Notice Board</h2>
+    <p class="subtitle">Team announcements and updates</p>
+    <div id="announce-admin-form" class="announce-form" style="display:none">
+      <h3>Post Announcement</h3>
+      <input class="announce-input" id="ann-title" type="text" placeholder="Title…" maxlength="80" />
+      <textarea class="announce-input" id="ann-message" rows="3" placeholder="Message…" maxlength="500" style="resize:none;height:70px"></textarea>
+      <div class="announce-priority-row">
+        <button class="priority-opt p-info selected" data-p="info" onclick="selectPriority('info')">ℹ️ Info</button>
+        <button class="priority-opt p-important" data-p="important" onclick="selectPriority('important')">⚠️ Important</button>
+        <button class="priority-opt p-urgent" data-p="urgent" onclick="selectPriority('urgent')">🔴 Urgent</button>
+      </div>
+      <button class="btn-post" onclick="postAnnouncement()">Post →</button>
+    </div>
+    <div id="announce-list"></div>
+  </div>
+</div>
+
 <canvas id="c"></canvas>
 
 <script>
@@ -473,6 +584,18 @@ let officeData = {};  // { room_id: { owner_user_id, owner_name, wall_color, des
 
 const WALL_COLORS = ['#EFF6FF','#F0FDF4','#FFF7ED','#FDF4FF','#FFF1F2','#ECFEFF','#FEFCE8','#F8F4F0'];
 const DESK_COLORS = ['#C8A97E','#D4B896','#E8C99A','#A07850','#8B6B4A','#6B4C2A'];
+
+const NOTE_COLORS = ['#FEF08A','#FBCFE8','#BAE6FD','#BBF7D0'];
+const NOTE_W = 60, NOTE_H = 50;
+// Notice board world-coords (sits in HALL1: y=252–340, right side)
+const BOARD_X = 855, BOARD_Y = 259, BOARD_W = 256, BOARD_H = 68;
+
+let stickyNotes      = [];
+let announcements    = [];
+let syncInterval     = null;
+let selectedPriority = 'info';
+let pendingStickyRoom  = null;
+let pendingStickyColor = '#FEF08A';
 
 // ══════════════════════════════════════════════
 // SCREEN MANAGEMENT
@@ -583,13 +706,16 @@ async function doLogout() {
   teardownRealtime();
   await sb.auth.signOut();
   currentUser = null; currentProfile = null; officeData = {};
-  document.getElementById('hud').style.display      = 'none';
-  document.getElementById('room-tag').style.display = 'none';
-  document.getElementById('hint').style.display     = 'none';
+  stickyNotes = []; announcements = [];
+  clearInterval(syncInterval); syncInterval = null;
+  document.getElementById('hud').style.display           = 'none';
+  document.getElementById('room-tag').style.display      = 'none';
+  document.getElementById('hint').style.display          = 'none';
   document.getElementById('nearby-badge').style.display  = 'none';
   document.getElementById('discord-btn').style.display   = 'none';
   document.getElementById('claim-btn').style.display     = 'none';
   document.getElementById('office-toolbar').style.display = 'none';
+  document.getElementById('board-btn').style.display     = 'none';
   showScreen('login');
 }
 
@@ -682,6 +808,21 @@ async function loadOffices() {
   const { data } = await sb.from('offices').select('*');
   officeData = {};
   if (data) data.forEach(o => { officeData[o.room_id] = o; });
+}
+
+async function loadStickyNotes() {
+  const { data } = await sb.from('sticky_notes').select('*');
+  stickyNotes = data || [];
+}
+
+async function loadAnnouncements() {
+  const { data } = await sb.from('announcements').select('*').order('created_at', { ascending: false });
+  announcements = data || [];
+}
+
+async function resync() {
+  await Promise.all([loadStickyNotes(), loadAnnouncements()]);
+  if (document.getElementById('announce-panel').style.display === 'flex') renderAnnounceList();
 }
 
 function currentOfficeRoom() {
@@ -781,6 +922,106 @@ function initOfficeToolbar() {
     el.addEventListener('click', () => saveOfficeColor('desk_color', c));
     deskEl.appendChild(el);
   });
+}
+
+// ══════════════════════════════════════════════
+// STICKY NOTES
+// ══════════════════════════════════════════════
+function openStickyPopup() {
+  if (document.getElementById('sticky-popup').style.display === 'flex') return;
+  if (!currentRoom || currentRoom === 'Hallway') return;
+  const room = ROOMS.find(r => r.name === currentRoom);
+  if (!room) return;
+  pendingStickyRoom  = room;
+  pendingStickyColor = NOTE_COLORS[Math.floor(Math.random() * NOTE_COLORS.length)];
+  const card = document.getElementById('sticky-card-inner');
+  card.style.background = pendingStickyColor;
+  document.getElementById('sticky-text').value = '';
+  document.getElementById('sticky-char-left').textContent = '80';
+  document.getElementById('sticky-popup').style.display = 'flex';
+  setTimeout(() => document.getElementById('sticky-text').focus(), 50);
+}
+
+function closeStickyPopup() {
+  document.getElementById('sticky-popup').style.display = 'none';
+  pendingStickyRoom = null;
+}
+
+async function submitStickyNote() {
+  const text = document.getElementById('sticky-text').value.trim();
+  if (!text || !pendingStickyRoom) { closeStickyPopup(); return; }
+  const r = pendingStickyRoom;
+  // Position near player, clamped inside room with margin
+  const nx = Math.max(r.x + NOTE_W/2 + 10,
+               Math.min(player.x + (Math.random()-0.5)*30, r.x + r.w - NOTE_W/2 - 10));
+  const ny = Math.max(r.y + NOTE_H/2 + 18,
+               Math.min(player.y + (Math.random()-0.5)*20, r.y + r.h - NOTE_H/2 - 10));
+  const note = {
+    user_id: currentUser.id, author_name: currentProfile.name,
+    message: text, room_id: r.id, x: nx, y: ny, color: pendingStickyColor,
+  };
+  const { data, error } = await sb.from('sticky_notes').insert(note).select().single();
+  if (error) { alert('Could not save note: ' + error.message); return; }
+  stickyNotes.push(data);
+  closeStickyPopup();
+}
+
+async function deleteStickyNote(noteId) {
+  await sb.from('sticky_notes').delete().eq('id', noteId);
+  stickyNotes = stickyNotes.filter(n => n.id !== noteId);
+}
+
+// ══════════════════════════════════════════════
+// ANNOUNCEMENTS
+// ══════════════════════════════════════════════
+function openAnnouncePanel() {
+  document.getElementById('announce-admin-form').style.display =
+    currentProfile?.role === 'admin' ? 'block' : 'none';
+  renderAnnounceList();
+  document.getElementById('announce-panel').style.display = 'flex';
+}
+
+function closeAnnouncePanel() {
+  document.getElementById('announce-panel').style.display = 'none';
+}
+
+function renderAnnounceList() {
+  const listEl = document.getElementById('announce-list');
+  if (!announcements.length) {
+    listEl.innerHTML = '<div class="empty-state">No announcements yet. Check back later!</div>';
+    return;
+  }
+  const pbMap = { info: 'pb-info', important: 'pb-important', urgent: 'pb-urgent' };
+  const plMap = { info: 'ℹ️ Info', important: '⚠️ Important', urgent: '🔴 Urgent' };
+  listEl.innerHTML = announcements.map(a => `
+    <div class="announce-item">
+      <div class="announce-header">
+        <span class="priority-badge ${pbMap[a.priority]||'pb-info'}">${plMap[a.priority]||'Info'}</span>
+        <span class="announce-title-text">${a.title.replace(/</g,'&lt;')}</span>
+      </div>
+      <div class="announce-msg">${a.message.replace(/</g,'&lt;')}</div>
+      <div class="announce-date">${new Date(a.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}</div>
+    </div>
+  `).join('');
+}
+
+function selectPriority(p) {
+  selectedPriority = p;
+  document.querySelectorAll('.priority-opt').forEach(el =>
+    el.classList.toggle('selected', el.dataset.p === p));
+}
+
+async function postAnnouncement() {
+  const title   = document.getElementById('ann-title').value.trim();
+  const message = document.getElementById('ann-message').value.trim();
+  if (!title || !message) return;
+  const { data, error } = await sb.from('announcements')
+    .insert({ title, message, priority: selectedPriority }).select().single();
+  if (error) { alert('Could not post: ' + error.message); return; }
+  announcements.unshift(data);
+  document.getElementById('ann-title').value = '';
+  document.getElementById('ann-message').value = '';
+  renderAnnounceList();
 }
 
 // ══════════════════════════════════════════════
@@ -915,11 +1156,12 @@ async function enterGame() {
   if (currentProfile.role === 'admin') document.getElementById('hud-admin-btn').style.display = 'block';
   playerCfg = { name: currentProfile.name, skin: currentProfile.skin, outfit: currentProfile.outfit };
   initOfficeToolbar();
-  await loadOffices();
+  await Promise.all([loadOffices(), loadStickyNotes(), loadAnnouncements()]);
   setupRealtime();
   startIdleDetection();
   updateHUD();
   updateClaimUI();
+  syncInterval = setInterval(resync, 30000);
   if (!gameRunning) { gameRunning = true; loop(); }
 }
 
@@ -1017,6 +1259,86 @@ function drawGamesFurniture(ctx,r) {
   ctx.fillStyle='#37474F';ctx.fillRect(r.x+r.w-140,r.y+120,120,12);
   ctx.fillStyle='#333';ctx.fillRect(r.x+r.w-130,r.y+112,28,10);ctx.fillRect(r.x+r.w-94,r.y+112,28,10);
   ctx.fillStyle='rgba(255,255,255,0.5)';ctx.font='10px Segoe UI';ctx.textAlign='center';ctx.fillText('PING PONG',tx+90,ty+115);
+}
+
+function drawStickyNotes(ctx) {
+  for (const note of stickyNotes) {
+    const nx = note.x, ny = note.y, hw = NOTE_W/2, hh = NOTE_H/2;
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.14)';
+    ctx.fillRect(nx - hw + 3, ny - hh + 3, NOTE_W, NOTE_H);
+    // Body
+    ctx.fillStyle = note.color || '#FEF08A';
+    ctx.fillRect(nx - hw, ny - hh, NOTE_W, NOTE_H);
+    // Header strip
+    ctx.fillStyle = 'rgba(0,0,0,0.10)';
+    ctx.fillRect(nx - hw, ny - hh, NOTE_W, 13);
+    // Author
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.font = 'bold 7px Segoe UI'; ctx.textAlign = 'center';
+    const auth = note.author_name.length > 9 ? note.author_name.slice(0,8) + '…' : note.author_name;
+    ctx.fillText(auth, nx, ny - hh + 9);
+    // Message with word wrap (max 3 lines)
+    ctx.fillStyle = '#333'; ctx.font = '8px Segoe UI'; ctx.textAlign = 'left';
+    const words = note.message.split(' ');
+    let line = '', lineY = ny - hh + 22, lines = 0;
+    for (const word of words) {
+      const test = line ? line + ' ' + word : word;
+      if (ctx.measureText(test).width > NOTE_W - 8 && line) {
+        ctx.fillText(line, nx - hw + 4, lineY);
+        line = word; lineY += 9; lines++;
+        if (lines >= 3) { ctx.fillText(line + (word !== words[words.length-1] ? '…' : ''), nx-hw+4, lineY); line = ''; break; }
+      } else { line = test; }
+    }
+    if (line && lines < 3) ctx.fillText(line, nx - hw + 4, lineY);
+  }
+}
+
+function drawNoticeBoard(ctx) {
+  const bx = BOARD_X, by = BOARD_Y, bw = BOARD_W, bh = BOARD_H;
+  // Wooden frame
+  ctx.fillStyle = '#5C3311'; ctx.fillRect(bx - 5, by - 5, bw + 10, bh + 10);
+  // Cork surface
+  const grad = ctx.createLinearGradient(bx, by, bx, by + bh);
+  grad.addColorStop(0, '#C97B2C'); grad.addColorStop(1, '#A0621A');
+  ctx.fillStyle = grad; ctx.fillRect(bx, by, bw, bh);
+  // Cork texture dots
+  ctx.fillStyle = 'rgba(0,0,0,0.06)';
+  for (let i = 0; i < 18; i++) {
+    ctx.beginPath(); ctx.arc(bx + (i * 31 + 10) % bw, by + (i * 17 + 8) % bh, 2.5, 0, Math.PI*2); ctx.fill();
+  }
+  // Header strip
+  ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fillRect(bx, by, bw, 16);
+  ctx.fillStyle = '#FEF9C3'; ctx.font = 'bold 9px Segoe UI'; ctx.textAlign = 'center';
+  ctx.fillText('📋  TEAM NOTICE BOARD', bx + bw/2, by + 11);
+  // Latest 3 announcements as mini pinned notes
+  const latest = announcements.slice(0, 3);
+  const bgMap = { info: '#BAE6FD', important: '#FEF08A', urgent: '#FECDD3' };
+  latest.forEach((ann, i) => {
+    const nw = Math.floor((bw - 16) / 3) - 4, nh = bh - 24;
+    const nx = bx + 8 + i * (nw + 4), ny = by + 20;
+    ctx.fillStyle = bgMap[ann.priority] || '#FEF08A'; ctx.fillRect(nx, ny, nw, nh);
+    // Pin
+    ctx.fillStyle = '#EF4444'; ctx.beginPath(); ctx.arc(nx + nw/2, ny, 3.5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#FCA5A5'; ctx.beginPath(); ctx.arc(nx + nw/2 - 1, ny - 1, 1.5, 0, Math.PI*2); ctx.fill();
+    // Title
+    ctx.fillStyle = '#1a1a2e'; ctx.font = 'bold 7px Segoe UI'; ctx.textAlign = 'left';
+    let t = ann.title;
+    while (ctx.measureText(t).width > nw - 4 && t.length) t = t.slice(0, -1);
+    if (t !== ann.title) t += '…';
+    ctx.fillText(t, nx + 2, ny + 10);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.font = '5.5px Segoe UI';
+    ctx.fillText('click to read', nx + 2, ny + nh - 2);
+  });
+  if (!latest.length) {
+    ctx.fillStyle = 'rgba(255,249,195,0.65)'; ctx.font = '9px Segoe UI'; ctx.textAlign = 'center';
+    ctx.fillText('No announcements yet', bx + bw/2, by + bh/2 + 8);
+  }
+  // Corner pins
+  [bx + 16, bx + bw - 16].forEach(px => {
+    ctx.fillStyle = '#EF4444'; ctx.beginPath(); ctx.arc(px, by + 4, 4.5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#FCA5A5'; ctx.beginPath(); ctx.arc(px - 1, by + 3, 1.5, 0, Math.PI*2); ctx.fill();
+  });
 }
 
 function drawOfficeNameplate(ctx, r, ownerName) {
@@ -1125,6 +1447,8 @@ function drawWorld(ctx) {
     if (oData && r.type==='office') drawOfficeNameplate(ctx, r, oData.owner_name);
   });
   drawDoorLabels(ctx);
+  drawStickyNotes(ctx);
+  drawNoticeBoard(ctx);
   ctx.fillStyle = '#383848'; WALLS.forEach(w => ctx.fillRect(w.x,w.y,w.w,w.h));
   ctx.strokeStyle = '#1e1e2e'; ctx.lineWidth = 12; ctx.strokeRect(54,54,WW-108,WH-108);
 }
@@ -1134,6 +1458,27 @@ function drawWorld(ctx) {
 // ══════════════════════════════════════════════
 const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
 let scale = 1, offX = 0, offY = 0;
+
+canvas.addEventListener('click', e => {
+  if (!currentUser) return;
+  const rect = canvas.getBoundingClientRect();
+  const wx = (e.clientX - rect.left - offX) / scale;
+  const wy = (e.clientY - rect.top  - offY) / scale;
+  // Own sticky notes → delete on click
+  for (const note of stickyNotes) {
+    if (wx >= note.x - NOTE_W/2 && wx <= note.x + NOTE_W/2 &&
+        wy >= note.y - NOTE_H/2 && wy <= note.y + NOTE_H/2) {
+      if (note.user_id === currentUser.id) {
+        if (confirm('Delete your sticky note?')) deleteStickyNote(note.id);
+      }
+      return;
+    }
+  }
+  // Click notice board → open panel
+  if (wx >= BOARD_X && wx <= BOARD_X + BOARD_W && wy >= BOARD_Y && wy <= BOARD_Y + BOARD_H) {
+    openAnnouncePanel();
+  }
+});
 const OFF_CX_START = COL.slice(0,5).map((x,i) => x + (COL[i+1]-COL[i])/2);
 let player    = { x: OFF_CX_START[0], y: ROW_TOP[0] + 100 };
 let playerCfg = { name: 'Player', skin: '#FDBCB4', outfit: '#4f46e5' };
@@ -1147,8 +1492,17 @@ function resize() {
   offY  = (window.innerHeight - WH * scale) / 2;
 }
 window.addEventListener('resize', resize);
-window.addEventListener('keydown', e => { keys[e.key]=true;  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault(); });
-window.addEventListener('keyup',   e => { keys[e.key]=false; });
+window.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
+  const tag = document.activeElement?.tagName?.toUpperCase();
+  if ((e.key === ' ' || e.code === 'Space') && tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+    e.preventDefault();
+    if (gameRunning) openStickyPopup();
+  }
+  if (e.key === 'Escape') { closeStickyPopup(); closeAnnouncePanel(); }
+});
+window.addEventListener('keyup', e => { keys[e.key] = false; });
 
 // ══════════════════════════════════════════════
 // HUD UPDATE
@@ -1221,6 +1575,10 @@ function loop() {
   }
 
   if (frame % 30 === 0) updateHUD();
+
+  // Notice board proximity
+  const dBx = player.x - (BOARD_X + BOARD_W/2), dBy = player.y - (BOARD_Y + BOARD_H/2);
+  document.getElementById('board-btn').style.display = (dBx*dBx + dBy*dBy < 95*95) ? 'block' : 'none';
 
   // Draw
   ctx.clearRect(0, 0, canvas.width, canvas.height);
