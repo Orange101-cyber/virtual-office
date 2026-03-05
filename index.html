@@ -725,7 +725,7 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
 
 <div id="room-tag" style="display:none">Hallway<span id="vibe-badge" style="display:none"></span></div>
 <div id="hint" style="display:none">⬆ ⬇ ⬅ ➡  Arrow keys to move<br>WASD also works</div>
-<div id="version-tag">v1.2 — 6 Mar 2026</div>
+<div id="version-tag">v1.3 — 6 Mar 2026</div>
 <div id="nearby-badge"></div>
 <button id="discord-btn" onclick="openDiscord()">🎙️ Join Voice Chat</button>
 <button id="claim-btn" onclick="claimCurrentOffice()">🏠 Claim This Office</button>
@@ -1420,9 +1420,9 @@ async function openWhiteboard() {
   const toolbar = document.getElementById('wb-toolbar');
   wbc.width  = window.innerWidth;
   wbc.height = window.innerHeight - toolbar.getBoundingClientRect().height;
-  // Load saved state
-  await loadWhiteboardData();
+  // Attach events first (clones canvas), then load draws onto the live element
   attachWbEvents();
+  await loadWhiteboardData();
 }
 
 function closeWhiteboard() {
@@ -1464,15 +1464,18 @@ function wbClear() {
 }
 
 function attachWbEvents() {
-  const wbc    = document.getElementById('wb-canvas');
-  const ctx2   = wbc.getContext('2d');
+  const wbc = document.getElementById('wb-canvas');
+
+  // Clone to drop any stale listeners, then get ctx2 from the LIVE element
+  const fresh = wbc.cloneNode(true);
+  wbc.parentNode.replaceChild(fresh, wbc);
+  const ctx2 = fresh.getContext('2d');
 
   function getPos(e) {
-    const el   = e.currentTarget;
-    const rect = el.getBoundingClientRect();
+    const rect = fresh.getBoundingClientRect();
     const src  = e.touches ? e.touches[0] : e;
-    const scaleX = el.width  / rect.width;
-    const scaleY = el.height / rect.height;
+    const scaleX = fresh.width  / rect.width;
+    const scaleY = fresh.height / rect.height;
     return {
       x: (src.clientX - rect.left) * scaleX,
       y: (src.clientY - rect.top)  * scaleY,
@@ -1505,9 +1508,6 @@ function attachWbEvents() {
 
   function endDraw() { wbDrawing = false; ctx2.globalCompositeOperation = 'source-over'; }
 
-  // Remove old listeners by cloning the canvas element
-  const fresh = wbc.cloneNode(true);
-  wbc.parentNode.replaceChild(fresh, wbc);
   fresh.addEventListener('mousedown',  startDraw);
   fresh.addEventListener('mousemove',  doDraw);
   fresh.addEventListener('mouseup',    endDraw);
