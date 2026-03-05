@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Virtual Office</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f172a; color: #1e293b; overflow: hidden; height: 100vh; }
+
+/* ── SCREENS ── */
+.screen { position: fixed; inset: 0; display: none; z-index: 10; }
+.screen.active { display: flex; align-items: center; justify-content: center; }
+#screen-game.active { display: block; }
+
+/* ── AUTH BACKGROUNDS ── */
+#screen-login, #screen-signup {
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 60%, #0f172a 100%);
+}
+
+/* ── AUTH CARD ── */
+.auth-card {
+  background: #fff; border-radius: 20px; padding: 40px 44px;
+  width: 480px; max-height: 92vh; overflow-y: auto;
+  box-shadow: 0 30px 80px rgba(0,0,0,0.55);
+  scrollbar-width: thin;
+}
+.auth-card h1 { font-size: 24px; color: #0f172a; margin-bottom: 4px; }
+.auth-card .sub { color: #94a3b8; font-size: 14px; margin-bottom: 28px; line-height: 1.5; }
+.field { margin-bottom: 18px; }
+.field label { display: block; font-size: 11px; font-weight: 700; color: #64748b; margin-bottom: 7px; text-transform: uppercase; letter-spacing: 0.6px; }
+.field input[type="text"], .field input[type="password"] {
+  width: 100%; padding: 11px 14px; border: 2px solid #e2e8f0; border-radius: 10px;
+  font-size: 14px; outline: none; transition: border-color 0.2s; color: #0f172a; font-family: inherit;
+}
+.field input:focus { border-color: #6366f1; }
+.errmsg { color: #ef4444; font-size: 12px; margin-top: 5px; display: none; }
+.errmsg.show { display: block; }
+.btn-primary {
+  width: 100%; padding: 13px; background: #6366f1; color: white;
+  border: none; border-radius: 10px; font-size: 15px; font-weight: 700;
+  cursor: pointer; margin-top: 6px; transition: background 0.2s, transform 0.1s; font-family: inherit;
+}
+.btn-primary:hover { background: #4f46e5; }
+.btn-primary:active { transform: scale(0.98); }
+.btn-primary:disabled { background: #a5b4fc; cursor: not-allowed; }
+.btn-secondary {
+  background: none; border: 2px solid #e2e8f0; border-radius: 10px;
+  padding: 10px 18px; font-size: 13px; font-weight: 600; cursor: pointer;
+  color: #64748b; transition: all 0.2s; font-family: inherit;
+}
+.btn-secondary:hover { border-color: #6366f1; color: #6366f1; }
+.auth-link { text-align: center; margin-top: 18px; font-size: 13px; color: #94a3b8; }
+.auth-link a { color: #6366f1; font-weight: 600; cursor: pointer; }
+.auth-link a:hover { text-decoration: underline; }
+.divider { border: none; border-top: 1px solid #f1f5f9; margin: 22px 0; }
+
+/* ── SWATCHES ── */
+.swatch-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+.swatch {
+  width: 32px; height: 32px; border-radius: 50%; cursor: pointer;
+  border: 3px solid transparent; transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+.swatch:hover { transform: scale(1.12); }
+.swatch.sel { border-color: #0f172a; transform: scale(1.18); box-shadow: 0 0 0 2px #fff, 0 0 0 4px #0f172a; }
+
+/* ── ADMIN PANEL ── */
+#screen-admin { z-index: 300; background: rgba(0,0,0,0.75); backdrop-filter: blur(4px); }
+.admin-card {
+  background: #fff; border-radius: 20px; padding: 36px 40px;
+  width: 560px; max-height: 88vh; overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.admin-card h2 { font-size: 20px; color: #0f172a; margin-bottom: 4px; }
+.admin-card .sub { color: #94a3b8; font-size: 13px; margin-bottom: 20px; }
+.sec-title { font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.8px; margin: 22px 0 10px; }
+.invite-row { display: flex; gap: 10px; align-items: center; }
+.invite-display {
+  flex: 1; padding: 11px 16px; background: #f8fafc; border-radius: 10px;
+  font-size: 20px; font-weight: 900; color: #6366f1; letter-spacing: 4px;
+  font-family: 'Courier New', monospace; border: 2px dashed #c7d2fe;
+}
+.user-row {
+  display: flex; align-items: center; gap: 12px; padding: 10px 14px;
+  background: #f8fafc; border-radius: 10px; margin-bottom: 8px;
+}
+.user-avatar { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; color: white; flex-shrink: 0; }
+.user-dname { font-size: 14px; font-weight: 700; color: #0f172a; }
+.user-meta { font-size: 11px; color: #94a3b8; margin-top: 1px; }
+.btn-danger { background: none; border: 2px solid #fecaca; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 700; color: #ef4444; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+.btn-danger:hover { background: #fef2f2; border-color: #ef4444; }
+.admin-footer { display: flex; gap: 10px; margin-top: 22px; padding-top: 18px; border-top: 1px solid #f1f5f9; }
+
+/* ── GAME HUD ── */
+#hud {
+  position: fixed; top: 16px; right: 16px;
+  background: rgba(255,255,255,0.97); border-radius: 14px;
+  padding: 16px; width: 220px; box-shadow: 0 6px 24px rgba(0,0,0,0.18);
+  z-index: 50; max-height: calc(100vh - 80px); overflow-y: auto; display: none;
+}
+#hud h3 { font-size: 11px; font-weight: 800; color: #64748b; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.8px; }
+.m-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f1f5f9; }
+.m-row:last-child { border-bottom: none; }
+.m-dot { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; color: white; flex-shrink: 0; }
+.m-name { font-size: 12px; font-weight: 600; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-loc  { font-size: 10px; color: #94a3b8; margin-top: 1px; }
+.call-btn { background: none; border: none; cursor: pointer; font-size: 15px; padding: 3px 5px; border-radius: 6px; color: #22c55e; transition: background 0.15s; flex-shrink: 0; }
+.call-btn:hover { background: #f0fdf4; }
+.hud-footer { margin-top: 12px; padding-top: 10px; border-top: 1px solid #f1f5f9; display: flex; gap: 6px; flex-wrap: wrap; }
+.hud-btn { background: none; border: 1.5px solid #e2e8f0; border-radius: 8px; padding: 5px 9px; font-size: 11px; font-weight: 600; cursor: pointer; color: #64748b; transition: all 0.15s; font-family: inherit; }
+.hud-btn:hover { border-color: #6366f1; color: #6366f1; }
+
+/* ── OVERLAY TAGS ── */
+#room-tag {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+  background: rgba(15,23,42,0.85); color: #fff; padding: 10px 22px;
+  border-radius: 30px; font-size: 14px; font-weight: 700; pointer-events: none;
+  backdrop-filter: blur(6px); z-index: 50; display: none;
+}
+#hint {
+  position: fixed; bottom: 22px; left: 18px;
+  background: rgba(15,23,42,0.72); color: rgba(255,255,255,0.8);
+  padding: 8px 14px; border-radius: 10px; font-size: 11px;
+  pointer-events: none; backdrop-filter: blur(4px); z-index: 50; line-height: 1.7; display: none;
+}
+#nearby-badge {
+  position: fixed; top: 18px; left: 50%; transform: translateX(-50%);
+  background: #6366f1; color: white; padding: 8px 18px;
+  border-radius: 30px; font-size: 13px; font-weight: 600;
+  pointer-events: none; z-index: 50; display: none;
+  box-shadow: 0 4px 16px rgba(99,102,241,0.4);
+}
+
+/* ── VOICE PROMPT ── */
+#voice-prompt {
+  position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%);
+  display: none; z-index: 60;
+}
+#voice-prompt button {
+  background: #6366f1; color: white; border: none; border-radius: 30px;
+  padding: 12px 24px; font-size: 14px; font-weight: 700; cursor: pointer;
+  box-shadow: 0 4px 20px rgba(99,102,241,0.5); transition: all 0.2s; font-family: inherit;
+}
+#voice-prompt button:hover { background: #4f46e5; transform: scale(1.04); }
+
+/* ── ACTIVE CALL ── */
+#call-overlay {
+  position: fixed; bottom: 80px; right: 16px;
+  background: #0f172a; color: white; border-radius: 16px;
+  padding: 16px 20px; display: none; z-index: 80;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4); min-width: 220px;
+}
+.co-label { font-size: 11px; color: #64748b; margin-bottom: 3px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.co-who   { font-size: 17px; font-weight: 800; margin-bottom: 14px; }
+.co-btns  { display: flex; gap: 10px; }
+.co-btn   { flex: 1; padding: 10px; border: none; border-radius: 10px; font-size: 18px; cursor: pointer; transition: all 0.15s; }
+.co-mute  { background: #1e293b; }
+.co-mute:hover { background: #334155; }
+.co-end   { background: #ef4444; }
+.co-end:hover { background: #dc2626; }
+
+/* ── INCOMING CALL ── */
+#incoming-call {
+  position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+  background: #0f172a; color: white; border-radius: 16px;
+  padding: 20px 28px; display: none; z-index: 90;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5); text-align: center; min-width: 290px;
+}
+.ic-label { font-size: 12px; color: #64748b; margin-bottom: 4px; }
+.ic-who   { font-size: 20px; font-weight: 800; margin-bottom: 16px; }
+.ic-btns  { display: flex; gap: 10px; }
+.ic-btn   { flex: 1; padding: 11px; border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.ic-accept  { background: #22c55e; color: white; }
+.ic-decline { background: #ef4444; color: white; }
+
+/* ── TOAST ── */
+#toast {
+  position: fixed; bottom: 30px; right: 16px;
+  background: #1e293b; color: white; padding: 12px 18px;
+  border-radius: 12px; font-size: 13px; font-weight: 600;
+  display: none; z-index: 400; max-width: 280px; line-height: 1.5;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+}
+
+/* ── CANVAS ── */
+#screen-game { background: #0f172a; overflow: hidden; }
+#c { display: block; position: absolute; top: 0; left: 0; }
+</style>
+</head>
+<body>
+
+<!-- ═════════════════════════════ LOGIN ═════════════════════════════ -->
+<div id="screen-login" class="screen">
+  <div class="auth-card">
+    <h1>🏢 Virtual Office</h1>
+    <p class="sub" id="login-sub">Sign in to enter your team's office</p>
+    <div class="field">
+      <label>Username</label>
+      <input type="text" id="l-user" placeholder="your username" autocomplete="username" />
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="l-pass" placeholder="••••••••" autocomplete="current-password" />
+    </div>
+    <p class="errmsg" id="l-err">Incorrect username or password.</p>
+    <button class="btn-primary" id="l-btn">Sign In</button>
+    <p class="auth-link"><a id="go-signup">Don't have an account? Sign up with an invite →</a></p>
+  </div>
+</div>
+
+<!-- ═════════════════════════════ SIGNUP ═════════════════════════════ -->
+<div id="screen-signup" class="screen">
+  <div class="auth-card">
+    <h1>🎉 Create Account</h1>
+    <p class="sub" id="signup-sub">You'll need an invite code from your admin</p>
+
+    <div class="field" id="invite-wrap">
+      <label>Invite Code</label>
+      <input type="text" id="s-invite" placeholder="ASK YOUR ADMIN" style="text-transform:uppercase;letter-spacing:3px;font-weight:800;font-family:monospace;" />
+    </div>
+    <hr class="divider">
+    <div class="field">
+      <label>Display Name <span style="color:#94a3b8;font-weight:400;text-transform:none;letter-spacing:0">(shown in office)</span></label>
+      <input type="text" id="s-name" placeholder="e.g. Jamie" maxlength="18" />
+    </div>
+    <div class="field">
+      <label>Username <span style="color:#94a3b8;font-weight:400;text-transform:none;letter-spacing:0">(for login, no spaces)</span></label>
+      <input type="text" id="s-user" placeholder="e.g. jamie92" maxlength="20" />
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="s-pass" placeholder="min 6 characters" />
+    </div>
+    <div class="field">
+      <label>Confirm Password</label>
+      <input type="password" id="s-pass2" placeholder="repeat password" />
+    </div>
+    <hr class="divider">
+    <div class="field">
+      <label>Skin Tone</label>
+      <div class="swatch-row" id="s-skin">
+        <div class="swatch sel" data-c="#FDBCB4" style="background:#FDBCB4"></div>
+        <div class="swatch" data-c="#F5CBA7" style="background:#F5CBA7"></div>
+        <div class="swatch" data-c="#E0AC69" style="background:#E0AC69"></div>
+        <div class="swatch" data-c="#C68642" style="background:#C68642"></div>
+        <div class="swatch" data-c="#8D5524" style="background:#8D5524"></div>
+        <div class="swatch" data-c="#4A2912" style="background:#4A2912"></div>
+      </div>
+    </div>
+    <div class="field">
+      <label>Outfit Colour</label>
+      <div class="swatch-row" id="s-outfit">
+        <div class="swatch sel" data-c="#6366f1" style="background:#6366f1"></div>
+        <div class="swatch" data-c="#dc2626" style="background:#dc2626"></div>
+        <div class="swatch" data-c="#16a34a" style="background:#16a34a"></div>
+        <div class="swatch" data-c="#d97706" style="background:#d97706"></div>
+        <div class="swatch" data-c="#0891b2" style="background:#0891b2"></div>
+        <div class="swatch" data-c="#9333ea" style="background:#9333ea"></div>
+        <div class="swatch" data-c="#be185d" style="background:#be185d"></div>
+        <div class="swatch" data-c="#374151" style="background:#374151"></div>
+      </div>
+    </div>
+    <p class="errmsg" id="s-err"></p>
+    <button class="btn-primary" id="s-btn">Create Account & Enter Office</button>
+    <p class="auth-link"><a id="go-login">Already have an account? Sign in →</a></p>
+  </div>
+</div>
+
+<!-- ═════════════════════════════ ADMIN PANEL ═════════════════════════════ -->
+<div id="screen-admin" class="screen">
+  <div class="admin-card">
+    <h2>⚙️ Admin Panel</h2>
+    <p class="sub">Manage your team members and office settings</p>
+
+    <p class="sec-title">Team Invite Code</p>
+    <div class="invite-row">
+      <div class="invite-display" id="admin-code-display">MYTEAM</div>
+      <button class="btn-secondary" id="btn-copy-code" style="white-space:nowrap">📋 Copy</button>
+      <button class="btn-secondary" id="btn-change-code">✏️ Change</button>
+    </div>
+    <p style="font-size:12px;color:#94a3b8;margin-top:8px;line-height:1.5;">
+      Share this code with new team members so they can sign up. Only people with this code can create an account.
+    </p>
+
+    <p class="sec-title">Team Members</p>
+    <div id="admin-user-list"></div>
+
+    <div class="admin-footer">
+      <button class="btn-secondary" id="btn-admin-close" style="flex:1">← Back to Office</button>
+      <button class="btn-secondary" id="btn-admin-signout" style="color:#ef4444;border-color:#fecaca">🚪 Sign Out</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═════════════════════════════ GAME ═════════════════════════════ -->
+<div id="screen-game" class="screen">
+  <canvas id="c"></canvas>
+</div>
+
+<!-- ═════════════════════════════ GAME HUD ═════════════════════════════ -->
+<div id="hud">
+  <h3>👥 Team</h3>
+  <div id="member-list"></div>
+  <div class="hud-footer">
+    <button class="hud-btn" id="btn-admin-open" style="display:none">⚙️ Admin</button>
+    <button class="hud-btn" id="btn-logout">🚪 Leave</button>
+  </div>
+</div>
+
+<div id="room-tag">Hallway</div>
+<div id="hint">⬆⬇⬅➡ Move &nbsp;·&nbsp; WASD works too</div>
+<div id="nearby-badge"></div>
+
+<!-- Voice chat -->
+<div id="voice-prompt"><button id="voice-btn">🎙️ Start Voice Chat</button></div>
+
+<div id="call-overlay">
+  <div class="co-label">In call with</div>
+  <div class="co-who" id="co-who">—</div>
+  <div class="co-btns">
+    <button class="co-btn co-mute" id="btn-mute" title="Toggle mute">🎙️</button>
+    <button class="co-btn co-end"  id="btn-end"  title="End call">📵</button>
+  </div>
+</div>
+
+<div id="incoming-call">
+  <div class="ic-label">Incoming voice call from</div>
+  <div class="ic-who" id="ic-who">—</div>
+  <div class="ic-btns">
+    <button class="ic-btn ic-accept"  id="btn-accept">✅ Accept</button>
+    <button class="ic-btn ic-decline" id="btn-decline">❌ Decline</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- PeerJS for WebRTC voice chat -->
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════════
+// STORAGE
+// ═══════════════════════════════════════════════════════════
+const DB = {
+  users:   ()    => JSON.parse(localStorage.getItem('vo_users')  || '[]'),
+  save:    (arr) => localStorage.setItem('vo_users', JSON.stringify(arr)),
+  code:    ()    => localStorage.getItem('vo_invite') || 'MYTEAM',
+  setCode: (c)   => localStorage.setItem('vo_invite', c),
+  session: ()    => localStorage.getItem('vo_session'),
+  login:   (u)   => localStorage.setItem('vo_session', u),
+  logout:  ()    => localStorage.removeItem('vo_session'),
+};
+
+// ═══════════════════════════════════════════════════════════
+// CRYPTO  (SHA-256 via Web Crypto)
+// ═══════════════════════════════════════════════════════════
+async function hashPw(pw) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pw + '__vo77__'));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+// AUTH FUNCTIONS
+// ═══════════════════════════════════════════════════════════
+async function authLogin(username, password) {
+  const user = DB.users().find(u => u.username.toLowerCase() === username.toLowerCase());
+  if (!user) return false;
+  if (await hashPw(password) !== user.passwordHash) return false;
+  DB.login(user.username);
+  return true;
+}
+
+async function authSignup({ invite, username, password, displayName, skin, outfit }) {
+  const users   = DB.users();
+  const isFirst = users.length === 0;
+
+  if (!isFirst && invite.toUpperCase() !== DB.code().toUpperCase())
+    return { ok: false, err: 'Invalid invite code — ask your admin for the current code.' };
+
+  if (!/^[a-zA-Z0-9_-]{2,20}$/.test(username))
+    return { ok: false, err: 'Username: 2–20 chars, letters/numbers/underscore only.' };
+
+  if (users.find(u => u.username.toLowerCase() === username.toLowerCase()))
+    return { ok: false, err: 'That username is already taken.' };
+
+  if (password.length < 6)
+    return { ok: false, err: 'Password must be at least 6 characters.' };
+
+  const user = {
+    username, displayName: displayName || username,
+    passwordHash: await hashPw(password),
+    skin, outfit,
+    role: isFirst ? 'admin' : 'member',
+    joinedAt: Date.now(),
+  };
+  users.push(user);
+  DB.save(users);
+  DB.login(username);
+  return { ok: true, user };
+}
+
+function currentUser() {
+  const s = DB.session();
+  return s ? DB.users().find(u => u.username === s) || null : null;
+}
+
+// ═══════════════════════════════════════════════════════════
+// SCREEN NAVIGATION
+// ═══════════════════════════════════════════════════════════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function showGameOverlays(on) {
+  ['hud','room-tag','hint'].forEach(id =>
+    document.getElementById(id).style.display = on ? 'block' : 'none');
+  if (!on) ['nearby-badge','voice-prompt','call-overlay','incoming-call']
+    .forEach(id => document.getElementById(id).style.display = 'none');
+}
+
+// ═══════════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════════
+let _toastTimer;
+function toast(msg, ms = 3500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.style.display = 'block';
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.style.display = 'none', ms);
+}
+
+// ═══════════════════════════════════════════════════════════
+// LOGIN FORM
+// ═══════════════════════════════════════════════════════════
+document.getElementById('l-btn').addEventListener('click', async () => {
+  const u   = document.getElementById('l-user').value.trim();
+  const p   = document.getElementById('l-pass').value;
+  const err = document.getElementById('l-err');
+  err.classList.remove('show');
+  if (!u || !p) { err.textContent = 'Please fill in both fields.'; err.classList.add('show'); return; }
+  const btn = document.getElementById('l-btn');
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  const ok = await authLogin(u, p);
+  btn.disabled = false; btn.textContent = 'Sign In';
+  if (ok) enterGame(); else { err.textContent = 'Incorrect username or password.'; err.classList.add('show'); }
+});
+document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key==='Enter') document.getElementById('l-btn').click(); });
+document.getElementById('go-signup').addEventListener('click', () => showScreen('screen-signup'));
+
+// ═══════════════════════════════════════════════════════════
+// SIGNUP FORM
+// ═══════════════════════════════════════════════════════════
+let sSkin = '#FDBCB4', sOutfit = '#6366f1';
+
+document.querySelectorAll('#s-skin .swatch').forEach(el => el.addEventListener('click', () => {
+  document.querySelectorAll('#s-skin .swatch').forEach(e => e.classList.remove('sel'));
+  el.classList.add('sel'); sSkin = el.dataset.c;
+}));
+document.querySelectorAll('#s-outfit .swatch').forEach(el => el.addEventListener('click', () => {
+  document.querySelectorAll('#s-outfit .swatch').forEach(e => e.classList.remove('sel'));
+  el.classList.add('sel'); sOutfit = el.dataset.c;
+}));
+
+document.getElementById('s-invite').addEventListener('input', function() { this.value = this.value.toUpperCase(); });
+
+document.getElementById('s-btn').addEventListener('click', async () => {
+  const invite = document.getElementById('s-invite').value.trim();
+  const name   = document.getElementById('s-name').value.trim();
+  const user   = document.getElementById('s-user').value.trim();
+  const pass   = document.getElementById('s-pass').value;
+  const pass2  = document.getElementById('s-pass2').value;
+  const err    = document.getElementById('s-err');
+  err.classList.remove('show');
+  if (!name)         { err.textContent='Enter a display name.';       err.classList.add('show'); return; }
+  if (pass !== pass2){ err.textContent='Passwords do not match.';     err.classList.add('show'); return; }
+  const btn = document.getElementById('s-btn');
+  btn.disabled = true; btn.textContent = 'Creating account…';
+  const res = await authSignup({ invite, username: user, password: pass, displayName: name, skin: sSkin, outfit: sOutfit });
+  btn.disabled = false; btn.textContent = 'Create Account & Enter Office';
+  if (res.ok) enterGame(); else { err.textContent = res.err; err.classList.add('show'); }
+});
+document.getElementById('go-login').addEventListener('click', () => showScreen('screen-login'));
+
+// ═══════════════════════════════════════════════════════════
+// ADMIN PANEL
+// ═══════════════════════════════════════════════════════════
+function renderAdmin() {
+  const me    = currentUser();
+  const users = DB.users();
+  document.getElementById('admin-code-display').textContent = DB.code();
+  document.getElementById('admin-user-list').innerHTML = users.map(u => `
+    <div class="user-row">
+      <div class="user-avatar" style="background:${u.outfit}">${u.displayName[0].toUpperCase()}</div>
+      <div style="flex:1">
+        <div class="user-dname">${u.displayName}
+          <span style="font-size:11px;color:#94a3b8;font-weight:400"> @${u.username}</span>
+        </div>
+        <div class="user-meta">${u.role==='admin'?'👑 Admin':'👤 Member'} · Joined ${new Date(u.joinedAt).toLocaleDateString()}</div>
+      </div>
+      ${u.username !== me.username && u.role !== 'admin'
+        ? `<button class="btn-danger" onclick="removeUser('${u.username}')">Remove</button>`
+        : ''}
+    </div>`).join('');
+}
+
+window.removeUser = function(username) {
+  const u = DB.users().find(u => u.username === username);
+  if (!confirm(`Remove ${u ? u.displayName : username} from the team? They will no longer be able to log in.`)) return;
+  DB.save(DB.users().filter(u => u.username !== username));
+  renderAdmin();
+  renderHUD();
+  toast(`${username} has been removed from the team.`);
+};
+
+document.getElementById('btn-copy-code').addEventListener('click', () => {
+  navigator.clipboard.writeText(DB.code())
+    .then(() => toast('✅ Invite code copied to clipboard!'))
+    .catch(() => toast('Code: ' + DB.code()));
+});
+
+document.getElementById('btn-change-code').addEventListener('click', () => {
+  const code = prompt('Enter new invite code (letters and numbers only):', DB.code());
+  if (!code) return;
+  const clean = code.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (clean.length < 3) { alert('Code must be at least 3 characters.'); return; }
+  DB.setCode(clean);
+  renderAdmin();
+  toast(`✅ Invite code changed to: ${clean}`);
+});
+
+document.getElementById('btn-admin-close').addEventListener('click', () => {
+  document.getElementById('screen-admin').classList.remove('active');
+});
+
+document.getElementById('btn-admin-signout').addEventListener('click', () => {
+  if (!confirm('Sign out?')) return;
+  endCall();
+  if (peerConn) { try { peerConn.destroy(); } catch(e){} peerConn = null; }
+  DB.logout();
+  stopGame();
+  document.getElementById('screen-admin').classList.remove('active');
+  initApp();
+});
+
+document.getElementById('btn-admin-open').addEventListener('click', () => {
+  renderAdmin();
+  document.getElementById('screen-admin').classList.add('active');
+});
+
+// ═══════════════════════════════════════════════════════════
+// WORLD CONSTANTS
+// ═══════════════════════════════════════════════════════════
+const WW = 1300, WH = 920;
+const WT = 8;
+const PR = 14;
+const SPEED = 3;
+const DOOR = 28; // half-door width → 56px opening
+
+// 5 columns for offices
+const COL  = [54, 306, 558, 810, 1062, 1246];
+// Rows — wider hallways for easy navigation
+const R_TOP  = [54,  248];   // top offices     194px
+const HALL1  = [248, 374];   // hallway 1       126px  ← nice and wide
+const R_MID  = [374, 568];   // mid offices     194px
+const HALL2  = [568, 664];   // hallway 2       96px
+const R_BOT  = [664, 866];   // lunch + games   202px
+
+const OFF_COLORS = [
+  ['#EFF6FF','#BFDBFE'],['#F0FDF4','#BBF7D0'],['#FFF7ED','#FED7AA'],
+  ['#FDF4FF','#E9D5FF'],['#FFF1F2','#FECDD3'],['#ECFEFF','#A5F3FC'],
+  ['#FEFCE8','#FEF08A'],['#F7FEE7','#D9F99D'],['#EFF6FF','#BAE6FD'],
+  ['#FDF2F8','#FBCFE8'],
+];
+
+const ROOMS = [];
+for (let i = 0; i < 5; i++)
+  ROOMS.push({ id:`off${i+1}`, name:`Office ${i+1}`, x:COL[i], y:R_TOP[0], w:COL[i+1]-COL[i], h:R_TOP[1]-R_TOP[0], floor:OFF_COLORS[i][0],   accent:OFF_COLORS[i][1],   type:'office' });
+for (let i = 0; i < 5; i++)
+  ROOMS.push({ id:`off${i+6}`, name:`Office ${i+6}`, x:COL[i], y:R_MID[0], w:COL[i+1]-COL[i], h:R_MID[1]-R_MID[0], floor:OFF_COLORS[i+5][0], accent:OFF_COLORS[i+5][1], type:'office' });
+ROOMS.push({ id:'lunch', name:'🍕 Lunch Room',  x:54,  y:R_BOT[0], w:596, h:R_BOT[1]-R_BOT[0], floor:'#FFFDE7', accent:'#F9A825', type:'lunch'  });
+ROOMS.push({ id:'games', name:'🎮 Games Room',  x:650, y:R_BOT[0], w:596, h:R_BOT[1]-R_BOT[0], floor:'#E8F5E9', accent:'#43A047', type:'games'  });
+
+// ═══════════════════════════════════════════════════════════
+// WALL BUILDER
+// ═══════════════════════════════════════════════════════════
+const WALLS = [];
+
+function hSeg(x1,x2,y) { if(x2>x1) WALLS.push({x:x1, y:y-WT/2, w:x2-x1, h:WT}); }
+function vSeg(y1,y2,x)  { if(y2>y1) WALLS.push({x:x-WT/2, y:y1, w:WT, h:y2-y1}); }
+
+function hWall(x1,x2,y,gaps=[]) {
+  let p=x1;
+  const gs=gaps.map(cx=>({s:cx-DOOR,e:cx+DOOR})).sort((a,b)=>a.s-b.s);
+  for(const g of gs){hSeg(p,g.s,y);p=g.e;}
+  hSeg(p,x2,y);
+}
+function vWall(y1,y2,x,gaps=[]) {
+  let p=y1;
+  const gs=gaps.map(cy=>({s:cy-DOOR,e:cy+DOOR})).sort((a,b)=>a.s-b.s);
+  for(const g of gs){vSeg(p,g.s,x);p=g.e;}
+  vSeg(p,y2,x);
+}
+
+// Office column center X positions
+const OCX = COL.slice(0,5).map((x,i) => x + (COL[i+1]-COL[i])/2);
+
+// Outer boundary
+hSeg(54,1246,54); hSeg(54,1246,866); vSeg(54,866,54); vSeg(54,866,1246);
+// Horizontal walls
+hWall(54,1246, R_TOP[1], OCX);   // top offices → hallway 1
+hWall(54,1246, R_MID[0], OCX);   // hallway 1 → mid offices
+hWall(54,1246, R_MID[1], OCX);   // mid offices → hallway 2
+hWall(54,1246, R_BOT[0], [54+298, 650+298]); // hallway 2 → bottom rooms
+// Vertical dividers between offices
+for(let i=1;i<5;i++) vWall(54,R_TOP[1], COL[i]);
+for(let i=1;i<5;i++) vWall(R_MID[0],R_MID[1], COL[i]);
+vWall(R_BOT[0],866, 650); // between lunch/games
+
+// ═══════════════════════════════════════════════════════════
+// COLLISION + ROOM DETECTION
+// ═══════════════════════════════════════════════════════════
+function circleRect(cx,cy,r,rx,ry,rw,rh) {
+  const nx=Math.max(rx,Math.min(cx,rx+rw)), ny=Math.max(ry,Math.min(cy,ry+rh));
+  const dx=cx-nx, dy=cy-ny;  return dx*dx+dy*dy < r*r;
+}
+function blocked(x,y) {
+  if(x-PR<58||x+PR>1242||y-PR<58||y+PR>862) return true;
+  for(const w of WALLS) if(circleRect(x,y,PR,w.x,w.y,w.w,w.h)) return true;
+  return false;
+}
+function roomAt(x,y) {
+  for(const r of ROOMS) if(x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h) return r.name;
+  return 'Hallway';
+}
+
+// ═══════════════════════════════════════════════════════════
+// FURNITURE
+// ═══════════════════════════════════════════════════════════
+function drawOffice(ctx, r) {
+  const cx = r.x+r.w/2, dx = cx-40, dy = r.y+42;
+  // Bookshelf
+  ctx.fillStyle='#D4A96A'; ctx.fillRect(r.x+6,r.y+6,26,r.h-12);
+  ctx.fillStyle='#B8893E'; ctx.fillRect(r.x+6,r.y+6,26,4);
+  ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22'].forEach((c,i)=>{
+    ctx.fillStyle=c; ctx.fillRect(r.x+9,r.y+12+i*23,5,19);
+  });
+  // Desk
+  ctx.fillStyle='#C8A97E'; ctx.fillRect(dx,dy,80,52);
+  ctx.fillStyle='#A07850'; ctx.fillRect(dx,dy+48,80,4);
+  // Monitor
+  ctx.fillStyle='#2d2d2d'; ctx.fillRect(dx+24,dy+7,32,22);
+  ctx.fillStyle='#1a3a5f'; ctx.fillRect(dx+26,dy+9,28,18);
+  ctx.fillStyle='rgba(148,210,252,0.4)'; ctx.fillRect(dx+26,dy+9,28,18);
+  ctx.fillStyle='#666'; ctx.fillRect(cx-3,dy+29,6,8);
+  // Chair
+  ctx.fillStyle='#5a6878'; ctx.beginPath(); ctx.arc(cx,dy+76,15,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#7a8898'; ctx.beginPath(); ctx.arc(cx,dy+76,10,0,Math.PI*2); ctx.fill();
+  // Plant
+  const px=r.x+r.w-22, py=r.y+r.h-38;
+  ctx.fillStyle='#7D5A2E'; ctx.fillRect(px-5,py+10,10,14);
+  ctx.fillStyle='#1E7A3E'; ctx.beginPath(); ctx.arc(px,py,13,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#28A452'; ctx.beginPath(); ctx.arc(px-9,py-7,9,0,Math.PI*2); ctx.fill();
+}
+
+function drawLunch(ctx, r) {
+  [[r.x+90,r.y+78],[r.x+260,r.y+78],[r.x+430,r.y+78],
+   [r.x+175,r.y+150],[r.x+345,r.y+150]].forEach(([tx,ty])=>{
+    ctx.fillStyle='#D4A574'; ctx.fillRect(tx-30,ty-18,60,36);
+    ctx.strokeStyle='#B8935A'; ctx.lineWidth=2; ctx.strokeRect(tx-30,ty-18,60,36);
+    ctx.fillStyle='#E8C99A';
+    ctx.fillRect(tx-42,ty-14,10,28); ctx.fillRect(tx+32,ty-14,10,28);
+    ctx.fillRect(tx-14,ty-30,28,10); ctx.fillRect(tx-14,ty+20,28,10);
+  });
+  // Fridge + coffee
+  ctx.fillStyle='#B0BEC5'; ctx.fillRect(r.x+r.w-62,r.y+14,48,160);
+  ctx.fillStyle='#90A4AE'; ctx.fillRect(r.x+r.w-62,r.y+14,48,70);
+  ctx.strokeStyle='#78909C'; ctx.lineWidth=1.5; ctx.strokeRect(r.x+r.w-60,r.y+16,44,66);
+  ctx.fillStyle='#CFD8DC'; ctx.fillRect(r.x+r.w-42,r.y+47,6,12);
+  ctx.fillStyle='#37474F'; ctx.fillRect(r.x+r.w-60,r.y+92,28,38);
+  ctx.fillStyle='#e74c3c'; ctx.fillRect(r.x+r.w-56,r.y+97,10,7);
+  ctx.fillStyle='#CFD8DC'; ctx.fillRect(r.x+r.w-56,r.y+112,16,10);
+}
+
+function drawGames(ctx, r) {
+  // Ping pong
+  const tx=r.x+42,ty=r.y+36;
+  ctx.fillStyle='#1565C0'; ctx.fillRect(tx,ty,196,112);
+  ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.strokeRect(tx,ty,196,112);
+  ctx.beginPath(); ctx.moveTo(tx+98,ty); ctx.lineTo(tx+98,ty+112); ctx.stroke();
+  ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(tx+55,ty+50,6,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#c0392b'; ctx.fillRect(tx+22,ty+46,20,12);
+  ctx.fillStyle='#2980b9'; ctx.fillRect(tx+154,ty+54,20,12);
+  ctx.fillStyle='rgba(255,255,255,0.4)'; ctx.font='10px Segoe UI'; ctx.textAlign='center';
+  ctx.fillText('PING PONG',tx+98,ty+128);
+  // Beanbags
+  [{x:r.x+320,y:r.y+76,r:30,c:'#FF7043',c2:'#E64A19'},
+   {x:r.x+400,y:r.y+90,r:26,c:'#42A5F5',c2:'#1976D2'},
+   {x:r.x+358,y:r.y+148,r:24,c:'#66BB6A',c2:'#388E3C'}].forEach(b=>{
+    ctx.fillStyle=b.c;  ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=b.c2; ctx.beginPath(); ctx.arc(b.x,b.y,b.r*.7,0,Math.PI*2); ctx.fill();
+  });
+  // TV
+  const tvx=r.x+r.w-155, tvy=r.y+30;
+  ctx.fillStyle='#111'; ctx.fillRect(tvx,tvy,132,84);
+  ctx.fillStyle='#0a0a2e'; ctx.fillRect(tvx+3,tvy+3,126,74);
+  ctx.fillStyle='rgba(99,179,237,0.18)'; ctx.fillRect(tvx+3,tvy+3,126,74);
+  ctx.fillStyle='#fff'; ctx.font='bold 12px Segoe UI'; ctx.textAlign='center';
+  ctx.fillText('GAMES ROOM',tvx+66,tvy+46);
+  ctx.fillStyle='#444'; ctx.fillRect(tvx+56,tvy+84,20,10); ctx.fillRect(tvx+40,tvy+92,52,5);
+  ctx.fillStyle='#37474F'; ctx.fillRect(tvx-10,tvy+112,152,14);
+  ctx.fillStyle='#222'; ctx.fillRect(tvx+4,tvy+102,32,12); ctx.fillRect(tvx+44,tvy+102,32,12);
+}
+
+// ═══════════════════════════════════════════════════════════
+// CHARACTER
+// ═══════════════════════════════════════════════════════════
+function drawChar(ctx, x, y, skin, outfit, name, isPlayer=false, moving=false) {
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,0.1)';
+  ctx.beginPath(); ctx.ellipse(x+2,y+PR+1,PR*.75,PR*.3,0,0,Math.PI*2); ctx.fill();
+  // Body
+  ctx.fillStyle=outfit; ctx.beginPath(); ctx.ellipse(x,y+5,PR*.88,PR*.65,0,0,Math.PI); ctx.fill();
+  // Head
+  ctx.fillStyle=skin; ctx.beginPath(); ctx.arc(x,y,PR*.78,0,Math.PI*2); ctx.fill();
+  // Hair
+  ctx.fillStyle='rgba(45,22,5,.55)'; ctx.beginPath(); ctx.arc(x,y,PR*.78,Math.PI*1.12,Math.PI*1.88); ctx.fill();
+  // Eyes
+  ctx.fillStyle='#111';
+  ctx.beginPath(); ctx.arc(x-4,y-1,2.2,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+4,y-1,2.2,0,Math.PI*2); ctx.fill();
+  // Smile
+  ctx.strokeStyle='#333'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.arc(x,y+2,4,0.15,Math.PI-.15); ctx.stroke();
+  // Player glow
+  if (isPlayer) {
+    ctx.strokeStyle='#fbbf24'; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.arc(x,y,PR+4,0,Math.PI*2); ctx.stroke();
+    if (moving) {
+      ctx.strokeStyle='rgba(251,191,36,.22)'; ctx.lineWidth=7;
+      ctx.beginPath(); ctx.arc(x,y,PR+9,0,Math.PI*2); ctx.stroke();
+    }
+  }
+  // Name tag
+  ctx.font = `bold ${isPlayer?12:11}px Segoe UI`; ctx.textAlign='center';
+  const tw=ctx.measureText(name).width, tagW=tw+12, tagH=16, tagX=x-tagW/2, tagY=y-PR-22;
+  ctx.fillStyle = isPlayer ? 'rgba(99,102,241,.92)' : 'rgba(15,23,42,.7)';
+  rrect(ctx,tagX,tagY,tagW,tagH,4); ctx.fill();
+  ctx.fillStyle='#fff'; ctx.fillText(name,x,tagY+11.5);
+}
+
+function rrect(ctx,x,y,w,h,r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath();
+}
+
+// ═══════════════════════════════════════════════════════════
+// WORLD DRAW
+// ═══════════════════════════════════════════════════════════
+function drawWorld(ctx) {
+  // Background
+  ctx.fillStyle='#1e1b4b'; ctx.fillRect(0,0,WW,WH);
+  // Floor
+  ctx.fillStyle='#EDEDE8'; ctx.fillRect(58,58,WW-116,WH-116);
+  // Hallway carpets
+  ctx.fillStyle='#DEDAD3';
+  ctx.fillRect(58, HALL1[0]+WT/2, WW-116, HALL1[1]-HALL1[0]-WT);
+  ctx.fillRect(58, HALL2[0]+WT/2, WW-116, HALL2[1]-HALL2[0]-WT);
+  // Hallway dashed centre lines
+  ctx.strokeStyle='rgba(175,165,145,.35)'; ctx.lineWidth=2; ctx.setLineDash([14,10]);
+  const h1y=(HALL1[0]+HALL1[1])/2, h2y=(HALL2[0]+HALL2[1])/2;
+  ctx.beginPath(); ctx.moveTo(80,h1y); ctx.lineTo(WW-80,h1y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(80,h2y); ctx.lineTo(WW-80,h2y); ctx.stroke();
+  ctx.setLineDash([]);
+  // Hallway labels
+  ctx.fillStyle='rgba(100,90,70,.4)'; ctx.font='bold 11px Segoe UI'; ctx.textAlign='center';
+  ctx.fillText('H A L L W A Y', WW/2, h1y+4);
+  ctx.fillText('H A L L W A Y', WW/2, h2y+4);
+  // Rooms
+  ROOMS.forEach(r => {
+    ctx.fillStyle=r.floor; ctx.fillRect(r.x+WT/2, r.y+WT/2, r.w-WT, r.h-WT);
+    ctx.strokeStyle=r.accent; ctx.lineWidth=2;
+    ctx.strokeRect(r.x+WT/2+2, r.y+WT/2+2, r.w-WT-4, r.h-WT-4);
+    ctx.fillStyle='rgba(50,50,80,.5)'; ctx.font='bold 12px Segoe UI'; ctx.textAlign='center';
+    ctx.fillText(r.name, r.x+r.w/2, r.y+WT/2+17);
+    if(r.type==='office') drawOffice(ctx,r);
+    if(r.type==='lunch')  drawLunch(ctx,r);
+    if(r.type==='games')  drawGames(ctx,r);
+  });
+  // Walls
+  ctx.fillStyle='#2a2848'; WALLS.forEach(w=>ctx.fillRect(w.x,w.y,w.w,w.h));
+  // Outer border
+  ctx.strokeStyle='#1e1b4b'; ctx.lineWidth=14; ctx.strokeRect(54,54,WW-108,WH-108);
+}
+
+// ═══════════════════════════════════════════════════════════
+// BOTS
+// ═══════════════════════════════════════════════════════════
+const BOT_DATA = [
+  {name:'Alex',  skin:'#FDBCB4',outfit:'#dc2626'},
+  {name:'Sam',   skin:'#E0AC69',outfit:'#16a34a'},
+  {name:'Jordan',skin:'#8D5524',outfit:'#d97706'},
+  {name:'Casey', skin:'#F5CBA7',outfit:'#0891b2'},
+  {name:'Riley', skin:'#C68642',outfit:'#9333ea'},
+  {name:'Morgan',skin:'#FDBCB4',outfit:'#be185d'},
+];
+let bots = [];
+
+function initBots() {
+  const offRooms = ROOMS.filter(r=>r.type==='office');
+  bots = BOT_DATA.map((b,i) => {
+    const room = offRooms[(i+1) % offRooms.length];
+    const sx = room.x + room.w/2 + (Math.random()-.5)*50;
+    const sy = room.y + room.h/2 + (Math.random()-.5)*35;
+    return { ...b, x:sx, y:sy, tx:sx, ty:sy, room, timer:80+Math.random()*220, state:'idle' };
+  });
+}
+
+function updateBots() {
+  bots.forEach(bot => {
+    bot.timer--;
+    if (bot.timer <= 0) {
+      const roll = Math.random(), room = bot.room;
+      if (roll < 0.5) {
+        bot.tx = room.x+26+Math.random()*(room.w-52);
+        bot.ty = room.y+26+Math.random()*(room.h-52);
+        bot.state = 'move';
+      } else if (roll < 0.7) {
+        const hallY = room.y < 300 ? HALL1[0]+50 : HALL2[0]+44;
+        bot.tx = room.x+room.w/2+(Math.random()-.5)*100;
+        bot.ty = hallY;
+        bot.state = 'hall';
+      } else {
+        bot.state = 'idle';
+      }
+      bot.timer = 110+Math.random()*300;
+    }
+    if (bot.state !== 'idle') {
+      const dx=bot.tx-bot.x, dy=bot.ty-bot.y, d=Math.sqrt(dx*dx+dy*dy);
+      if(d>2){bot.x+=dx/d*1.4;bot.y+=dy/d*1.4;} else bot.state='idle';
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// VOICE CHAT  (PeerJS WebRTC)
+// ═══════════════════════════════════════════════════════════
+let peerConn = null, localStream = null, activeCall = null, muted = false;
+let voiceTarget = null;  // username to call on proximity
+
+async function initPeer(username) {
+  if (typeof Peer === 'undefined') return; // PeerJS CDN not loaded
+  try {
+    peerConn = new Peer(`vo-${username}`);
+    peerConn.on('error', err => { if(err.type !== 'peer-unavailable') console.warn('PeerJS:', err.type); });
+    peerConn.on('call', incomingCall => {
+      const caller = incomingCall.peer.replace('vo-','');
+      document.getElementById('ic-who').textContent = caller;
+      document.getElementById('incoming-call').style.display = 'block';
+
+      document.getElementById('btn-accept').onclick = async () => {
+        document.getElementById('incoming-call').style.display = 'none';
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+          incomingCall.answer(localStream);
+          hookCall(incomingCall, caller);
+        } catch(e) { toast('🎙️ Microphone access was denied.'); }
+      };
+      document.getElementById('btn-decline').onclick = () => {
+        document.getElementById('incoming-call').style.display = 'none';
+        incomingCall.close();
+      };
+    });
+  } catch(e) { console.warn('PeerJS init failed:', e); }
+}
+
+window.callUser = async function(targetUsername) {
+  if (!peerConn) { toast('Voice chat not ready yet. Try again in a moment.'); return; }
+  if (activeCall)  { toast('You are already in a call.'); return; }
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+  } catch(e) {
+    toast('🎙️ Microphone access denied — please allow it in your browser settings.');
+    return;
+  }
+  toast(`📞 Calling ${targetUsername}…`);
+  const call = peerConn.call(`vo-${targetUsername}`, localStream);
+  if (!call) { toast(`Could not reach ${targetUsername}. Are they online?`); return; }
+  hookCall(call, targetUsername);
+};
+
+function hookCall(call, who) {
+  activeCall = call;
+  document.getElementById('co-who').textContent = who;
+  document.getElementById('call-overlay').style.display = 'block';
+  call.on('stream', stream => {
+    const audio = new Audio();
+    audio.srcObject = stream; audio.play().catch(()=>{});
+    document.getElementById('co-who').textContent = who + '  ✅';
+  });
+  call.on('close', endCall);
+  call.on('error', endCall);
+}
+
+function endCall() {
+  if (activeCall) { try { activeCall.close(); } catch(e){} activeCall = null; }
+  if (localStream) { localStream.getTracks().forEach(t=>t.stop()); localStream = null; }
+  document.getElementById('call-overlay').style.display = 'none';
+  muted = false; document.getElementById('btn-mute').textContent = '🎙️';
+}
+
+document.getElementById('btn-end').addEventListener('click', endCall);
+document.getElementById('btn-mute').addEventListener('click', () => {
+  if (!localStream) return;
+  muted = !muted;
+  localStream.getAudioTracks().forEach(t => t.enabled = !muted);
+  document.getElementById('btn-mute').textContent = muted ? '🔇' : '🎙️';
+});
+document.getElementById('voice-btn').addEventListener('click', () => {
+  if (voiceTarget) window.callUser(voiceTarget);
+});
+
+// ═══════════════════════════════════════════════════════════
+// HUD
+// ═══════════════════════════════════════════════════════════
+function renderHUD() {
+  const me    = currentUser();
+  const users = DB.users().filter(u => u.username !== me.username);
+  const rows  = [
+    `<div class="m-row">
+       <div class="m-dot" style="background:${me.outfit}">${me.displayName[0].toUpperCase()}</div>
+       <div style="flex:1"><div class="m-name">${me.displayName} <span style="color:#94a3b8;font-weight:400">(you)</span></div>
+       <div class="m-loc">${roomAt(player.x,player.y)}</div></div>
+     </div>`,
+    ...bots.map(b =>
+      `<div class="m-row">
+         <div class="m-dot" style="background:${b.outfit}">${b.name[0].toUpperCase()}</div>
+         <div style="flex:1"><div class="m-name">${b.name}</div><div class="m-loc">${roomAt(b.x,b.y)}</div></div>
+         <button class="call-btn" onclick="callUser('${b.name.toLowerCase()}')" title="Voice chat">📞</button>
+       </div>`),
+    ...users.map(u =>
+      `<div class="m-row">
+         <div class="m-dot" style="background:${u.outfit}">${u.displayName[0].toUpperCase()}</div>
+         <div style="flex:1"><div class="m-name">${u.displayName}</div><div class="m-loc">🟢 Online</div></div>
+         <button class="call-btn" onclick="callUser('${u.username}')" title="Voice chat">📞</button>
+       </div>`)
+  ];
+  document.getElementById('member-list').innerHTML = rows.join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+// GAME STATE
+// ═══════════════════════════════════════════════════════════
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+let scale=1, offX=0, offY=0;
+let player   = { x: OCX[0], y: R_TOP[0]+97 };
+let pCfg     = {};
+let keys     = {}, curRoom='', frame=0, moving=false;
+let running  = false, rafId=null;
+
+function resize() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+  scale = Math.min(window.innerWidth/WW, window.innerHeight/WH) * 0.97;
+  offX  = (window.innerWidth  - WW*scale) / 2;
+  offY  = (window.innerHeight - WH*scale) / 2;
+}
+window.addEventListener('resize', resize);
+window.addEventListener('keydown', e => {
+  keys[e.key]=true;
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
+});
+window.addEventListener('keyup', e => keys[e.key]=false);
+
+// ═══════════════════════════════════════════════════════════
+// GAME LOOP
+// ═══════════════════════════════════════════════════════════
+function loop() {
+  if (!running) return;
+  frame++;
+
+  // Movement
+  let nx=player.x, ny=player.y;
+  if(keys['ArrowLeft'] ||keys['a']) nx-=SPEED;
+  if(keys['ArrowRight']||keys['d']) nx+=SPEED;
+  if(keys['ArrowUp']   ||keys['w']) ny-=SPEED;
+  if(keys['ArrowDown'] ||keys['s']) ny+=SPEED;
+  moving = (nx!==player.x || ny!==player.y);
+  if(!blocked(nx,player.y)) player.x=nx;
+  if(!blocked(player.x,ny)) player.y=ny;
+
+  // Bots every 2nd frame
+  if(frame%2===0) updateBots();
+
+  // Room name
+  const nr = roomAt(player.x,player.y);
+  if(nr!==curRoom){ curRoom=nr; document.getElementById('room-tag').textContent=curRoom; }
+
+  // Proximity
+  let near=null;
+  for(const b of bots){
+    const dx=b.x-player.x, dy=b.y-player.y;
+    if(dx*dx+dy*dy < 68*68){ near=b; break; }
+  }
+  const vp=document.getElementById('voice-prompt'), nb=document.getElementById('nearby-badge');
+  if(near){
+    voiceTarget = near.name.toLowerCase();
+    vp.style.display='block';
+    document.getElementById('voice-btn').textContent=`🎙️ Voice Chat with ${near.name}`;
+    nb.style.display='block';
+    nb.textContent=`You are near ${near.name}`;
+  } else {
+    voiceTarget=null; vp.style.display='none'; nb.style.display='none';
+  }
+
+  if(frame%30===0) renderHUD();
+
+  // Draw
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.save();
+  ctx.translate(offX,offY); ctx.scale(scale,scale);
+  drawWorld(ctx);
+  bots.forEach(b=>drawChar(ctx,b.x,b.y,b.skin,b.outfit,b.name));
+  drawChar(ctx,player.x,player.y,pCfg.skin,pCfg.outfit,pCfg.displayName,true,moving);
+  ctx.restore();
+
+  rafId = requestAnimationFrame(loop);
+}
+
+function stopGame() {
+  running=false;
+  if(rafId){ cancelAnimationFrame(rafId); rafId=null; }
+  showGameOverlays(false);
+}
+
+// ═══════════════════════════════════════════════════════════
+// ENTER GAME
+// ═══════════════════════════════════════════════════════════
+function enterGame() {
+  const user = currentUser();
+  if (!user) { initApp(); return; }
+  pCfg     = user;
+  player.x = OCX[0]; player.y = R_TOP[0]+97;
+  document.getElementById('btn-admin-open').style.display = user.role==='admin' ? 'block' : 'none';
+  showScreen('screen-game');
+  showGameOverlays(true);
+  resize();
+  initBots();
+  renderHUD();
+  running=true;
+  loop();
+  initPeer(user.username).catch(()=>{});
+}
+
+// ═══════════════════════════════════════════════════════════
+// HUD BUTTONS
+// ═══════════════════════════════════════════════════════════
+document.getElementById('btn-logout').addEventListener('click', () => {
+  if (!confirm('Leave the virtual office?')) return;
+  endCall();
+  if(peerConn){ try{peerConn.destroy();}catch(e){} peerConn=null; }
+  DB.logout();
+  stopGame();
+  initApp();
+});
+
+// ═══════════════════════════════════════════════════════════
+// BOOTSTRAP
+// ═══════════════════════════════════════════════════════════
+function initApp() {
+  resize();
+  // If session exists and user is valid, jump straight into game
+  if (DB.session() && currentUser()) { enterGame(); return; }
+  const users = DB.users();
+  if (users.length === 0) {
+    // No users yet — this is the first setup, create admin
+    document.getElementById('invite-wrap').style.display = 'none';
+    document.getElementById('signup-sub').textContent =
+      '👑 No accounts exist yet. Create the admin account for your office — you can add teammates afterward.';
+    showScreen('screen-signup');
+  } else {
+    showScreen('screen-login');
+  }
+}
+
+window.addEventListener('DOMContentLoaded', initApp);
+</script>
+</body>
+</html>
