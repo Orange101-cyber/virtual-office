@@ -725,7 +725,7 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
 
 <div id="room-tag" style="display:none">Hallway<span id="vibe-badge" style="display:none"></span></div>
 <div id="hint" style="display:none">⬆ ⬇ ⬅ ➡  Arrow keys to move<br>WASD also works</div>
-<div id="version-tag">v1.0 — 6 Mar 2026</div>
+<div id="version-tag">v1.1 — 6 Mar 2026</div>
 <div id="nearby-badge"></div>
 <button id="discord-btn" onclick="openDiscord()">🎙️ Join Voice Chat</button>
 <button id="claim-btn" onclick="claimCurrentOffice()">🏠 Claim This Office</button>
@@ -1416,9 +1416,10 @@ function wbSetTool(t) {
 async function openWhiteboard() {
   document.getElementById('wb-overlay').style.display = 'flex';
   initWhiteboardUI();
-  const wbc = document.getElementById('wb-canvas');
+  const wbc     = document.getElementById('wb-canvas');
+  const toolbar = document.getElementById('wb-toolbar');
   wbc.width  = window.innerWidth;
-  wbc.height = window.innerHeight - wbc.offsetTop;
+  wbc.height = window.innerHeight - toolbar.getBoundingClientRect().height;
   // Load saved state
   await loadWhiteboardData();
   attachWbEvents();
@@ -1467,9 +1468,15 @@ function attachWbEvents() {
   const ctx2   = wbc.getContext('2d');
 
   function getPos(e) {
-    const rect = wbc.getBoundingClientRect();
+    const el   = e.currentTarget;
+    const rect = el.getBoundingClientRect();
     const src  = e.touches ? e.touches[0] : e;
-    return { x: src.clientX - rect.left, y: src.clientY - rect.top };
+    const scaleX = el.width  / rect.width;
+    const scaleY = el.height / rect.height;
+    return {
+      x: (src.clientX - rect.left) * scaleX,
+      y: (src.clientY - rect.top)  * scaleY,
+    };
   }
 
   function startDraw(e) {
