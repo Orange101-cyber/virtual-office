@@ -204,6 +204,42 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
   box-shadow: 0 4px 16px rgba(88,101,242,0.45); transition: background 0.2s;
 }
 #discord-btn:hover { background: #4752C4; }
+
+/* ── CLAIM BUTTON ── */
+#claim-btn {
+  position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
+  background: #4f46e5; color: white; padding: 11px 28px;
+  border-radius: 30px; font-size: 14px; font-weight: 700;
+  border: none; cursor: pointer; display: none; z-index: 50;
+  box-shadow: 0 4px 16px rgba(79,70,229,0.45); transition: background 0.2s, transform 0.1s;
+}
+#claim-btn:hover { background: #4338ca; }
+#claim-btn:active { transform: translateX(-50%) scale(0.97); }
+
+/* ── OFFICE TOOLBAR ── */
+#office-toolbar {
+  position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
+  background: rgba(255,255,255,0.97); border-radius: 16px;
+  padding: 10px 16px; display: none; align-items: center; gap: 14px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.18); z-index: 50;
+}
+.toolbar-label { font-size: 10px; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
+.toolbar-group { display: flex; align-items: center; gap: 8px; }
+.toolbar-swatches { display: flex; gap: 5px; align-items: center; }
+.toolbar-swatch {
+  width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
+  border: 2px solid transparent; transition: transform 0.15s, border-color 0.15s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+.toolbar-swatch:hover { transform: scale(1.15); }
+.toolbar-swatch.tsactive { border-color: #1a1a2e; transform: scale(1.2); box-shadow: 0 0 0 2px #fff, 0 0 0 4px #1a1a2e; }
+.toolbar-divider { width: 1px; height: 30px; background: #e8e8e8; }
+#toolbar-unclaim-btn {
+  padding: 5px 12px; background: #fef2f2; color: #dc2626;
+  border: 1.5px solid #fecaca; border-radius: 8px; font-size: 11px;
+  font-weight: 700; cursor: pointer; white-space: nowrap;
+}
+#toolbar-unclaim-btn:hover { background: #fee2e2; }
 </style>
 </head>
 <body>
@@ -293,9 +329,11 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
     <div class="admin-tabs">
       <div class="admin-tab active" onclick="switchAdminTab('pending')">Pending</div>
       <div class="admin-tab" onclick="switchAdminTab('approved')">Approved</div>
+      <div class="admin-tab" onclick="switchAdminTab('offices')">Offices</div>
     </div>
     <div id="admin-pending-list"></div>
     <div id="admin-approved-list" style="display:none"></div>
+    <div id="admin-offices-list" style="display:none"></div>
   </div>
 </div>
 
@@ -359,6 +397,20 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
 <div id="hint" style="display:none">⬆ ⬇ ⬅ ➡  Arrow keys to move<br>WASD also works</div>
 <div id="nearby-badge"></div>
 <button id="discord-btn" onclick="openDiscord()">🎙️ Join Voice Chat</button>
+<button id="claim-btn" onclick="claimCurrentOffice()">🏠 Claim This Office</button>
+<div id="office-toolbar">
+  <div class="toolbar-group">
+    <span class="toolbar-label">Wall</span>
+    <div class="toolbar-swatches" id="wall-swatches"></div>
+  </div>
+  <div class="toolbar-divider"></div>
+  <div class="toolbar-group">
+    <span class="toolbar-label">Desk</span>
+    <div class="toolbar-swatches" id="desk-swatches"></div>
+  </div>
+  <div class="toolbar-divider"></div>
+  <button id="toolbar-unclaim-btn" onclick="unclaimCurrentOffice()">Unclaim</button>
+</div>
 <canvas id="c"></canvas>
 
 <script>
@@ -416,6 +468,11 @@ let otherPlayers    = {};   // { [user_id]: { name, skin, outfit, status, x, y }
 let myManualStatus = 'active';  // what the user explicitly chose
 let myStatus       = 'active';  // current (may become 'idle' automatically)
 let lastMoveTime   = Date.now();
+
+let officeData = {};  // { room_id: { owner_user_id, owner_name, wall_color, desk_color } }
+
+const WALL_COLORS = ['#EFF6FF','#F0FDF4','#FFF7ED','#FDF4FF','#FFF1F2','#ECFEFF','#FEFCE8','#F8F4F0'];
+const DESK_COLORS = ['#C8A97E','#D4B896','#E8C99A','#A07850','#8B6B4A','#6B4C2A'];
 
 // ══════════════════════════════════════════════
 // SCREEN MANAGEMENT
@@ -525,12 +582,14 @@ document.getElementById('setup-btn').addEventListener('click', async () => {
 async function doLogout() {
   teardownRealtime();
   await sb.auth.signOut();
-  currentUser = null; currentProfile = null;
+  currentUser = null; currentProfile = null; officeData = {};
   document.getElementById('hud').style.display      = 'none';
   document.getElementById('room-tag').style.display = 'none';
   document.getElementById('hint').style.display     = 'none';
-  document.getElementById('nearby-badge').style.display = 'none';
-  document.getElementById('discord-btn').style.display  = 'none';
+  document.getElementById('nearby-badge').style.display  = 'none';
+  document.getElementById('discord-btn').style.display   = 'none';
+  document.getElementById('claim-btn').style.display     = 'none';
+  document.getElementById('office-toolbar').style.display = 'none';
   showScreen('login');
 }
 
@@ -546,11 +605,14 @@ function closeAdmin() { document.getElementById('admin-panel').style.display = '
 function switchAdminTab(tab) {
   adminTab = tab;
   document.querySelectorAll('.admin-tab').forEach((t, i) =>
-    t.classList.toggle('active', (i === 0 && tab === 'pending') || (i === 1 && tab === 'approved'))
+    t.classList.toggle('active',
+      (i === 0 && tab === 'pending') || (i === 1 && tab === 'approved') || (i === 2 && tab === 'offices'))
   );
   document.getElementById('admin-pending-list').style.display  = tab === 'pending'  ? 'block' : 'none';
   document.getElementById('admin-approved-list').style.display = tab === 'approved' ? 'block' : 'none';
-  loadAdminTab(tab);
+  document.getElementById('admin-offices-list').style.display  = tab === 'offices'  ? 'block' : 'none';
+  if (tab === 'offices') loadAdminOfficesTab();
+  else loadAdminTab(tab);
 }
 async function loadAdminTab(tab) {
   const isPending = tab === 'pending';
@@ -583,6 +645,142 @@ async function removeUser(userId) {
   if (!confirm('Remove this team member?')) return;
   await sb.from('profiles').delete().eq('user_id', userId);
   loadAdminTab(adminTab);
+}
+async function loadAdminOfficesTab() {
+  const { data } = await sb.from('offices').select('*');
+  const listEl = document.getElementById('admin-offices-list');
+  if (!data || data.length === 0) {
+    listEl.innerHTML = '<div class="empty-state">No offices claimed yet</div>';
+    return;
+  }
+  listEl.innerHTML = data.map(o => `
+    <div class="member-item">
+      <div class="member-avatar" style="background:#4f46e5;font-size:18px">🏠</div>
+      <div class="member-info">
+        <div class="mname">${o.owner_name}</div>
+        <div class="memail">${o.room_id.replace('office', 'Office ')}</div>
+        <span class="mbadge badge-approved">Claimed</span>
+      </div>
+      <div class="member-actions">
+        <button class="btn-remove" onclick="adminUnclaimOffice('${o.room_id}')">Unclaim</button>
+      </div>
+    </div>
+  `).join('');
+}
+async function adminUnclaimOffice(roomId) {
+  if (!confirm('Unclaim this office?')) return;
+  await sb.from('offices').delete().eq('room_id', roomId);
+  delete officeData[roomId];
+  broadcastOfficeUpdate(roomId, null);
+  loadAdminOfficesTab();
+}
+
+// ══════════════════════════════════════════════
+// OFFICE CLAIMING & PERSONALISATION
+// ══════════════════════════════════════════════
+async function loadOffices() {
+  const { data } = await sb.from('offices').select('*');
+  officeData = {};
+  if (data) data.forEach(o => { officeData[o.room_id] = o; });
+}
+
+function currentOfficeRoom() {
+  return ROOMS.find(r => r.type === 'office' &&
+    player.x >= r.x && player.x <= r.x + r.w &&
+    player.y >= r.y && player.y <= r.y + r.h) || null;
+}
+
+function broadcastOfficeUpdate(roomId, data) {
+  if (!realtimeChannel) return;
+  realtimeChannel.send({ type: 'broadcast', event: 'office_update', payload: { room_id: roomId, data } });
+}
+
+async function claimCurrentOffice() {
+  const r = currentOfficeRoom();
+  if (!r) return;
+  if (officeData[r.id]) return;
+  const payload = {
+    room_id: r.id,
+    owner_user_id: currentUser.id,
+    owner_name: currentProfile.name,
+    wall_color: r.floor,
+    desk_color: '#C8A97E',
+    objects: {},
+  };
+  const { error } = await sb.from('offices').upsert(payload);
+  if (error) { alert('Could not claim office: ' + error.message); return; }
+  officeData[r.id] = payload;
+  broadcastOfficeUpdate(r.id, payload);
+  updateClaimUI();
+}
+
+async function unclaimCurrentOffice() {
+  const r = currentOfficeRoom();
+  if (!r || !officeData[r.id]) return;
+  if (!confirm('Release this office?')) return;
+  await sb.from('offices').delete().eq('room_id', r.id);
+  delete officeData[r.id];
+  broadcastOfficeUpdate(r.id, null);
+  updateClaimUI();
+}
+
+async function saveOfficeColor(type, color) {
+  const r = currentOfficeRoom();
+  if (!r || !officeData[r.id] || officeData[r.id].owner_user_id !== currentUser.id) return;
+  await sb.from('offices').update({ [type]: color }).eq('room_id', r.id);
+  officeData[r.id][type] = color;
+  broadcastOfficeUpdate(r.id, officeData[r.id]);
+  // update active swatch highlight
+  const groupId = type === 'wall_color' ? 'wall-swatches' : 'desk-swatches';
+  document.querySelectorAll(`#${groupId} .toolbar-swatch`).forEach(el => {
+    el.classList.toggle('tsactive', el.dataset.c === color);
+  });
+}
+
+function updateClaimUI() {
+  const r = currentOfficeRoom();
+  const claimBtn = document.getElementById('claim-btn');
+  const toolbar  = document.getElementById('office-toolbar');
+  if (!r || !currentUser) { claimBtn.style.display = 'none'; toolbar.style.display = 'none'; return; }
+  const oData = officeData[r.id];
+  if (!oData) {
+    claimBtn.style.display = 'block';
+    toolbar.style.display  = 'none';
+  } else if (oData.owner_user_id === currentUser.id) {
+    claimBtn.style.display = 'none';
+    toolbar.style.display  = 'flex';
+    // highlight active swatches
+    document.querySelectorAll('#wall-swatches .toolbar-swatch').forEach(el => {
+      el.classList.toggle('tsactive', el.dataset.c === oData.wall_color);
+    });
+    document.querySelectorAll('#desk-swatches .toolbar-swatch').forEach(el => {
+      el.classList.toggle('tsactive', el.dataset.c === oData.desk_color);
+    });
+  } else {
+    claimBtn.style.display = 'none';
+    toolbar.style.display  = 'none';
+  }
+}
+
+function initOfficeToolbar() {
+  const wallEl = document.getElementById('wall-swatches');
+  const deskEl = document.getElementById('desk-swatches');
+  WALL_COLORS.forEach(c => {
+    const el = document.createElement('div');
+    el.className = 'toolbar-swatch'; el.dataset.c = c;
+    el.style.background = c;
+    el.title = c;
+    el.addEventListener('click', () => saveOfficeColor('wall_color', c));
+    wallEl.appendChild(el);
+  });
+  DESK_COLORS.forEach(c => {
+    const el = document.createElement('div');
+    el.className = 'toolbar-swatch'; el.dataset.c = c;
+    el.style.background = c;
+    el.title = c;
+    el.addEventListener('click', () => saveOfficeColor('desk_color', c));
+    deskEl.appendChild(el);
+  });
 }
 
 // ══════════════════════════════════════════════
@@ -668,6 +866,13 @@ function setupRealtime() {
     }
   });
 
+  // Broadcast: office claim/update/unclaim
+  realtimeChannel.on('broadcast', { event: 'office_update' }, ({ payload }) => {
+    if (payload.data) { officeData[payload.room_id] = payload.data; }
+    else { delete officeData[payload.room_id]; }
+    updateClaimUI();
+  });
+
   realtimeChannel.subscribe(async status => {
     if (status === 'SUBSCRIBED') {
       await realtimeChannel.track({
@@ -705,13 +910,16 @@ function teardownRealtime() {
 // ══════════════════════════════════════════════
 // ENTER GAME
 // ══════════════════════════════════════════════
-function enterGame() {
+async function enterGame() {
   showScreen('game');
   if (currentProfile.role === 'admin') document.getElementById('hud-admin-btn').style.display = 'block';
   playerCfg = { name: currentProfile.name, skin: currentProfile.skin, outfit: currentProfile.outfit };
+  initOfficeToolbar();
+  await loadOffices();
   setupRealtime();
   startIdleDetection();
   updateHUD();
+  updateClaimUI();
   if (!gameRunning) { gameRunning = true; loop(); }
 }
 
@@ -761,9 +969,9 @@ function circleRect(cx,cy,r,rx,ry,rw,rh) { const nx=Math.max(rx,Math.min(cx,rx+r
 function blocked(x,y) { if(x-PR<58||x+PR>1140||y-PR<58||y+PR>796)return true; for(const w of WALLS)if(circleRect(x,y,PR,w.x,w.y,w.w,w.h))return true; return false; }
 function roomAt(x,y) { for(const r of ROOMS)if(x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h)return r.name; return 'Hallway'; }
 
-function drawOfficeFurniture(ctx,r) {
+function drawOfficeFurniture(ctx,r,deskColor='#C8A97E') {
   const cx=r.x+r.w/2, deskX=cx-38, deskY=r.y+38;
-  ctx.fillStyle='#C8A97E'; ctx.fillRect(deskX,deskY,76,48);
+  ctx.fillStyle=deskColor; ctx.fillRect(deskX,deskY,76,48);
   ctx.fillStyle='#A07850'; ctx.fillRect(deskX,deskY+44,76,4);
   ctx.fillStyle='#2d2d2d'; ctx.fillRect(deskX+22,deskY+6,32,22);
   ctx.fillStyle='#1e3a5f'; ctx.fillRect(deskX+24,deskY+8,28,18);
@@ -809,6 +1017,41 @@ function drawGamesFurniture(ctx,r) {
   ctx.fillStyle='#37474F';ctx.fillRect(r.x+r.w-140,r.y+120,120,12);
   ctx.fillStyle='#333';ctx.fillRect(r.x+r.w-130,r.y+112,28,10);ctx.fillRect(r.x+r.w-94,r.y+112,28,10);
   ctx.fillStyle='rgba(255,255,255,0.5)';ctx.font='10px Segoe UI';ctx.textAlign='center';ctx.fillText('PING PONG',tx+90,ty+115);
+}
+
+function drawOfficeNameplate(ctx, r, ownerName) {
+  // Plaque on interior wall near door
+  const px = r.x + r.w / 2;
+  const py = r.y + r.h - 14;
+  ctx.font = 'bold 10px Segoe UI'; ctx.textAlign = 'center';
+  const tw = ctx.measureText(ownerName).width;
+  const pw = tw + 20, ph = 16;
+  ctx.fillStyle = '#C8A060';
+  rrect(ctx, px - pw/2 - 2, py - ph/2 - 2, pw + 4, ph + 4, 4); ctx.fill();
+  ctx.fillStyle = '#2c1f0a';
+  rrect(ctx, px - pw/2, py - ph/2, pw, ph, 3); ctx.fill();
+  ctx.fillStyle = '#FFD700';
+  ctx.fillText(ownerName, px, py + 4);
+}
+
+function drawDoorLabels(ctx) {
+  ctx.font = 'bold 10px Segoe UI'; ctx.textAlign = 'center';
+  ROOMS.forEach(r => {
+    if (r.type !== 'office') return;
+    const oData = officeData[r.id];
+    if (!oData) return;
+    const doorX = r.x + r.w / 2;
+    // top-row offices have y < 300, door at ROW_TOP[1]=252; mid-row door at ROW_MID[1]=538
+    const doorY = r.y < 300 ? ROW_TOP[1] : ROW_MID[1];
+    const labelY = doorY + 16;
+    const name = oData.owner_name;
+    const tw = ctx.measureText(name).width;
+    const lw = tw + 16, lh = 14;
+    ctx.fillStyle = 'rgba(79,70,229,0.88)';
+    rrect(ctx, doorX - lw/2, labelY - lh/2, lw, lh, 4); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillText(name, doorX, labelY + 4.5);
+  });
 }
 
 function drawChar(ctx, x, y, skin, outfit, name, status, isPlayer=false, isMoving=false) {
@@ -871,14 +1114,17 @@ function drawWorld(ctx) {
   ctx.beginPath(); ctx.moveTo(100,(HALL2[0]+HALL2[1])/2); ctx.lineTo(WW-100,(HALL2[0]+HALL2[1])/2); ctx.stroke();
   ctx.setLineDash([]);
   ROOMS.forEach(r => {
-    ctx.fillStyle = r.floor; ctx.fillRect(r.x+WT/2,r.y+WT/2,r.w-WT,r.h-WT);
+    const oData = r.type === 'office' ? officeData[r.id] : null;
+    ctx.fillStyle = oData?.wall_color || r.floor; ctx.fillRect(r.x+WT/2,r.y+WT/2,r.w-WT,r.h-WT);
     ctx.strokeStyle = r.accent; ctx.lineWidth = 2; ctx.strokeRect(r.x+WT/2+2,r.y+WT/2+2,r.w-WT-4,r.h-WT-4);
     ctx.fillStyle = 'rgba(60,60,80,0.55)'; ctx.font = 'bold 12px Segoe UI'; ctx.textAlign = 'center';
     ctx.fillText(r.name, r.x+r.w/2, r.y+WT/2+16);
-    if (r.type==='office') drawOfficeFurniture(ctx,r);
+    if (r.type==='office') drawOfficeFurniture(ctx,r,oData?.desk_color);
     if (r.type==='lunch')  drawLunchFurniture(ctx,r);
     if (r.type==='games')  drawGamesFurniture(ctx,r);
+    if (oData && r.type==='office') drawOfficeNameplate(ctx, r, oData.owner_name);
   });
+  drawDoorLabels(ctx);
   ctx.fillStyle = '#383848'; WALLS.forEach(w => ctx.fillRect(w.x,w.y,w.w,w.h));
   ctx.strokeStyle = '#1e1e2e'; ctx.lineWidth = 12; ctx.strokeRect(54,54,WW-108,WH-108);
 }
@@ -957,7 +1203,7 @@ function loop() {
   if (!blocked(player.x, ny)) player.y = ny;
 
   const nr = roomAt(player.x, player.y);
-  if (nr !== currentRoom) { currentRoom = nr; document.getElementById('room-tag').textContent = currentRoom; }
+  if (nr !== currentRoom) { currentRoom = nr; document.getElementById('room-tag').textContent = currentRoom; updateClaimUI(); }
 
   // Nearby detection
   let nearby = null;
