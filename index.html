@@ -725,7 +725,7 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
 
 <div id="room-tag" style="display:none">Hallway<span id="vibe-badge" style="display:none"></span></div>
 <div id="hint" style="display:none">⬆ ⬇ ⬅ ➡  Arrow keys to move<br>WASD also works</div>
-<div id="version-tag">v2.2 — 6 Mar 2026</div>
+<div id="version-tag">v2.3 — 6 Mar 2026</div>
 <div id="nearby-badge"></div>
 <button id="discord-btn" onclick="openDiscord()">🎙️ Join Voice Chat</button>
 <button id="claim-btn" onclick="claimCurrentOffice()">🏠 Claim This Office</button>
@@ -2372,50 +2372,193 @@ function drawStickyNotes(ctx) {
 }
 
 function drawNoticeBoard(ctx) {
+  ctx.imageSmoothingEnabled = false;
   const bx = BOARD_X, by = BOARD_Y, bw = BOARD_W, bh = BOARD_H;
-  // Wooden frame
-  ctx.fillStyle = '#5C3311'; ctx.fillRect(bx - 5, by - 5, bw + 10, bh + 10);
-  // Cork surface
-  const grad = ctx.createLinearGradient(bx, by, bx, by + bh);
-  grad.addColorStop(0, '#C97B2C'); grad.addColorStop(1, '#A0621A');
-  ctx.fillStyle = grad; ctx.fillRect(bx, by, bw, bh);
-  // Cork texture dots
-  ctx.fillStyle = 'rgba(0,0,0,0.06)';
-  for (let i = 0; i < 18; i++) {
-    ctx.beginPath(); ctx.arc(bx + (i * 31 + 10) % bw, by + (i * 17 + 8) % bh, 2.5, 0, Math.PI*2); ctx.fill();
-  }
-  // Header strip
-  ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fillRect(bx, by, bw, 16);
-  ctx.fillStyle = '#FEF9C3'; ctx.font = 'bold 9px Segoe UI'; ctx.textAlign = 'center';
-  ctx.fillText('📋  TEAM NOTICE BOARD', bx + bw/2, by + 11);
-  // Latest 3 announcements as mini pinned notes
+
+  // ── PIXEL ART WOODEN FRAME ──────────────────────────────────────────
+  ctx.fillStyle = '#3d2008';
+  ctx.fillRect(bx - 6, by - 6, bw + 12, bh + 12);
+  // frame highlight
+  ctx.fillStyle = '#6b3a12';
+  ctx.fillRect(bx - 6, by - 6, bw + 12, 4);
+  ctx.fillRect(bx - 6, by - 6, 4, bh + 12);
+  // frame shadow
+  ctx.fillStyle = '#1e0e04';
+  ctx.fillRect(bx - 6, by + bh + 2, bw + 12, 4);
+  ctx.fillRect(bx + bw + 2, by - 6, 4, bh + 12);
+
+  // ── CORK SURFACE (pixel texture) ────────────────────────────────────
+  ctx.fillStyle = '#b5711e'; ctx.fillRect(bx, by, bw, bh);
+  // cork grain dots (2x2 pixel blocks)
+  const corkDots = [
+    [8,5],[22,12],[40,7],[60,4],[80,9],[95,14],[115,6],[140,11],[160,5],
+    [175,13],[200,8],[220,14],[240,6],[12,20],[35,26],[55,18],[75,24],
+    [100,19],[130,27],[155,22],[185,17],[210,25],[235,21],
+    [10,36],[30,42],[50,34],[70,40],[90,38],[110,44],[135,35],[165,41],
+    [190,39],[215,43],[238,37],
+  ];
+  corkDots.forEach(([dx, dy]) => {
+    if (dx < bw - 2 && dy < bh - 2) {
+      ctx.fillStyle = (dx + dy) % 3 === 0 ? '#c47f25' : '#a06018';
+      ctx.fillRect(bx + dx, by + dy, 2, 2);
+    }
+  });
+
+  // ── HEADER STRIP ─────────────────────────────────────────────────────
+  ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(bx, by, bw, 16);
+  ctx.fillStyle = '#FEF9C3';
+  ctx.font = 'bold 9px "Courier New", monospace'; ctx.textAlign = 'center';
+  ctx.fillText('TEAM NOTICE BOARD', bx + bw/2, by + 11);
+
+  // ── PINNED PAPER NOTES ───────────────────────────────────────────────
   const latest = announcements.slice(0, 3);
   const bgMap = { info: '#BAE6FD', important: '#FEF08A', urgent: '#FECDD3' };
   latest.forEach((ann, i) => {
     const nw = Math.floor((bw - 16) / 3) - 4, nh = bh - 24;
     const nx = bx + 8 + i * (nw + 4), ny = by + 20;
+    // paper shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fillRect(nx + 2, ny + 2, nw, nh);
+    // paper
     ctx.fillStyle = bgMap[ann.priority] || '#FEF08A'; ctx.fillRect(nx, ny, nw, nh);
-    // Pin
-    ctx.fillStyle = '#EF4444'; ctx.beginPath(); ctx.arc(nx + nw/2, ny, 3.5, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#FCA5A5'; ctx.beginPath(); ctx.arc(nx + nw/2 - 1, ny - 1, 1.5, 0, Math.PI*2); ctx.fill();
-    // Title
-    ctx.fillStyle = '#1a1a2e'; ctx.font = 'bold 7px Segoe UI'; ctx.textAlign = 'left';
+    // paper edge
+    ctx.fillStyle = 'rgba(0,0,0,0.1)'; ctx.fillRect(nx, ny + nh - 2, nw, 2);
+    // pixel art pin (4x4 square)
+    ctx.fillStyle = '#ef4444'; ctx.fillRect(nx + nw/2 - 3, ny - 3, 6, 6);
+    ctx.fillStyle = '#fca5a5'; ctx.fillRect(nx + nw/2 - 2, ny - 2, 2, 2);
+    // title text
+    ctx.fillStyle = '#1a1a2e'; ctx.font = 'bold 7px "Courier New", monospace'; ctx.textAlign = 'left';
     let t = ann.title;
     while (ctx.measureText(t).width > nw - 4 && t.length) t = t.slice(0, -1);
     if (t !== ann.title) t += '…';
     ctx.fillText(t, nx + 2, ny + 10);
-    ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.font = '5.5px Segoe UI';
-    ctx.fillText('click to read', nx + 2, ny + nh - 2);
+    // text lines (decorative pixel lines)
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    for (let ln = 14; ln < nh - 6; ln += 5) ctx.fillRect(nx + 2, ny + ln, nw - 4, 1);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.font = '5px "Courier New", monospace';
+    ctx.fillText('click to read', nx + 2, ny + nh - 3);
   });
   if (!latest.length) {
-    ctx.fillStyle = 'rgba(255,249,195,0.65)'; ctx.font = '9px Segoe UI'; ctx.textAlign = 'center';
-    ctx.fillText('No announcements yet', bx + bw/2, by + bh/2 + 8);
+    ctx.fillStyle = 'rgba(255,249,195,0.7)';
+    ctx.font = '8px "Courier New", monospace'; ctx.textAlign = 'center';
+    ctx.fillText('No announcements yet', bx + bw/2, by + bh/2 + 4);
   }
-  // Corner pins
-  [bx + 16, bx + bw - 16].forEach(px => {
-    ctx.fillStyle = '#EF4444'; ctx.beginPath(); ctx.arc(px, by + 4, 4.5, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#FCA5A5'; ctx.beginPath(); ctx.arc(px - 1, by + 3, 1.5, 0, Math.PI*2); ctx.fill();
+  // corner pixel pins
+  [bx + 14, bx + bw - 14].forEach(px => {
+    ctx.fillStyle = '#ef4444'; ctx.fillRect(px - 3, by + 2, 6, 6);
+    ctx.fillStyle = '#fca5a5'; ctx.fillRect(px - 2, by + 3, 2, 2);
   });
+}
+
+// ── Pixel art room details: windows, ceiling lights, door frames ────────────
+function drawRoomDetails(ctx) {
+  ctx.imageSmoothingEnabled = false;
+
+  ROOMS.forEach(r => {
+    const rx = r.x + WT/2, ry = r.y + WT/2, rw = r.w - WT, rh = r.h - WT;
+
+    // ── CEILING LIGHT (pixel yellow glow square) ─────────────────────
+    const lx = r.x + r.w/2, ly = r.y + WT/2 + 22;
+    // outer glow (faint)
+    ctx.fillStyle = 'rgba(255,240,150,0.12)';
+    ctx.fillRect(lx - 14, ly - 14, 28, 28);
+    // light fixture (pixel art)
+    ctx.fillStyle = '#b8902a';
+    ctx.fillRect(lx - 8, ly - 2, 16, 4); // bar
+    ctx.fillStyle = '#ffe87a';
+    ctx.fillRect(lx - 6, ly + 2, 12, 6); // bulb
+    ctx.fillStyle = '#fff9c4';
+    ctx.fillRect(lx - 4, ly + 3, 4, 3);  // shine
+
+    // ── WINDOWS (on outer walls only) ────────────────────────────────
+    const onTopEdge    = r.y <= ROW_TOP[0] + 2;
+    const onBottomEdge = r.y + r.h >= ROW_BOT[1] - 2;
+    const onLeftEdge   = r.x <= COL[0] + 2;
+    const onRightEdge  = r.x + r.w >= COL[5] - 2;
+
+    function drawWindow(wx, wy) {
+      // sill (warm wood)
+      ctx.fillStyle = '#8B6535'; ctx.fillRect(wx - 14, wy + 18, 28, 4);
+      // outer frame
+      ctx.fillStyle = '#c8a060'; ctx.fillRect(wx - 13, wy - 4, 26, 24);
+      // pane bg (sky blue)
+      ctx.fillStyle = '#5bb8d4'; ctx.fillRect(wx - 11, wy - 2, 22, 20);
+      // sky gradient feel
+      ctx.fillStyle = '#8dd4e8'; ctx.fillRect(wx - 11, wy - 2, 22, 8);
+      // window cross-frame
+      ctx.fillStyle = '#c8a060';
+      ctx.fillRect(wx - 1, wy - 2, 2, 20); // vertical
+      ctx.fillRect(wx - 11, wy + 7, 22, 2); // horizontal
+      // glass shine pixels
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.fillRect(wx - 9, wy, 4, 3);
+      ctx.fillRect(wx + 3, wy + 10, 3, 3);
+    }
+
+    if (onTopEdge) {
+      // one window centred near top of room
+      drawWindow(r.x + r.w * 0.5, r.y + WT + 8);
+    }
+    if (onBottomEdge) {
+      drawWindow(r.x + r.w * 0.5, r.y + rh - 16);
+    }
+    if (onLeftEdge) {
+      drawWindow(r.x + WT + 10, r.y + r.h * 0.45);
+    }
+    if (onRightEdge) {
+      drawWindow(r.x + rw - 4, r.y + r.h * 0.45);
+    }
+  });
+
+  // ── DOOR FRAMES (warm wood colour at each door gap) ──────────────────
+  const doorW = DOOR_HALF * 2;
+  const doorFrameColor = '#8B6535';
+  const doorFrameHL    = '#c8a060';
+
+  function drawDoorFrame(dx, dy, isHoriz) {
+    if (isHoriz) {
+      ctx.fillStyle = doorFrameColor;
+      ctx.fillRect(dx - DOOR_HALF - 4, dy - WT/2 - 2, 6, WT + 4);
+      ctx.fillRect(dx + DOOR_HALF - 2, dy - WT/2 - 2, 6, WT + 4);
+      ctx.fillStyle = doorFrameHL;
+      ctx.fillRect(dx - DOOR_HALF - 4, dy - WT/2 - 2, 2, WT + 4);
+      ctx.fillRect(dx + DOOR_HALF - 2, dy - WT/2 - 2, 2, WT + 4);
+    } else {
+      ctx.fillStyle = doorFrameColor;
+      ctx.fillRect(dx - WT/2 - 2, dy - DOOR_HALF - 4, WT + 4, 6);
+      ctx.fillRect(dx - WT/2 - 2, dy + DOOR_HALF - 2, WT + 4, 6);
+      ctx.fillStyle = doorFrameHL;
+      ctx.fillRect(dx - WT/2 - 2, dy - DOOR_HALF - 4, WT + 4, 2);
+      ctx.fillRect(dx - WT/2 - 2, dy + DOOR_HALF - 2, WT + 4, 2);
+    }
+  }
+
+  const OFF_CX2 = COL.slice(0,5).map((x,i) => x + (COL[i+1]-COL[i])/2);
+  OFF_CX2.forEach(cx2 => {
+    drawDoorFrame(cx2, ROW_TOP[1], true);
+    drawDoorFrame(cx2, ROW_MID[0], true);
+    drawDoorFrame(cx2, ROW_MID[1], true);
+  });
+  drawDoorFrame(54 + 245, ROW_BOT[0], true);
+  drawDoorFrame(544 + 300, ROW_BOT[0], true);
+  for (let i = 1; i < 5; i++) {
+    drawDoorFrame(COL[i], (ROW_TOP[0] + ROW_TOP[1]) / 2, false);
+    drawDoorFrame(COL[i], (ROW_MID[0] + ROW_MID[1]) / 2, false);
+  }
+
+  // ── HALLWAY PLANTS ────────────────────────────────────────────────────
+  function drawHallPlant(hx, hy) {
+    ctx.fillStyle = '#5a3515'; ctx.fillRect(hx - 6, hy + 6, 12, 10);
+    ctx.fillStyle = '#3d2208'; ctx.fillRect(hx - 8, hy + 4, 16, 4);
+    ctx.fillStyle = '#145a2a'; ctx.fillRect(hx - 8, hy - 8, 16, 14);
+    ctx.fillStyle = '#1e7a38'; ctx.fillRect(hx - 4, hy - 12, 10, 10);
+    ctx.fillStyle = '#27ae60'; ctx.fillRect(hx - 2, hy - 8,  6,  6);
+  }
+  // scatter a few plants along the hallways
+  [[120, (HALL1[0]+HALL1[1])/2], [500, (HALL1[0]+HALL1[1])/2],
+   [850, (HALL1[0]+HALL1[1])/2], [1060,(HALL1[0]+HALL1[1])/2],
+   [120, (HALL2[0]+HALL2[1])/2], [500, (HALL2[0]+HALL2[1])/2],
+   [850, (HALL2[0]+HALL2[1])/2], [1060,(HALL2[0]+HALL2[1])/2],
+  ].forEach(([hx, hy]) => drawHallPlant(hx, hy));
 }
 
 function drawOfficeNameplate(ctx, r, ownerName) {
@@ -2698,6 +2841,7 @@ function drawWorld(ctx) {
     if (oData && r.type === 'office') drawOfficeNameplate(ctx, r, oData.owner_name);
   });
 
+  drawRoomDetails(ctx);
   drawDoorLabels(ctx);
   drawStickyNotes(ctx);
   drawNoticeBoard(ctx);
