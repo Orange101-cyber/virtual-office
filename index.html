@@ -725,7 +725,7 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
 
 <div id="room-tag" style="display:none">Hallway<span id="vibe-badge" style="display:none"></span></div>
 <div id="hint" style="display:none">⬆ ⬇ ⬅ ➡  Arrow keys to move<br>WASD also works</div>
-<div id="version-tag">v2.0 — 6 Mar 2026</div>
+<div id="version-tag">v2.1 — 6 Mar 2026</div>
 <div id="nearby-badge"></div>
 <button id="discord-btn" onclick="openDiscord()">🎙️ Join Voice Chat</button>
 <button id="claim-btn" onclick="claimCurrentOffice()">🏠 Claim This Office</button>
@@ -2310,33 +2310,140 @@ function rrect(ctx,x,y,w,h,r) {
   ctx.closePath();
 }
 
+// ── Pixel tile fill helper ──────────────────────────────────────────────────
+// Fills rect (rx,ry,rw,rh) with a checkerboard tile of tileSize.
+// color1 = primary, color2 = secondary (slightly darker shade for checker).
+function drawTileFloor(ctx, rx, ry, rw, rh, color1, color2, tileSize=16) {
+  ctx.fillStyle = color1;
+  ctx.fillRect(rx, ry, rw, rh);
+  ctx.fillStyle = color2;
+  const startCol = Math.floor(rx / tileSize);
+  const startRow = Math.floor(ry / tileSize);
+  const endCol   = Math.ceil((rx + rw) / tileSize);
+  const endRow   = Math.ceil((ry + rh) / tileSize);
+  for (let col = startCol; col < endCol; col++) {
+    for (let row = startRow; row < endRow; row++) {
+      if ((col + row) % 2 === 0) continue;
+      const tx = col * tileSize, ty = row * tileSize;
+      // clip to rect bounds
+      const cx = Math.max(tx, rx), cy = Math.max(ty, ry);
+      const cw = Math.min(tx + tileSize, rx + rw) - cx;
+      const ch = Math.min(ty + tileSize, ry + rh) - cy;
+      if (cw > 0 && ch > 0) ctx.fillRect(cx, cy, cw, ch);
+    }
+  }
+  // subtle grout lines
+  ctx.strokeStyle = 'rgba(0,0,0,0.07)';
+  ctx.lineWidth = 1;
+  for (let col = startCol; col <= endCol; col++) {
+    const lx = col * tileSize;
+    if (lx < rx || lx > rx + rw) continue;
+    ctx.beginPath(); ctx.moveTo(lx, ry); ctx.lineTo(lx, ry + rh); ctx.stroke();
+  }
+  for (let row = startRow; row <= endRow; row++) {
+    const ly = row * tileSize;
+    if (ly < ry || ly > ry + rh) continue;
+    ctx.beginPath(); ctx.moveTo(rx, ly); ctx.lineTo(rx + rw, ly); ctx.stroke();
+  }
+}
+
+// ── Pixel brick wall helper ─────────────────────────────────────────────────
+function drawBrickWall(ctx, wx, wy, ww, wh) {
+  const BH = 8, BW = 20; // brick height / width in px
+  ctx.fillStyle = '#2e2e42';
+  ctx.fillRect(wx, wy, ww, wh);
+  // drop shadow (right + bottom edge)
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillRect(wx + ww, wy + 3, 3, wh);
+  ctx.fillRect(wx + 3, wy + wh, ww, 3);
+  // brick rows
+  for (let row = 0; row * BH < wh; row++) {
+    const offset = (row % 2 === 0) ? 0 : BW / 2;
+    for (let col = -1; col * BW < ww + BW; col++) {
+      const bx = wx + col * BW + offset, by = wy + row * BH;
+      const bw = Math.min(BW - 2, wx + ww - bx - 1), bh = BH - 1;
+      if (bw <= 0 || bh <= 0) continue;
+      const cx = Math.max(bx, wx), cy = Math.max(by, wy);
+      const cw2 = Math.min(bx + bw, wx + ww) - cx;
+      const ch2 = Math.min(by + bh, wy + wh) - cy;
+      if (cw2 <= 0 || ch2 <= 0) continue;
+      ctx.fillStyle = '#3a3a52';
+      ctx.fillRect(cx, cy, cw2, ch2);
+      // highlight on top brick edge
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.fillRect(cx, cy, cw2, 1);
+    }
+  }
+}
+
+// ── Darken a hex colour by `amount` (0–1) ──────────────────────────────────
+function darkenHex(hex, amount) {
+  let c = hex.replace('#','');
+  if (c.length === 3) c = c.split('').map(x=>x+x).join('');
+  const r = Math.max(0, parseInt(c.slice(0,2),16) - Math.round(255*amount));
+  const g = Math.max(0, parseInt(c.slice(2,4),16) - Math.round(255*amount));
+  const b = Math.max(0, parseInt(c.slice(4,6),16) - Math.round(255*amount));
+  return `rgb(${r},${g},${b})`;
+}
+
 function drawWorld(ctx) {
-  ctx.fillStyle = '#2c2c3e'; ctx.fillRect(0,0,WW,WH);
-  ctx.fillStyle = '#EDEDE8'; ctx.fillRect(58,58,WW-116,WH-116);
-  ctx.fillStyle = '#D6D0C4';
-  ctx.fillRect(58,HALL1[0]+WT/2,WW-116,HALL1[1]-HALL1[0]-WT);
-  ctx.fillRect(58,HALL2[0]+WT/2,WW-116,HALL2[1]-HALL2[0]-WT);
-  ctx.strokeStyle = 'rgba(180,170,150,0.4)'; ctx.lineWidth = 2; ctx.setLineDash([12,8]);
-  ctx.beginPath(); ctx.moveTo(100,(HALL1[0]+HALL1[1])/2); ctx.lineTo(WW-100,(HALL1[0]+HALL1[1])/2); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(100,(HALL2[0]+HALL2[1])/2); ctx.lineTo(WW-100,(HALL2[0]+HALL2[1])/2); ctx.stroke();
-  ctx.setLineDash([]);
+  ctx.imageSmoothingEnabled = false;
+
+  // ── OUTSIDE BORDER (dark tile pattern) ──────────────────────────────────
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, 0, WW, WH);
+  // dark pixel tile border pattern
+  ctx.fillStyle = '#22223a';
+  const OT = 12;
+  for (let col = 0; col * OT < WW; col++) {
+    for (let row = 0; row * OT < WH; row++) {
+      if ((col + row) % 2 === 0) ctx.fillRect(col*OT, row*OT, OT, OT);
+    }
+  }
+
+  // ── HALLWAY FLOORS (grey tile) ────────────────────────────────────────────
+  drawTileFloor(ctx, 58, HALL1[0]+WT/2, WW-116, HALL1[1]-HALL1[0]-WT, '#c8c2b4', '#bdb8aa', 20);
+  drawTileFloor(ctx, 58, HALL2[0]+WT/2, WW-116, HALL2[1]-HALL2[0]-WT, '#c8c2b4', '#bdb8aa', 20);
+
+  // ── ROOMS ────────────────────────────────────────────────────────────────
   ROOMS.forEach(r => {
     const oData = r.type === 'office' ? officeData[r.id] : null;
-    ctx.fillStyle = oData?.wall_color || r.floor; ctx.fillRect(r.x+WT/2,r.y+WT/2,r.w-WT,r.h-WT);
-    ctx.strokeStyle = r.accent; ctx.lineWidth = 2; ctx.strokeRect(r.x+WT/2+2,r.y+WT/2+2,r.w-WT-4,r.h-WT-4);
-    ctx.fillStyle = 'rgba(60,60,80,0.55)'; ctx.font = 'bold 12px Segoe UI'; ctx.textAlign = 'center';
-    ctx.fillText(r.name, r.x+r.w/2, r.y+WT/2+16);
-    if (r.type==='office') drawOfficeFurniture(ctx,r,oData?.desk_color);
-    if (r.type==='lunch')       drawLunchFurniture(ctx,r);
-    if (r.type==='games')       drawGamesFurniture(ctx,r);
-    if (r.type==='whiteboard')  drawWhiteboardRoom(ctx,r);
-    if (oData && r.type==='office') drawOfficeNameplate(ctx, r, oData.owner_name);
+    const floorBase  = oData?.wall_color || r.floor;
+    const floorDark  = darkenHex(floorBase, 0.05);
+    const rx = r.x + WT/2, ry = r.y + WT/2, rw = r.w - WT, rh = r.h - WT;
+
+    // tiled floor
+    drawTileFloor(ctx, rx, ry, rw, rh, floorBase, floorDark, 16);
+
+    // accent inner border
+    ctx.strokeStyle = r.accent; ctx.lineWidth = 2;
+    ctx.strokeRect(rx + 2, ry + 2, rw - 4, rh - 4);
+
+    // room label
+    ctx.fillStyle = 'rgba(40,40,60,0.60)';
+    ctx.font = 'bold 11px "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(r.name, r.x + r.w/2, r.y + WT/2 + 16);
+
+    if (r.type === 'office')     drawOfficeFurniture(ctx, r, oData?.desk_color);
+    if (r.type === 'lunch')      drawLunchFurniture(ctx, r);
+    if (r.type === 'games')      drawGamesFurniture(ctx, r);
+    if (r.type === 'whiteboard') drawWhiteboardRoom(ctx, r);
+    if (oData && r.type === 'office') drawOfficeNameplate(ctx, r, oData.owner_name);
   });
+
   drawDoorLabels(ctx);
   drawStickyNotes(ctx);
   drawNoticeBoard(ctx);
-  ctx.fillStyle = '#383848'; WALLS.forEach(w => ctx.fillRect(w.x,w.y,w.w,w.h));
-  ctx.strokeStyle = '#1e1e2e'; ctx.lineWidth = 12; ctx.strokeRect(54,54,WW-108,WH-108);
+
+  // ── PIXEL BRICK WALLS ───────────────────────────────────────────────────
+  WALLS.forEach(w => drawBrickWall(ctx, w.x, w.y, w.w, w.h));
+
+  // ── OUTER FRAME ─────────────────────────────────────────────────────────
+  drawBrickWall(ctx, 54, 54,    WW-108, WT);       // top
+  drawBrickWall(ctx, 54, WH-62, WW-108, WT);       // bottom
+  drawBrickWall(ctx, 54, 54,    WT, WH-108);       // left
+  drawBrickWall(ctx, WW-62, 54, WT, WH-108);       // right
 }
 
 // ══════════════════════════════════════════════
