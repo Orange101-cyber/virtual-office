@@ -189,6 +189,12 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
   padding: 8px 14px; border-radius: 10px; font-size: 11px;
   pointer-events: none; backdrop-filter: blur(4px); z-index: 50; line-height: 1.6;
 }
+#version-tag {
+  position: fixed; bottom: 22px; right: 18px;
+  background: rgba(15,15,30,0.7); color: rgba(255,255,255,0.45);
+  padding: 6px 12px; border-radius: 10px; font-size: 11px; font-weight: 600;
+  pointer-events: none; backdrop-filter: blur(4px); z-index: 50; letter-spacing: 0.3px;
+}
 #nearby-badge {
   position: fixed; top: 18px; left: 50%; transform: translateX(-50%);
   background: #4f46e5; color: white; padding: 9px 18px;
@@ -719,6 +725,7 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
 
 <div id="room-tag" style="display:none">Hallway<span id="vibe-badge" style="display:none"></span></div>
 <div id="hint" style="display:none">⬆ ⬇ ⬅ ➡  Arrow keys to move<br>WASD also works</div>
+<div id="version-tag">v1.0 — 6 Mar 2026</div>
 <div id="nearby-badge"></div>
 <button id="discord-btn" onclick="openDiscord()">🎙️ Join Voice Chat</button>
 <button id="claim-btn" onclick="claimCurrentOffice()">🏠 Claim This Office</button>
