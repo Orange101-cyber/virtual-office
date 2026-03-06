@@ -438,6 +438,41 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
   box-shadow: 2px 2px 0 rgba(0,0,0,0.4); pointer-events: none;
 }
 
+/* ── EDIT MODE ── */
+#edit-mode-banner {
+  position: fixed; top: 0; left: 0; right: 0;
+  background: rgba(220,38,38,0.95); color: #fff; text-align: center;
+  padding: 8px 12px; font-size: 11px; font-weight: 700;
+  font-family: 'Courier New', monospace; z-index: 800;
+  border-bottom: 2px solid #7f1d1d; display: none; pointer-events: none;
+  letter-spacing: 0.3px;
+}
+#edit-mode-notice {
+  position: fixed; top: 0; left: 0; right: 0;
+  background: rgba(245,158,11,0.95); color: #1a1a0a; text-align: center;
+  padding: 8px 12px; font-size: 11px; font-weight: 700;
+  font-family: 'Courier New', monospace; z-index: 800;
+  border-bottom: 2px solid #92400e; display: none; pointer-events: none;
+}
+#edit-style-legend {
+  position: fixed; right: 14px; top: 50%; transform: translateY(-50%);
+  background: rgba(10,10,22,0.96); border: 2px solid #3a3a5a;
+  padding: 10px 12px; z-index: 801; display: none;
+  box-shadow: 2px 2px 0 rgba(0,0,0,0.5);
+}
+#edit-style-legend p {
+  margin: 0 0 4px; font-size: 9px; font-weight: 700;
+  color: rgba(140,150,220,0.7); font-family: 'Courier New', monospace;
+  letter-spacing: 0.5px; text-transform: uppercase;
+}
+.edit-style-btn {
+  display: block; width: 100%; text-align: left; background: rgba(255,255,255,0.04);
+  border: 1px solid #2a2a48; color: #c7d2fe; padding: 4px 8px; margin-bottom: 3px;
+  font-size: 10px; font-family: 'Courier New', monospace; cursor: pointer;
+  transition: background 0.1s;
+}
+.edit-style-btn:hover { background: rgba(99,102,241,0.25); border-color: #6366f1; }
+
 /* ── WHITEBOARD ── */
 #wb-open-btn {
   position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
@@ -720,7 +755,34 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
     <div id="admin-pending-list"></div>
     <div id="admin-approved-list" style="display:none"></div>
     <div id="admin-offices-list" style="display:none"></div>
+    <hr style="border:none;border-top:1px solid #e8e8e8;margin:20px 0 14px">
+    <button class="admin-btn" onclick="enterEditMode()" style="background:#1e3a5f;border-color:#3b82f6;color:#93c5fd">
+      🏗️ Edit Office Layout
+    </button>
   </div>
+</div>
+
+<!-- EDIT MODE BANNER (admin sees this) -->
+<div id="edit-mode-banner">
+  🏗️ EDIT MODE &nbsp;·&nbsp; Click floor = restyle &nbsp;·&nbsp; Click grid line = toggle wall &nbsp;·&nbsp;
+  Double-click label = rename &nbsp;·&nbsp; ESC = exit
+</div>
+<!-- EDIT MODE NOTICE (other players see this) -->
+<div id="edit-mode-notice">✏️ Office is being updated by admin — changes will appear shortly</div>
+<!-- EDIT STYLE LEGEND (right panel in edit mode) -->
+<div id="edit-style-legend">
+  <p>Floor Styles</p>
+  <button class="edit-style-btn" onclick="setEditBrush('wood')">🪵 Wood Planks</button>
+  <button class="edit-style-btn" onclick="setEditBrush('carpet-blue')">🔵 Carpet Blue</button>
+  <button class="edit-style-btn" onclick="setEditBrush('carpet-red')">🔴 Carpet Red</button>
+  <button class="edit-style-btn" onclick="setEditBrush('carpet-green')">🟢 Carpet Green</button>
+  <button class="edit-style-btn" onclick="setEditBrush('carpet-purple')">🟣 Carpet Purple</button>
+  <button class="edit-style-btn" onclick="setEditBrush('tile')">⬛ B&amp;W Tiles</button>
+  <button class="edit-style-btn" onclick="setEditBrush('concrete')">🩶 Concrete</button>
+  <button class="edit-style-btn" onclick="setEditBrush('default')">↩ Room Default</button>
+  <p style="margin-top:10px">Walls</p>
+  <button class="edit-style-btn" onclick="setEditBrush('wall')">🧱 Toggle Wall</button>
+  <p style="margin-top:10px;color:#f87171">Active: <span id="edit-brush-label">Wood Planks</span></p>
 </div>
 
 <!-- SETUP / CHARACTER SCREEN -->
@@ -792,7 +854,7 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
 
 <div id="room-tag" style="display:none">Hallway<span id="vibe-badge" style="display:none"></span></div>
 <div id="hint" style="display:none">⬆ ⬇ ⬅ ➡ Move &nbsp;·&nbsp; W = Wave 👋 &nbsp;·&nbsp; R = React 💬 &nbsp;·&nbsp; E = Interact &nbsp;·&nbsp; Space = Sticky note</div>
-<div id="version-tag">v3.1 — 6 Mar 2026</div>
+<div id="version-tag">v3.2 — 6 Mar 2026</div>
 <div id="nearby-badge"></div>
 <button id="discord-btn" onclick="openDiscord()">🎙️ Join Voice Chat</button>
 <button id="claim-btn" onclick="claimCurrentOffice()">🏠 Claim This Office</button>
@@ -1332,7 +1394,7 @@ async function loadAnnouncements() {
 
 async function resync() {
   await loadOffices();
-  await Promise.all([loadStickyNotes(), loadAnnouncements(), loadPets(), syncMoods()]);
+  await Promise.all([loadStickyNotes(), loadAnnouncements(), loadPets(), syncMoods(), loadFloorTiles(), loadCustomWalls()]);
   if (document.getElementById('announce-panel').style.display === 'flex') renderAnnounceList();
 }
 
@@ -1977,6 +2039,18 @@ function setupRealtime() {
     triggerGongAnim(payload.name);
   });
 
+  // Broadcast: office edit mode (non-admins see notice)
+  realtimeChannel.on('broadcast', { event: 'edit_mode' }, ({ payload }) => {
+    if (currentProfile?.role === 'admin') return;
+    document.getElementById('edit-mode-notice').style.display = payload.active ? 'block' : 'none';
+  });
+
+  // Broadcast: edit refresh — non-admins reload floor/wall data
+  realtimeChannel.on('broadcast', { event: 'edit_refresh' }, async () => {
+    if (currentProfile?.role === 'admin') return;
+    await Promise.all([loadFloorTiles(), loadCustomWalls()]);
+  });
+
   // Broadcast: office claim/update/unclaim
   realtimeChannel.on('broadcast', { event: 'office_update' }, ({ payload }) => {
     if (payload.data) { officeData[payload.room_id] = payload.data; }
@@ -2039,7 +2113,7 @@ async function enterGame() {
   playerCfg = { name: currentProfile.name, skin: currentProfile.skin, outfit: currentProfile.outfit };
   initOfficeToolbar();
   await loadOffices();
-  await Promise.all([loadStickyNotes(), loadAnnouncements(), loadPets(), loadGongCount()]);
+  await Promise.all([loadStickyNotes(), loadAnnouncements(), loadPets(), loadGongCount(), loadFloorTiles(), loadCustomWalls()]);
   setupRealtime();
   startIdleDetection();
   updateHUD();
@@ -2156,7 +2230,12 @@ vSeg(BOT_Y1, BY2, LUNCH_X2);
 vSeg(BOT_Y1, BY2, GAMES_X2);
 
 function circleRect(cx,cy,r,rx,ry,rw,rh) { const nx=Math.max(rx,Math.min(cx,rx+rw)),ny=Math.max(ry,Math.min(cy,ry+rh)); const dx=cx-nx,dy=cy-ny; return dx*dx+dy*dy<r*r; }
-function blocked(x,y) { if(x-PR<10||x+PR>WW-10||y-PR<10||y+PR>WH-10)return true; for(const w of WALLS)if(circleRect(x,y,PR,w.x,w.y,w.w,w.h))return true; return false; }
+function blocked(x,y) {
+  if(x-PR<10||x+PR>WW-10||y-PR<10||y+PR>WH-10) return true;
+  for(const w of WALLS) if(circleRect(x,y,PR,w.x,w.y,w.w,w.h)) return true;
+  for(const s of customWallSegs) { if(!s.active) continue; const r=wallSegToRect(s); if(circleRect(x,y,PR,r.x,r.y,r.w,r.h)) return true; }
+  return false;
+}
 function roomAt(x,y) { for(const r of ROOMS)if(x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h)return r.name; return 'Hallway'; }
 
 // ── OUTDOOR AREA (grass + go kart track + trees) ───────────────────────────
@@ -2624,6 +2703,58 @@ function drawWhiteboardRoom(ctx, r) {
 }
 
 // ══════════════════════════════════════════════
+// OFFICE EDITOR — SUPABASE LOADERS
+// ══════════════════════════════════════════════
+async function loadFloorTiles() {
+  const { data } = await sb.from('floor_tiles').select('*');
+  customFloorData = {};
+  for (const row of (data || [])) {
+    if (row.tile_type && row.tile_type.startsWith('name:')) {
+      // Room rename
+      const room = ROOMS.find(r => r.x === row.x && r.y === row.y);
+      if (room) room.name = row.tile_type.slice(5);
+    } else {
+      // Floor style — find matching room by origin
+      const room = ROOMS.find(r => r.x === row.x && r.y === row.y);
+      if (room) customFloorData[room.id] = row.tile_type;
+    }
+  }
+}
+
+async function loadCustomWalls() {
+  const { data } = await sb.from('custom_walls').select('*').eq('active', true);
+  customWallSegs = data || [];
+}
+
+async function saveFloorTile(room, tileType) {
+  // Upsert by (x, y) — use room origin as unique key
+  await sb.from('floor_tiles').upsert(
+    { x: room.x, y: room.y, tile_type: tileType, updated_at: new Date().toISOString() },
+    { onConflict: 'x,y' }
+  );
+}
+
+async function saveRoomName(room, name) {
+  await sb.from('floor_tiles').upsert(
+    { x: room.x, y: room.y, tile_type: 'name:' + name, updated_at: new Date().toISOString() },
+    { onConflict: 'x,y' }
+  );
+}
+
+async function saveCustomWall(seg) {
+  if (seg.id) {
+    // Update existing
+    await sb.from('custom_walls').update({ active: seg.active }).eq('id', seg.id);
+  } else {
+    // Insert new
+    const { data } = await sb.from('custom_walls')
+      .insert({ x1: seg.x1, y1: seg.y1, x2: seg.x2, y2: seg.y2, active: true })
+      .select().single();
+    if (data) seg.id = data.id;
+  }
+}
+
+// ══════════════════════════════════════════════
 // GONG — LOAD + HIT + ANIMATE + DRAW
 // ══════════════════════════════════════════════
 async function loadGongCount() {
@@ -2866,6 +2997,276 @@ function drawKart(ctx, x, y, name, isLocal, cfg) {
       ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx - 10, ly); ctx.stroke();
     }
   }
+}
+
+// ══════════════════════════════════════════════
+// OFFICE EDITOR — FLOOR STYLES
+// ══════════════════════════════════════════════
+function drawWoodFloor(ctx, rx, ry, rw, rh) {
+  const PH = 18; // plank height
+  const PLANK_COLS = ['#c8955e','#b8834a','#d4a870','#bc8e56'];
+  for (let py = Math.floor(ry / PH) * PH; py < ry + rh; py += PH) {
+    const ri = Math.floor((py - ry) / PH);
+    const cy = Math.max(py, ry), ch = Math.min(py + PH, ry + rh) - cy;
+    if (ch <= 0) continue;
+    ctx.fillStyle = PLANK_COLS[ri % PLANK_COLS.length];
+    ctx.fillRect(rx, cy, rw, ch);
+    // Horizontal plank divider
+    ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(rx, py, rw, 1);
+    // Vertical grain lines (offset alternating rows)
+    const off = (ri % 2) * 40;
+    ctx.fillStyle = 'rgba(0,0,0,0.07)';
+    for (let gx = rx + off; gx < rx + rw; gx += 80) ctx.fillRect(gx, cy, 1, ch);
+  }
+  // Subtle sheen
+  ctx.fillStyle = 'rgba(255,255,200,0.04)'; ctx.fillRect(rx, ry, rw, rh);
+}
+
+function drawCarpetFloor(ctx, rx, ry, rw, rh, color) {
+  ctx.fillStyle = color; ctx.fillRect(rx, ry, rw, rh);
+  // Loop pile texture
+  ctx.fillStyle = 'rgba(0,0,0,0.08)';
+  for (let dx = 0; dx < rw; dx += 5) {
+    for (let dy = 0; dy < rh; dy += 5) {
+      if ((dx * 3 + dy * 7) % 11 < 3) ctx.fillRect(rx + dx, ry + dy, 2, 2);
+    }
+  }
+  // Border trim
+  ctx.strokeStyle = darkenHex(color, 0.2); ctx.lineWidth = 2;
+  ctx.strokeRect(rx + 3, ry + 3, rw - 6, rh - 6);
+}
+
+function drawTileBWFloor(ctx, rx, ry, rw, rh) {
+  const TS = 24;
+  for (let col = Math.floor(rx / TS); col < Math.ceil((rx + rw) / TS); col++) {
+    for (let row = Math.floor(ry / TS); row < Math.ceil((ry + rh) / TS); row++) {
+      const tx = col * TS, ty = row * TS;
+      const cx = Math.max(tx, rx), cy = Math.max(ty, ry);
+      const cw = Math.min(tx + TS, rx + rw) - cx, ch = Math.min(ty + TS, ry + rh) - cy;
+      if (cw <= 0 || ch <= 0) continue;
+      ctx.fillStyle = (col + row) % 2 === 0 ? '#f4f4f4' : '#1e1e30';
+      ctx.fillRect(cx, cy, cw, ch);
+    }
+  }
+  // Grout lines
+  ctx.strokeStyle = 'rgba(100,100,140,0.35)'; ctx.lineWidth = 1;
+  for (let col = Math.floor(rx / TS); col <= Math.ceil((rx + rw) / TS); col++) {
+    const lx = col * TS; if (lx < rx || lx > rx + rw) continue;
+    ctx.beginPath(); ctx.moveTo(lx, ry); ctx.lineTo(lx, ry + rh); ctx.stroke();
+  }
+  for (let row = Math.floor(ry / TS); row <= Math.ceil((ry + rh) / TS); row++) {
+    const ly = row * TS; if (ly < ry || ly > ry + rh) continue;
+    ctx.beginPath(); ctx.moveTo(rx, ly); ctx.lineTo(rx + rw, ly); ctx.stroke();
+  }
+}
+
+function drawConcreteFloor(ctx, rx, ry, rw, rh) {
+  ctx.fillStyle = '#9a9aaa'; ctx.fillRect(rx, ry, rw, rh);
+  // Noise
+  for (let dx = 0; dx < rw; dx += 4) {
+    for (let dy = 0; dy < rh; dy += 4) {
+      const v = (dx * 7 + dy * 13) % 17;
+      if (v < 3) { ctx.fillStyle = '#888898'; ctx.fillRect(rx + dx, ry + dy, 3, 3); }
+      else if (v < 5) { ctx.fillStyle = '#b0b0c0'; ctx.fillRect(rx + dx, ry + dy, 2, 2); }
+    }
+  }
+  // Expansion joints
+  ctx.strokeStyle = 'rgba(0,0,0,0.14)'; ctx.lineWidth = 2;
+  for (let jx = rx + 80; jx < rx + rw; jx += 80) {
+    ctx.beginPath(); ctx.moveTo(jx, ry); ctx.lineTo(jx, ry + rh); ctx.stroke();
+  }
+  for (let jy = ry + 80; jy < ry + rh; jy += 80) {
+    ctx.beginPath(); ctx.moveTo(rx, jy); ctx.lineTo(rx + rw, jy); ctx.stroke();
+  }
+}
+
+const CARPET_COLORS = {
+  'carpet-blue': '#1e40af', 'carpet-red': '#991b1b',
+  'carpet-green': '#166534', 'carpet-purple': '#6b21a8',
+};
+
+function drawFloorStyle(ctx, rx, ry, rw, rh, style, fallbackColor) {
+  switch (style) {
+    case 'wood':          drawWoodFloor(ctx, rx, ry, rw, rh); break;
+    case 'carpet-blue':   drawCarpetFloor(ctx, rx, ry, rw, rh, CARPET_COLORS['carpet-blue']); break;
+    case 'carpet-red':    drawCarpetFloor(ctx, rx, ry, rw, rh, CARPET_COLORS['carpet-red']); break;
+    case 'carpet-green':  drawCarpetFloor(ctx, rx, ry, rw, rh, CARPET_COLORS['carpet-green']); break;
+    case 'carpet-purple': drawCarpetFloor(ctx, rx, ry, rw, rh, CARPET_COLORS['carpet-purple']); break;
+    case 'tile':          drawTileBWFloor(ctx, rx, ry, rw, rh); break;
+    case 'concrete':      drawConcreteFloor(ctx, rx, ry, rw, rh); break;
+    default:
+      drawTileFloor(ctx, rx, ry, rw, rh, fallbackColor, darkenHex(fallbackColor, 0.05), 16);
+  }
+}
+
+// ══════════════════════════════════════════════
+// OFFICE EDITOR — WALL HELPERS
+// ══════════════════════════════════════════════
+function wallSegToRect(seg) {
+  if (Math.abs(seg.x1 - seg.x2) < 1) {
+    // Vertical
+    return { x: seg.x1 - WT / 2, y: Math.min(seg.y1, seg.y2), w: WT, h: Math.abs(seg.y2 - seg.y1) };
+  }
+  // Horizontal
+  return { x: Math.min(seg.x1, seg.x2), y: seg.y1 - WT / 2, w: Math.abs(seg.x2 - seg.x1), h: WT };
+}
+
+// ══════════════════════════════════════════════
+// OFFICE EDITOR — ENTER / EXIT / OVERLAY
+// ══════════════════════════════════════════════
+function enterEditMode() {
+  closeAdmin();
+  editMode = true;
+  document.getElementById('edit-mode-banner').style.display  = 'block';
+  document.getElementById('edit-style-legend').style.display = 'block';
+  // Notify other players
+  realtimeChannel?.send({ type: 'broadcast', event: 'edit_mode', payload: { active: true } });
+}
+
+function exitEditMode() {
+  editMode = false;
+  editMouseWorld = { x: -1, y: -1 };
+  document.getElementById('edit-mode-banner').style.display  = 'none';
+  document.getElementById('edit-style-legend').style.display = 'none';
+  realtimeChannel?.send({ type: 'broadcast', event: 'edit_mode', payload: { active: false } });
+  // Trigger non-admins to refresh
+  realtimeChannel?.send({ type: 'broadcast', event: 'edit_refresh', payload: {} });
+}
+
+function setEditBrush(style) {
+  editBrush = style;
+  const labels = {
+    'wood':'Wood Planks','carpet-blue':'Carpet Blue','carpet-red':'Carpet Red',
+    'carpet-green':'Carpet Green','carpet-purple':'Carpet Purple',
+    'tile':'B&W Tiles','concrete':'Concrete','default':'Room Default','wall':'Toggle Wall',
+  };
+  document.getElementById('edit-brush-label').textContent = labels[style] || style;
+}
+
+async function handleEditClick(wx, wy) {
+  if (editBrush === 'wall') {
+    // Wall toggle mode — snap to nearest grid line
+    const snapX = Math.round(wx / EDIT_GRID) * EDIT_GRID;
+    const snapY = Math.round(wy / EDIT_GRID) * EDIT_GRID;
+    const distH = Math.abs(wy - snapY);
+    const distV = Math.abs(wx - snapX);
+
+    let x1, y1, x2, y2;
+    if (distH <= distV) {
+      // Horizontal wall
+      x1 = Math.floor(wx / EDIT_GRID) * EDIT_GRID;
+      y1 = snapY; x2 = x1 + EDIT_GRID; y2 = snapY;
+    } else {
+      // Vertical wall
+      x1 = snapX;
+      y1 = Math.floor(wy / EDIT_GRID) * EDIT_GRID;
+      x2 = snapX; y2 = y1 + EDIT_GRID;
+    }
+
+    // Check if segment already exists
+    const eps = 2;
+    const existing = customWallSegs.find(s =>
+      Math.abs(s.x1 - x1) < eps && Math.abs(s.y1 - y1) < eps &&
+      Math.abs(s.x2 - x2) < eps && Math.abs(s.y2 - y2) < eps
+    );
+    if (existing) {
+      existing.active = !existing.active;
+      await saveCustomWall(existing);
+    } else {
+      const seg = { x1, y1, x2, y2, active: true };
+      customWallSegs.push(seg);
+      await saveCustomWall(seg);
+    }
+  } else {
+    // Floor style mode — find which room was clicked
+    const room = ROOMS.find(r => wx >= r.x && wx <= r.x + r.w && wy >= r.y && wy <= r.y + r.h);
+    if (!room) return;
+    const newStyle = editBrush;
+    customFloorData[room.id] = newStyle;
+    await saveFloorTile(room, newStyle);
+  }
+}
+
+async function handleEditDblClick(wx, wy) {
+  // Find room whose label was double-clicked
+  for (const r of ROOMS) {
+    const lx = r.x + r.w / 2, ly = r.y + WT / 2 + 16;
+    if (Math.abs(wx - lx) < 100 && Math.abs(wy - ly) < 16) {
+      const newName = prompt(`Rename "${r.name}" to:`, r.name);
+      if (newName && newName.trim() && newName.trim() !== r.name) {
+        r.name = newName.trim();
+        await saveRoomName(r, r.name);
+      }
+      return;
+    }
+  }
+}
+
+function drawEditOverlay(ctx) {
+  if (!editMode) return;
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(99,102,241,0.22)'; ctx.lineWidth = 1;
+  for (let x = 0; x < WW; x += EDIT_GRID) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, WH); ctx.stroke();
+  }
+  for (let y = 0; y < WH; y += EDIT_GRID) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(WW, y); ctx.stroke();
+  }
+
+  // Active custom wall segments (drawn as semi-transparent red)
+  for (const seg of customWallSegs) {
+    if (!seg.active) continue;
+    const rect = wallSegToRect(seg);
+    ctx.fillStyle = 'rgba(239,68,68,0.55)';
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 1;
+    ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+  }
+
+  // Hover highlight
+  const { x: mx, y: my } = editMouseWorld;
+  if (mx >= 0 && my >= 0) {
+    if (editBrush === 'wall') {
+      const snapX = Math.round(mx / EDIT_GRID) * EDIT_GRID;
+      const snapY = Math.round(my / EDIT_GRID) * EDIT_GRID;
+      const distH = Math.abs(my - snapY), distV = Math.abs(mx - snapX);
+      ctx.fillStyle = 'rgba(239,68,68,0.4)';
+      if (distH <= distV) {
+        // Horizontal wall preview
+        const hx = Math.floor(mx / EDIT_GRID) * EDIT_GRID;
+        ctx.fillRect(hx, snapY - WT / 2, EDIT_GRID, WT);
+      } else {
+        // Vertical wall preview
+        const vy = Math.floor(my / EDIT_GRID) * EDIT_GRID;
+        ctx.fillRect(snapX - WT / 2, vy, WT, EDIT_GRID);
+      }
+    } else {
+      // Floor cell highlight
+      const cx = Math.floor(mx / EDIT_GRID) * EDIT_GRID;
+      const cy = Math.floor(my / EDIT_GRID) * EDIT_GRID;
+      ctx.fillStyle = 'rgba(99,102,241,0.28)';
+      ctx.fillRect(cx, cy, EDIT_GRID, EDIT_GRID);
+      ctx.strokeStyle = '#6366f1'; ctx.lineWidth = 1;
+      ctx.strokeRect(cx, cy, EDIT_GRID, EDIT_GRID);
+    }
+  }
+
+  // Floor style labels on rooms
+  ROOMS.forEach(r => {
+    const style = customFloorData[r.id];
+    if (!style || style === 'default') return;
+    ctx.fillStyle = 'rgba(10,10,22,0.82)';
+    ctx.font = 'bold 8px "Courier New", monospace'; ctx.textAlign = 'center';
+    const label = style.toUpperCase();
+    const tw = ctx.measureText(label).width + 8;
+    ctx.fillRect(r.x + r.w / 2 - tw / 2, r.y + r.h / 2 + 2, tw, 12);
+    ctx.fillStyle = '#7eb8ff'; ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2 + 11);
+  });
+
+  ctx.restore();
 }
 
 function drawStickyNotes(ctx) {
@@ -3350,8 +3751,13 @@ function drawWorld(ctx) {
     const floorDark  = darkenHex(floorBase, 0.05);
     const rx = r.x + WT/2, ry = r.y + WT/2, rw = r.w - WT, rh = r.h - WT;
 
-    // tiled floor
-    drawTileFloor(ctx, rx, ry, rw, rh, floorBase, floorDark, 16);
+    // tiled floor (custom style overrides room default)
+    const customStyle = customFloorData[r.id];
+    if (customStyle && customStyle !== 'default') {
+      drawFloorStyle(ctx, rx, ry, rw, rh, customStyle, floorBase);
+    } else {
+      drawTileFloor(ctx, rx, ry, rw, rh, floorBase, floorDark, 16);
+    }
 
     // accent inner border
     ctx.strokeStyle = r.accent; ctx.lineWidth = 2;
@@ -3380,6 +3786,14 @@ function drawWorld(ctx) {
 
   // ── PIXEL BRICK WALLS ───────────────────────────────────────────────────
   WALLS.forEach(w => drawBrickWall(ctx, w.x, w.y, w.w, w.h));
+  // Custom admin walls
+  for (const seg of customWallSegs) {
+    if (!seg.active) continue;
+    const rect = wallSegToRect(seg);
+    drawBrickWall(ctx, rect.x, rect.y, rect.w, rect.h);
+  }
+  // Edit mode overlay (grid + highlights)
+  drawEditOverlay(ctx);
 
   // ── OUTER FRAME ─────────────────────────────────────────────────────────
   drawBrickWall(ctx, 54, 54,    WW-108, WT);       // top
@@ -3416,11 +3830,22 @@ canvas.addEventListener('mousemove', e => {
   }
 });
 
+canvas.addEventListener('mousemove', e => {
+  if (!editMode) return;
+  const rect = canvas.getBoundingClientRect();
+  editMouseWorld.x = (e.clientX - rect.left - offX) / scale;
+  editMouseWorld.y = (e.clientY - rect.top  - offY) / scale;
+});
+
 canvas.addEventListener('click', e => {
   if (!currentUser) return;
   const rect = canvas.getBoundingClientRect();
   const wx = (e.clientX - rect.left - offX) / scale;
   const wy = (e.clientY - rect.top  - offY) / scale;
+
+  // Edit mode — route click to editor
+  if (editMode) { handleEditClick(wx, wy); return; }
+
   // Own sticky notes → delete on click
   for (const note of stickyNotes) {
     if (wx >= note.x - NOTE_W/2 && wx <= note.x + NOTE_W/2 &&
@@ -3435,6 +3860,14 @@ canvas.addEventListener('click', e => {
   if (wx >= BOARD_X && wx <= BOARD_X + BOARD_W && wy >= BOARD_Y && wy <= BOARD_Y + BOARD_H) {
     openAnnouncePanel();
   }
+});
+
+canvas.addEventListener('dblclick', e => {
+  if (!editMode || !currentUser) return;
+  const rect = canvas.getBoundingClientRect();
+  const wx = (e.clientX - rect.left - offX) / scale;
+  const wy = (e.clientY - rect.top  - offY) / scale;
+  handleEditDblClick(wx, wy);
 });
 let player    = { x: 600, y: 170 };
 let playerCfg = { name: 'Player', skin: '#FDBCB4', outfit: '#4f46e5' };
@@ -3451,6 +3884,15 @@ let gongAnim        = null;        // { name, life, maxLife, particles[] }
 let inKart          = false;
 const KART_SPEED    = 6;
 const GONG_X        = 1070, GONG_Y = 165, GONG_R = 42; // position in team HQ
+
+// ── Office editor state ───────────────────────────────────────────────────
+const EDIT_GRID = 40;
+const FLOOR_TYPES = ['wood','carpet-blue','carpet-red','carpet-green','carpet-purple','tile','concrete','default'];
+let editMode        = false;
+let editBrush       = 'wood';          // active tool
+let editMouseWorld  = { x: -1, y: -1 };// mouse in world coords
+let customFloorData = {};              // roomId → tile_type
+let customWallSegs  = [];              // { id, x1, y1, x2, y2, active }
 
 function resize() {
   canvas.width  = window.innerWidth;
@@ -3493,6 +3935,7 @@ window.addEventListener('keydown', e => {
     if (gameRunning) openStickyPopup();
   }
   if (e.key === 'Escape') {
+    if (editMode) { exitEditMode(); return; }
     closeStickyPopup(); closeAnnouncePanel(); closePetPicker(); closeWhiteboard();
     if (emojiPickerOpen) { emojiPickerOpen = false; document.getElementById('emoji-picker').style.display = 'none'; }
   }
