@@ -131,30 +131,50 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
 .setup-card h1 { font-size: 26px; color: #1a1a2e; margin-bottom: 4px; }
 .setup-card .subtitle { color: #888; font-size: 14px; margin-bottom: 28px; }
 
-/* ── HUD SIDEBAR (pixel art panel) ── */
-#hud {
-  position: fixed; top: 16px; right: 16px;
-  background: rgba(20,20,36,0.96);
-  border: 2px solid #3a3a5a;
-  /* pixel art stepped border shadow */
-  box-shadow: 2px 0 0 #1a1a2e, 0 2px 0 #1a1a2e, 2px 2px 0 #1a1a2e,
-              4px 4px 0 rgba(0,0,0,0.4), -1px -1px 0 #4a4a6a;
-  border-radius: 0;
-  padding: 16px; width: 224px; z-index: 50;
-  max-height: calc(100vh - 32px); overflow-y: auto;
-  font-family: 'Courier New', monospace;
-  image-rendering: pixelated;
+/* ── HAMBURGER BUTTON ── */
+#hamburger-btn {
+  position: fixed; top: 14px; right: 14px;
+  background: rgba(20,20,36,0.96); border: 2px solid #3a3a5a;
+  color: #818cf8; font-size: 18px; width: 42px; height: 42px;
+  cursor: pointer; z-index: 200; font-family: 'Courier New', monospace;
+  display: none;
+  box-shadow: 2px 2px 0 rgba(0,0,0,0.5);
+  transition: background 0.15s;
 }
-/* top accent bar */
-#hud::before {
-  content: ''; display: block; height: 3px; margin: -16px -16px 12px;
+#hamburger-btn:hover { background: rgba(40,30,70,0.98); }
+
+/* ── SLIDE-OUT SIDE PANEL ── */
+#side-panel {
+  position: fixed; top: 0; right: -290px; width: 270px; height: 100vh;
+  background: rgba(16,16,30,0.98);
+  border-left: 2px solid #3a3a5a;
+  box-shadow: -4px 0 24px rgba(0,0,0,0.6);
+  transition: right 0.25s ease;
+  z-index: 190; display: flex; flex-direction: column;
+  font-family: 'Courier New', monospace;
+  overflow-y: auto;
+}
+#side-panel.open { right: 0; }
+#side-panel::before {
+  content: ''; display: block; height: 3px; flex-shrink: 0;
   background: linear-gradient(90deg, #4f46e5, #818cf8, #4f46e5);
 }
-#hud h3 {
+#side-panel-inner {
+  padding: 14px; flex: 1; overflow-y: auto;
+}
+#side-panel h3 {
   font-size: 10px; font-weight: 800; color: #818cf8; margin-bottom: 12px;
   text-transform: uppercase; letter-spacing: 1.2px;
   font-family: 'Courier New', monospace;
 }
+#side-panel-close {
+  background: none; border: none; color: #555; font-size: 16px; cursor: pointer;
+  float: right; margin-top: -4px; font-family: 'Courier New', monospace;
+}
+#side-panel-close:hover { color: #818cf8; }
+
+/* Legacy #hud — hidden in v4.0 */
+#hud { display: none !important; }
 .member-row {
   display: flex; align-items: center; gap: 8px; padding: 5px 0;
   border-bottom: 1px solid rgba(255,255,255,0.07);
@@ -822,39 +842,48 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
   </div>
 </div>
 
-<!-- HUD -->
-<div id="hud" style="display:none">
-  <h3>👥 Team</h3>
-  <div id="member-list"></div>
-  <hr class="hud-divider">
-  <div class="status-section">
-    <label>Your Status</label>
-    <select id="status-select">
-      <option value="active">🟢 Active</option>
-      <option value="focus">🟣 Deep Focus</option>
-      <option value="lunch">🟠 On Lunch</option>
-      <option value="back-soon">🟡 Back Soon</option>
-      <option value="dnd">🔴 Do Not Disturb</option>
-    </select>
-  </div>
-  <div class="mood-section">
-    <label>Your Mood</label>
-    <div id="mood-grid">
-      <div class="mood-opt" data-mood="energised" onclick="setMood('energised')">☀️<span class="mood-opt-label">Energised</span></div>
-      <div class="mood-opt" data-mood="focused"   onclick="setMood('focused')"  >🎯<span class="mood-opt-label">Focused</span></div>
-      <div class="mood-opt" data-mood="flowing"   onclick="setMood('flowing')"  >🌊<span class="mood-opt-label">Flowing</span></div>
-      <div class="mood-opt" data-mood="tired"     onclick="setMood('tired')"    >😴<span class="mood-opt-label">Tired</span></div>
-      <div class="mood-opt" data-mood="excited"   onclick="setMood('excited')"  >🎉<span class="mood-opt-label">Excited</span></div>
-      <div class="mood-opt" data-mood="thinking"  onclick="setMood('thinking')" >🤔<span class="mood-opt-label">Thinking</span></div>
+<!-- HUD (legacy, hidden) -->
+<div id="hud" style="display:none"></div>
+
+<!-- HAMBURGER BUTTON -->
+<button id="hamburger-btn" onclick="toggleSidePanel()">☰</button>
+
+<!-- SLIDE-OUT SIDE PANEL -->
+<div id="side-panel">
+  <div id="side-panel-inner">
+    <button id="side-panel-close" onclick="toggleSidePanel()">✕</button>
+    <h3>👥 Team</h3>
+    <div id="member-list"></div>
+    <hr class="hud-divider">
+    <div class="status-section">
+      <label>Your Status</label>
+      <select id="status-select">
+        <option value="active">🟢 Active</option>
+        <option value="focus">🟣 Deep Focus</option>
+        <option value="lunch">🟠 On Lunch</option>
+        <option value="back-soon">🟡 Back Soon</option>
+        <option value="dnd">🔴 Do Not Disturb</option>
+      </select>
     </div>
+    <div class="mood-section">
+      <label>Your Mood</label>
+      <div id="mood-grid">
+        <div class="mood-opt" data-mood="energised" onclick="setMood('energised')">☀️<span class="mood-opt-label">Energised</span></div>
+        <div class="mood-opt" data-mood="focused"   onclick="setMood('focused')"  >🎯<span class="mood-opt-label">Focused</span></div>
+        <div class="mood-opt" data-mood="flowing"   onclick="setMood('flowing')"  >🌊<span class="mood-opt-label">Flowing</span></div>
+        <div class="mood-opt" data-mood="tired"     onclick="setMood('tired')"    >😴<span class="mood-opt-label">Tired</span></div>
+        <div class="mood-opt" data-mood="excited"   onclick="setMood('excited')"  >🎉<span class="mood-opt-label">Excited</span></div>
+        <div class="mood-opt" data-mood="thinking"  onclick="setMood('thinking')" >🤔<span class="mood-opt-label">Thinking</span></div>
+      </div>
+    </div>
+    <button class="admin-btn" id="hud-admin-btn" style="display:none" onclick="openAdmin()">⚙️ Admin Panel</button>
+    <button class="logout-btn" onclick="doLogout()">Sign Out</button>
   </div>
-  <button class="admin-btn" id="hud-admin-btn" style="display:none" onclick="openAdmin()">⚙️ Admin Panel</button>
-  <button class="logout-btn" onclick="doLogout()">Sign Out</button>
 </div>
 
 <div id="room-tag" style="display:none">Hallway<span id="vibe-badge" style="display:none"></span></div>
-<div id="hint" style="display:none">⬆ ⬇ ⬅ ➡ Move &nbsp;·&nbsp; W = Wave 👋 &nbsp;·&nbsp; R = React 💬 &nbsp;·&nbsp; E = Interact &nbsp;·&nbsp; Space = Sticky note</div>
-<div id="version-tag">v3.2 — 6 Mar 2026</div>
+<div id="hint" style="display:none">⬆ ⬇ ⬅ ➡ Move &nbsp;·&nbsp; W = Wave 👋 &nbsp;·&nbsp; R = React 💬 &nbsp;·&nbsp; E = Interact / Sit 💺 &nbsp;·&nbsp; Space = Sticky note</div>
+<div id="version-tag">v4.0 — 6 Mar 2026</div>
 <div id="nearby-badge"></div>
 <button id="discord-btn" onclick="openDiscord()">🎙️ Join Voice Chat</button>
 <button id="claim-btn" onclick="claimCurrentOffice()">🏠 Claim This Office</button>
@@ -1084,13 +1113,10 @@ const ADMIN_EMAIL = 'cameron@cylglobal.com';
 const DISCORD_CHANNELS = {
   'Campaigns You Love HQ': 'https://discord.com/channels/1042249264123879454/1119058808073879602',
   '📅 Meeting Room': 'https://discord.com/channels/1042249264123879454/1119058808073879602',
-  'Office 1':  'https://discord.com/channels/1042249264123879454/1119058808073879602',
-  'Office 2':  'https://discord.com/channels/1042249264123879454/1119058808073879602',
-  'Office 3':  'https://discord.com/channels/1042249264123879454/1119058808073879602',
-  'Office 4':  'https://discord.com/channels/1042249264123879454/1119058808073879602',
   '🎨 Whiteboard': 'https://discord.com/channels/1042249264123879454/1119058808073879602',
   '🍕 Lunch Room': 'https://discord.com/channels/1042249264123879454/1119058808073879602',
   '🎮 Games Room': 'https://discord.com/channels/1042249264123879454/1119058808073879602',
+  '🎵 Music Room': 'https://discord.com/channels/1042249264123879454/1119058808073879602',
   'Hallway':   'https://discord.com/channels/1042249264123879454/1119058808073879602',
 };
 
@@ -1129,8 +1155,8 @@ const DESK_COLORS = ['#C8A97E','#D4B896','#E8C99A','#A07850','#8B6B4A','#6B4C2A'
 
 const NOTE_COLORS = ['#FEF08A','#FBCFE8','#BAE6FD','#BBF7D0'];
 const NOTE_W = 60, NOTE_H = 50;
-// Notice board world-coords (sits in HALL1: y=252–340, right side)
-const BOARD_X = 640, BOARD_Y = 284, BOARD_W = 220, BOARD_H = 48;
+// Notice board world-coords (sits in HALL1: left side of hallway)
+const BOARD_X = 100, BOARD_Y = 304, BOARD_W = 220, BOARD_H = 48;
 
 const PET_OPTIONS = [
   { emoji: '🐱', label: 'Cat'     },
@@ -1171,7 +1197,7 @@ function showScreen(name) {
   document.getElementById('pending-screen').style.display = name === 'pending' ? 'flex' : 'none';
   document.getElementById('setup-screen').style.display   = name === 'setup'   ? 'flex' : 'none';
   if (name === 'game') {
-    document.getElementById('hud').style.display      = 'block';
+    document.getElementById('hamburger-btn').style.display = 'block';
     document.getElementById('room-tag').style.display = 'block';
     document.getElementById('hint').style.display     = 'block';
   }
@@ -1273,7 +1299,8 @@ async function doLogout() {
   currentUser = null; currentProfile = null; officeData = {};
   stickyNotes = []; announcements = [];
   clearInterval(syncInterval); syncInterval = null;
-  document.getElementById('hud').style.display           = 'none';
+  document.getElementById('hamburger-btn').style.display  = 'none';
+  document.getElementById('side-panel').classList.remove('open');
   document.getElementById('room-tag').style.display      = 'none';
   document.getElementById('hint').style.display          = 'none';
   document.getElementById('nearby-badge').style.display  = 'none';
@@ -1996,13 +2023,14 @@ function setupRealtime() {
       const p = presences[0];
       if (p.user_id === currentUser.id) continue;
       updated[p.user_id] = {
-        x:      otherPlayers[p.user_id]?.x ?? 600,
-        y:      otherPlayers[p.user_id]?.y ?? 400,
-        name:   p.name,
-        skin:   p.skin,
-        outfit: p.outfit,
-        status: p.status || 'active',
-        mood:   p.mood   ?? null,
+        x:         otherPlayers[p.user_id]?.x ?? 900,
+        y:         otherPlayers[p.user_id]?.y ?? 200,
+        name:      p.name,
+        skin:      p.skin,
+        outfit:    p.outfit,
+        status:    p.status    || 'active',
+        mood:      p.mood      ?? null,
+        sitting_at: p.sitting_at ?? null,
       };
     }
     otherPlayers = updated;
@@ -2015,7 +2043,8 @@ function setupRealtime() {
     if (otherPlayers[payload.user_id]) {
       otherPlayers[payload.user_id].x = payload.x;
       otherPlayers[payload.user_id].y = payload.y;
-      otherPlayers[payload.user_id].inKart = !!payload.inKart;
+      otherPlayers[payload.user_id].inKart    = !!payload.inKart;
+      otherPlayers[payload.user_id].sitting_at = payload.sitting_at ?? null;
     }
   });
 
@@ -2072,12 +2101,13 @@ function setupRealtime() {
   realtimeChannel.subscribe(async status => {
     if (status === 'SUBSCRIBED') {
       await realtimeChannel.track({
-        user_id: currentUser.id,
-        name:    currentProfile.name,
-        skin:    currentProfile.skin,
-        outfit:  currentProfile.outfit,
-        status:  myStatus,
-        mood:    currentProfile.mood ?? null,
+        user_id:    currentUser.id,
+        name:       currentProfile.name,
+        skin:       currentProfile.skin,
+        outfit:     currentProfile.outfit,
+        status:     myStatus,
+        mood:       currentProfile.mood ?? null,
+        sitting_at: sittingAt,
       });
     }
   });
@@ -2087,7 +2117,7 @@ function setupRealtime() {
     if (!realtimeChannel) return;
     realtimeChannel.send({
       type: 'broadcast', event: 'pos',
-      payload: { user_id: currentUser.id, x: player.x, y: player.y, inKart },
+      payload: { user_id: currentUser.id, x: player.x, y: player.y, inKart, sitting_at: sittingAt },
     });
   }, 100);
 }
@@ -2113,7 +2143,7 @@ async function enterGame() {
   playerCfg = { name: currentProfile.name, skin: currentProfile.skin, outfit: currentProfile.outfit };
   initOfficeToolbar();
   await loadOffices();
-  await Promise.all([loadStickyNotes(), loadAnnouncements(), loadPets(), loadGongCount(), loadFloorTiles(), loadCustomWalls()]);
+  await Promise.all([loadStickyNotes(), loadAnnouncements(), loadPets(), loadGongCount(), loadFloorTiles(), loadCustomWalls(), loadNowPlaying()]);
   setupRealtime();
   startIdleDetection();
   updateHUD();
@@ -2135,59 +2165,76 @@ sb.auth.getSession().then(({ data: { session } }) => {
 // GAME ENGINE
 // ══════════════════════════════════════════════
 // ══════════════════════════════════════════════
-// NEW FLOOR PLAN — v2.0 LAYOUT
+// NEW FLOOR PLAN — v4.0 LAYOUT (widescreen 1800×900)
 // ══════════════════════════════════════════════
-const WW = 1200, WH = 820, WT = 8, PR = 14, SPEED = 3;
+const WW = 1800, WH = 900, WT = 8, PR = 14, SPEED = 3;
 const DOOR_HALF = 24;
 
 // Building bounds
-const BX1 = 80, BY1 = 80, BX2 = 1120, BY2 = 760;
+const BX1 = 50, BY1 = 50, BX2 = 1750, BY2 = 850;
 
 // Zone y-boundaries
-const TEAM_Y2  = 280;  // team HQ bottom / hallway 1 top
-const HALL1_Y1 = 280, HALL1_Y2 = 340;  // hallway 1
-const MID_Y1   = 340, MID_Y2   = 580;  // middle section
-const HALL2_Y1 = 580, HALL2_Y2 = 640;  // hallway 2
-const BOT_Y1   = 640;                  // bottom section
+const TEAM_Y2  = 300;               // team HQ bottom / hallway 1 top
+const HALL1_Y1 = 300, HALL1_Y2 = 360;  // hallway 1
+const MID_Y1   = 360;              // offices / lunch top
+const OFF_ROW_B = 490;             // office row A/B divide
+const MID_Y2   = 620;              // offices / lunch bottom
+const HALL2_Y1 = 620, HALL2_Y2 = 680;  // hallway 2
+const BOT_Y1   = 680;              // bottom section
 
-// Zone x-boundaries (middle + bottom)
-const PRIV_X2  = 540;  // right edge of private offices
-const LUNCH_X2 = 440;  // right edge of lunch
-const GAMES_X2 = 790;  // right edge of games
+// Zone x-boundaries
+const MEET_X1  = 1410;             // meeting room left edge (top-right corner)
+const OFF_END  = 850;              // right edge of 5 offices (5×160 + 50)
+const OFF_W    = (OFF_END - BX1) / 5;  // = 160px each
+const GAMES_X2 = 600;              // right edge of games room
+const MUSIC_X2 = 1200;             // right edge of music room
 
 const ROOMS = [];
 
-// Open team HQ (top, full width)
+// Top section: Team HQ (wide left) + Meeting Room (top-right corner)
 ROOMS.push({ id:'team', name:'Campaigns You Love HQ',
-  x:BX1, y:BY1, w:BX2-BX1, h:TEAM_Y2-BY1,
+  x:BX1, y:BY1, w:MEET_X1-BX1, h:TEAM_Y2-BY1,
   floor:'#EDF5FF', accent:'#4f46e5', type:'team' });
-
-// Private offices — single row of 4, 115px wide each
-const OFF_W = 115, OFF_H = MID_Y2 - MID_Y1;
-const OFF_COLORS4 = [
-  ['#EFF6FF','#3b82f6'], ['#F0FDF4','#22c55e'],
-  ['#FFF7ED','#f97316'], ['#FDF4FF','#a855f7'],
-];
-for (let i = 0; i < 4; i++) {
-  ROOMS.push({ id:`office${i+1}`, name:`Office ${i+1}`,
-    x: BX1 + i * OFF_W, y: MID_Y1, w: OFF_W, h: OFF_H,
-    floor: OFF_COLORS4[i][0], accent: OFF_COLORS4[i][1], type:'office' });
-}
-
-// Meeting room (right side of middle section)
 ROOMS.push({ id:'meeting', name:'📅 Meeting Room',
-  x:PRIV_X2, y:MID_Y1, w:BX2-PRIV_X2, h:MID_Y2-MID_Y1,
+  x:MEET_X1, y:BY1, w:BX2-MEET_X1, h:TEAM_Y2-BY1,
   floor:'#F0F4FF', accent:'#6366f1', type:'meeting' });
 
-// Bottom row
+// 10 private offices — 2 rows of 5, each 160×130px
+const OFF_COLORS10 = [
+  ['#EFF6FF','#3b82f6'], ['#F0FDF4','#22c55e'],
+  ['#FFF7ED','#f97316'], ['#FDF4FF','#a855f7'],
+  ['#FFF1F2','#e11d48'],
+  ['#ECFEFF','#0891b2'], ['#FEFCE8','#ca8a04'],
+  ['#F8F4F0','#92400e'], ['#F0FDF4','#15803d'],
+  ['#EEF2FF','#4f46e5'],
+];
+// Row A: top of middle section, accessed from hallway 1 (south wall doors)
+for (let i = 0; i < 5; i++) {
+  ROOMS.push({ id:`office${i+1}`, name:`Office ${i+1}`,
+    x: BX1 + i * OFF_W, y: MID_Y1, w: OFF_W, h: OFF_ROW_B - MID_Y1,
+    floor: OFF_COLORS10[i][0], accent: OFF_COLORS10[i][1], type:'office' });
+}
+// Row B: bottom of middle section, accessed from hallway 2 (north wall doors)
+for (let i = 0; i < 5; i++) {
+  ROOMS.push({ id:`office${i+6}`, name:`Office ${i+6}`,
+    x: BX1 + i * OFF_W, y: OFF_ROW_B, w: OFF_W, h: MID_Y2 - OFF_ROW_B,
+    floor: OFF_COLORS10[i+5][0], accent: OFF_COLORS10[i+5][1], type:'office' });
+}
+
+// Lunch room (right of offices, full middle height)
 ROOMS.push({ id:'lunch', name:'🍕 Lunch Room',
-  x:BX1, y:BOT_Y1, w:LUNCH_X2-BX1, h:BY2-BOT_Y1,
+  x:OFF_END, y:MID_Y1, w:BX2-OFF_END, h:MID_Y2-MID_Y1,
   floor:'#FFFDE7', accent:'#F9A825', type:'lunch' });
+
+// Bottom row: Games | Music | Whiteboard
 ROOMS.push({ id:'games', name:'🎮 Games Room',
-  x:LUNCH_X2, y:BOT_Y1, w:GAMES_X2-LUNCH_X2, h:BY2-BOT_Y1,
+  x:BX1, y:BOT_Y1, w:GAMES_X2-BX1, h:BY2-BOT_Y1,
   floor:'#E8F5E9', accent:'#43A047', type:'games' });
+ROOMS.push({ id:'music', name:'🎵 Music Room',
+  x:GAMES_X2, y:BOT_Y1, w:MUSIC_X2-GAMES_X2, h:BY2-BOT_Y1,
+  floor:'#1a0a2e', accent:'#7c3aed', type:'music' });
 ROOMS.push({ id:'whiteboard', name:'🎨 Whiteboard',
-  x:GAMES_X2, y:BOT_Y1, w:BX2-GAMES_X2, h:BY2-BOT_Y1,
+  x:MUSIC_X2, y:BOT_Y1, w:BX2-MUSIC_X2, h:BY2-BOT_Y1,
   floor:'#F0F4FF', accent:'#6366f1', type:'whiteboard' });
 
 // ── WALLS ──────────────────────────────────────────────────────────────────
@@ -2197,37 +2244,50 @@ function vSeg(y1,y2,x) { if(y2>y1) WALLS.push({x:x-WT/2,y:y1,w:WT,h:y2-y1}); }
 function hWall(x1,x2,y,gaps=[]) { let pos=x1; const gps=gaps.map(cx=>({s:cx-DOOR_HALF,e:cx+DOOR_HALF})).sort((a,b)=>a.s-b.s); for(const g of gps){hSeg(pos,g.s,y);pos=g.e;} hSeg(pos,x2,y); }
 function vWall(y1,y2,x,gaps=[]) { let pos=y1; const gps=gaps.map(cy=>({s:cy-DOOR_HALF,e:cy+DOOR_HALF})).sort((a,b)=>a.s-b.s); for(const g of gps){vSeg(pos,g.s,x);pos=g.e;} vSeg(pos,y2,x); }
 
-// Outer perimeter — top wall has a go-kart exit gap at x=600
-hWall(BX1, BX2, BY1, [600]);    // gap at centre (width = DOOR_HALF*2 = 48px)
+// Outer perimeter — top wall has a go-kart exit gap at x=900 (center)
+hWall(BX1, BX2, BY1, [900]);
 hSeg(BX1, BX2, BY2);
 vSeg(BY1, BY2, BX1); vSeg(BY1, BY2, BX2);
 
-// y=280: team HQ / hallway 1 (3 doors evenly spaced)
-hWall(BX1, BX2, HALL1_Y1, [270, 600, 930]);
+// y=300: team HQ / hallway 1 — 3 doors in team area, 1 in meeting area
+hWall(BX1, MEET_X1, HALL1_Y1, [280, 700, 1120]);
+hWall(MEET_X1, BX2, HALL1_Y1, [MEET_X1 + (BX2-MEET_X1)/2]);  // meeting door
 
-// y=340: hallway 1 / middle row
-// Private offices: door in each office's top wall
-const OFF_DOORS = [0,1,2,3].map(i => BX1 + i*OFF_W + OFF_W/2);
-hWall(BX1, PRIV_X2, HALL1_Y2, OFF_DOORS);
-// Meeting room: one door from hallway 1
-hWall(PRIV_X2, BX2, HALL1_Y2, [PRIV_X2 + (BX2-PRIV_X2)/2]);
+// Vertical divider: team HQ / meeting room
+vSeg(BY1, HALL1_Y1, MEET_X1);
 
-// y=580: middle row / hallway 2
-hSeg(BX1, PRIV_X2, MID_Y2);          // private offices: solid south wall (no exit)
-hWall(PRIV_X2, BX2, MID_Y2, [PRIV_X2 + (BX2-PRIV_X2)/2]); // meeting room south door
+// y=360: hallway 1 / offices + lunch
+// 5 row A office doors (centred in each office top wall)
+const OFF_DOORS_A = [0,1,2,3,4].map(i => BX1 + i*OFF_W + OFF_W/2);
+hWall(BX1, OFF_END, HALL1_Y2, OFF_DOORS_A);
+// Lunch room door from hallway 1
+hWall(OFF_END, BX2, HALL1_Y2, [OFF_END + (BX2-OFF_END)/2]);
 
-// y=640: hallway 2 / bottom row
-hWall(BX1, BX2, HALL2_Y2, [260, 615, 955]);
+// y=490: solid divider between office row A and row B (no door)
+hSeg(BX1, OFF_END, OFF_ROW_B);
 
-// Vertical dividers between private offices
-vSeg(MID_Y1, MID_Y2, BX1+OFF_W);
-vSeg(MID_Y1, MID_Y2, BX1+OFF_W*2);
-vSeg(MID_Y1, MID_Y2, BX1+OFF_W*3);
-// Private offices / meeting room divider
-vSeg(MID_Y1, MID_Y2, PRIV_X2);
+// y=620: offices bottom / hallway 2
+// 5 row B office doors (south wall of each office)
+const OFF_DOORS_B = [0,1,2,3,4].map(i => BX1 + i*OFF_W + OFF_W/2);
+hWall(BX1, OFF_END, MID_Y2, OFF_DOORS_B);
+// Lunch room: solid south wall
+hSeg(OFF_END, BX2, MID_Y2);
+
+// y=680: hallway 2 / bottom row (3 doors)
+const GAMES_DOOR = Math.round(BX1 + (GAMES_X2-BX1)/2);       // 325
+const MUSIC_DOOR = Math.round(GAMES_X2 + (MUSIC_X2-GAMES_X2)/2); // 900
+const WB_DOOR    = Math.round(MUSIC_X2 + (BX2-MUSIC_X2)/2);   // 1475
+hWall(BX1, BX2, HALL2_Y2, [GAMES_DOOR, MUSIC_DOOR, WB_DOOR]);
+
+// Vertical dividers between row A offices
+[1,2,3,4].forEach(i => vSeg(MID_Y1, OFF_ROW_B, BX1 + i*OFF_W));
+// Vertical dividers between row B offices
+[1,2,3,4].forEach(i => vSeg(OFF_ROW_B, MID_Y2, BX1 + i*OFF_W));
+// Offices / lunch room divider
+vSeg(MID_Y1, MID_Y2, OFF_END);
 // Bottom row dividers
-vSeg(BOT_Y1, BY2, LUNCH_X2);
 vSeg(BOT_Y1, BY2, GAMES_X2);
+vSeg(BOT_Y1, BY2, MUSIC_X2);
 
 function circleRect(cx,cy,r,rx,ry,rw,rh) { const nx=Math.max(rx,Math.min(cx,rx+rw)),ny=Math.max(ry,Math.min(cy,ry+rh)); const dx=cx-nx,dy=cy-ny; return dx*dx+dy*dy<r*r; }
 function blocked(x,y) {
@@ -2299,221 +2359,194 @@ function drawOutdoorArea(ctx) {
   }
   [
     [38,38],[WW-38,38],[38,WH-38],[WW-38,WH-38],
-    [200,35],[500,35],[700,35],[1000,35],
-    [200,WH-35],[500,WH-35],[700,WH-35],[1000,WH-35],
-    [35,200],[35,450],[35,650],
-    [WW-35,200],[WW-35,450],[WW-35,650],
+    [200,35],[500,35],[700,35],[1000,35],[1300,35],[1600,35],
+    [200,WH-35],[500,WH-35],[700,WH-35],[1000,WH-35],[1300,WH-35],[1600,WH-35],
+    [35,200],[35,450],[35,700],
+    [WW-35,200],[WW-35,450],[WW-35,700],
   ].forEach(([tx,ty]) => drawTree(tx, ty));
 }
 
-// ── OPEN TEAM AREA: 6 pixel art desks in 2 rows of 3 ─────────────────────
+// ── OPEN TEAM AREA: 12 pixel art desks in 3 rows of 4 ─────────────────────
 function drawTeamArea(ctx, r) {
   ctx.imageSmoothingEnabled = false;
   const cx = r.x + r.w/2;
 
-  // BIG SIGN above desk rows
+  // BIG FLOOR LABEL (centre of room)
   ctx.fillStyle = 'rgba(30,30,70,0.55)';
-  ctx.fillRect(cx - 190, r.y + WT + 4, 380, 18);
+  ctx.fillRect(cx - 230, r.y + WT + 4, 460, 18);
   ctx.fillStyle = '#c7d2fe';
-  ctx.font = 'bold 11px "Courier New", monospace'; ctx.textAlign = 'center';
+  ctx.font = 'bold 12px "Courier New", monospace'; ctx.textAlign = 'center';
   ctx.fillText('★  CAMPAIGNS YOU LOVE HQ  ★', cx, r.y + WT + 16);
 
-  // Desk grid: 3 columns, 2 rows
-  const cols = [cx - 320, cx, cx + 320];
-  const rows = [r.y + 50, r.y + 140];
-  const deskTints = ['#8B6535','#7a5a2e','#9a7040','#8B6535','#7a5a2e','#9a7040'];
+  // Desk grid: 4 columns, 3 rows (evenly spaced across 1360px wide room)
+  const colCount = 4, rowCount = 3;
+  const colSpacing = (r.w - 80) / colCount;
+  const cols = Array.from({length:colCount}, (_,i) => r.x + 40 + colSpacing * (i + 0.5));
+  const rows = [r.y + 55, r.y + 115, r.y + 175];
+  const deskTints  = ['#8B6535','#7a5a2e','#9a7040','#8B6535','#7a5a2e','#9a7040','#8B6535','#7a5a2e','#9a7040','#8B6535','#7a5a2e','#9a7040'];
   const plantColors = ['#27ae60','#2ecc71','#1e7a38','#27ae60','#2ecc71','#1e7a38'];
 
   let di = 0;
   rows.forEach(dy => cols.forEach(dx => {
     const dk = deskTints[di % deskTints.length];
     // Desk surface
-    ctx.fillStyle = dk; ctx.fillRect(dx - 36, dy, 72, 38);
-    ctx.fillStyle = 'rgba(0,0,0,0.1)'; // grain
-    for (let g=0;g<72;g+=9) ctx.fillRect(dx-36+g,dy,1,38);
-    ctx.fillStyle = darkenHex(dk,0.15); ctx.fillRect(dx-36,dy+34,72,4);
+    ctx.fillStyle = dk; ctx.fillRect(dx - 32, dy, 64, 34);
+    ctx.fillStyle = 'rgba(0,0,0,0.1)';
+    for (let g=0;g<64;g+=8) ctx.fillRect(dx-32+g,dy,1,34);
+    ctx.fillStyle = darkenHex(dk,0.15); ctx.fillRect(dx-32,dy+30,64,4);
     // Monitor
-    ctx.fillStyle = '#111'; ctx.fillRect(dx-14, dy+4, 28, 18);
-    ctx.fillStyle = '#1a3a6e'; ctx.fillRect(dx-12, dy+6, 24, 14);
-    ctx.fillStyle = 'rgba(100,180,255,0.5)'; ctx.fillRect(dx-12,dy+6,24,14);
-    ctx.fillStyle = '#333'; ctx.fillRect(dx-2, dy+22, 4, 4);
-    ctx.fillStyle = '#555'; ctx.fillRect(dx-5, dy+26, 10, 2);
+    ctx.fillStyle = '#111'; ctx.fillRect(dx-12, dy+3, 24, 16);
+    ctx.fillStyle = '#1a3a6e'; ctx.fillRect(dx-10, dy+5, 20, 12);
+    ctx.fillStyle = 'rgba(100,180,255,0.5)'; ctx.fillRect(dx-10,dy+5,20,12);
+    ctx.fillStyle = '#333'; ctx.fillRect(dx-2, dy+19, 4, 3);
+    ctx.fillStyle = '#555'; ctx.fillRect(dx-4, dy+22, 8, 2);
     // Keyboard
-    ctx.fillStyle = '#bbb'; ctx.fillRect(dx-12, dy+28, 22, 6);
+    ctx.fillStyle = '#bbb'; ctx.fillRect(dx-10, dy+25, 18, 5);
     ctx.fillStyle = '#999';
-    for (let k=0;k<4;k++) ctx.fillRect(dx-11+k*5, dy+30, 4, 2);
+    for (let k=0;k<3;k++) ctx.fillRect(dx-9+k*5, dy+26, 4, 2);
     // Chair behind desk
-    ctx.fillStyle = '#37474f'; ctx.fillRect(dx-11,dy+38,22,12);
-    ctx.fillStyle = '#546e7a'; ctx.fillRect(dx-10,dy+39,20,4);
-    ctx.fillStyle = '#37474f'; ctx.fillRect(dx-9,dy+26,18,12);
-    // Small personal item (alternating)
+    ctx.fillStyle = '#37474f'; ctx.fillRect(dx-10,dy+34,20,10);
+    ctx.fillStyle = '#546e7a'; ctx.fillRect(dx-9,dy+35,18,4);
+    ctx.fillStyle = '#37474f'; ctx.fillRect(dx-8,dy+24,16,10);
+    // Small personal item
     if (di % 3 === 0) {
-      // plant
-      ctx.fillStyle = '#6b4020'; ctx.fillRect(dx+18,dy+24,8,8);
-      ctx.fillStyle = plantColors[di%plantColors.length]; ctx.fillRect(dx+16,dy+14,12,12);
-      ctx.fillStyle = '#52d68a'; ctx.fillRect(dx+18,dy+16,4,3);
+      ctx.fillStyle = '#6b4020'; ctx.fillRect(dx+16,dy+20,7,7);
+      ctx.fillStyle = plantColors[di%plantColors.length]; ctx.fillRect(dx+14,dy+12,10,10);
+      ctx.fillStyle = '#52d68a'; ctx.fillRect(dx+16,dy+14,4,3);
     } else if (di % 3 === 1) {
-      // coffee cup
-      ctx.fillStyle = '#fff'; ctx.fillRect(dx+18,dy+26,8,8);
-      ctx.fillStyle = '#6d4c41'; ctx.fillRect(dx+19,dy+27,6,6);
-      ctx.fillStyle = '#9e9e9e'; ctx.fillRect(dx+16,dy+34,12,2);
+      ctx.fillStyle = '#fff'; ctx.fillRect(dx+16,dy+22,7,7);
+      ctx.fillStyle = '#6d4c41'; ctx.fillRect(dx+17,dy+23,5,5);
+      ctx.fillStyle = '#9e9e9e'; ctx.fillRect(dx+14,dy+29,10,2);
     } else {
-      // small photo frame
-      ctx.fillStyle = '#8B6535'; ctx.fillRect(dx+18,dy+22,10,12);
-      ctx.fillStyle = '#7ab3d4'; ctx.fillRect(dx+20,dy+24,6,8);
+      ctx.fillStyle = '#8B6535'; ctx.fillRect(dx+16,dy+19,9,10);
+      ctx.fillStyle = '#7ab3d4'; ctx.fillRect(dx+18,dy+21,5,7);
     }
     di++;
   }));
+
+  // "E to sit" prompt if player is inside team HQ
+  if (player && player.x >= r.x && player.x <= r.x+r.w && player.y >= r.y && player.y <= r.y+r.h && !isSitting) {
+    ctx.fillStyle = 'rgba(10,10,22,0.88)';
+    ctx.fillRect(cx - 55, r.y + r.h - 24, 110, 16);
+    ctx.fillStyle = '#fde68a';
+    ctx.font = 'bold 9px "Courier New", monospace'; ctx.textAlign = 'center';
+    ctx.fillText('[ E ] Sit at open desk', cx, r.y + r.h - 11);
+  }
 }
 
 // ── MEETING ROOM ────────────────────────────────────────────────────────────
 function drawMeetingRoom(ctx, r) {
   ctx.imageSmoothingEnabled = false;
   const cx = r.x + r.w/2, cy = r.y + r.h/2;
-  const tw = 300, th = 72; // table dims
+  const tw = Math.min(240, r.w - 60), th = 60; // table fits in room
 
   // Oval table (pixel art: rectangle + darker ends)
   ctx.fillStyle = '#7a5028'; ctx.fillRect(cx-tw/2, cy-th/2, tw, th);
   ctx.fillStyle = '#5a3a18';
-  ctx.fillRect(cx-tw/2, cy-th/2, 24, th); // left end
-  ctx.fillRect(cx+tw/2-24, cy-th/2, 24, th); // right end
-  // table grain
+  ctx.fillRect(cx-tw/2, cy-th/2, 18, th); // left end
+  ctx.fillRect(cx+tw/2-18, cy-th/2, 18, th); // right end
   ctx.fillStyle = 'rgba(255,255,255,0.07)';
-  for (let g=0;g<tw;g+=18) ctx.fillRect(cx-tw/2+g, cy-th/2, 1, th);
-  // table edge
-  ctx.fillStyle = '#3d2408'; ctx.fillRect(cx-tw/2, cy+th/2-4, tw, 4);
-  // table top highlight
-  ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(cx-tw/2+4, cy-th/2+3, tw-8, 6);
-  // Cable tray pixel
-  ctx.fillStyle = '#888'; ctx.fillRect(cx-20, cy-th/2-2, 40, 4);
+  for (let g=0;g<tw;g+=15) ctx.fillRect(cx-tw/2+g, cy-th/2, 1, th);
+  ctx.fillStyle = '#3d2408'; ctx.fillRect(cx-tw/2, cy+th/2-3, tw, 3);
+  ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(cx-tw/2+3, cy-th/2+2, tw-6, 5);
 
-  // 6 chairs: 2 short ends + 2 each long side
+  // Chairs (compact, 4 around table)
   const chairColor = '#263238', chairHL = '#37474f';
   [
-    // top side (2 chairs)
-    [cx-100, cy-th/2-16], [cx+100, cy-th/2-16],
-    // bottom side (2 chairs)
-    [cx-100, cy+th/2+4],  [cx+100, cy+th/2+4],
-    // left end
-    [cx-tw/2-18, cy-8],
-    // right end
-    [cx+tw/2+6, cy-8],
+    [cx-tw/4, cy-th/2-14], [cx+tw/4, cy-th/2-14],
+    [cx-tw/4, cy+th/2+2],  [cx+tw/4, cy+th/2+2],
   ].forEach(([chx, chy]) => {
-    ctx.fillStyle = chairColor; ctx.fillRect(chx-11, chy, 22, 12);
-    ctx.fillStyle = chairHL; ctx.fillRect(chx-10, chy+1, 20, 4);
-    ctx.fillStyle = chairColor; ctx.fillRect(chx-9, chy-10, 18, 10);
-    ctx.fillStyle = chairHL; ctx.fillRect(chx-8, chy-9, 16, 4);
+    ctx.fillStyle = chairColor; ctx.fillRect(chx-10, chy, 20, 10);
+    ctx.fillStyle = chairHL;    ctx.fillRect(chx-9,  chy+1, 18, 3);
+    ctx.fillStyle = chairColor; ctx.fillRect(chx-8,  chy-9, 16, 9);
+    ctx.fillStyle = chairHL;    ctx.fillRect(chx-7,  chy-8, 14, 3);
   });
 
-  // Side credenza (pixel art)
-  ctx.fillStyle = '#4a3018'; ctx.fillRect(r.x+WT+4, r.y+WT+4, 24, r.h-WT*2-8);
-  ctx.fillStyle = '#6a4a28'; ctx.fillRect(r.x+WT+4, r.y+WT+4, 24, 4);
-
-  // Projector screen on far right wall
-  const sx = r.x+r.w-WT-40, sy = r.y+WT+10, sw=34, sh=r.h-WT*2-20;
+  // Projector screen (right wall — scaled for smaller room)
+  const sx = r.x+r.w-WT-24, sy = r.y+WT+10, sw=18, sh=r.h-WT*2-20;
   ctx.fillStyle = '#aaa'; ctx.fillRect(sx-2, sy-2, sw+4, sh+4);
   ctx.fillStyle = '#f0f0f0'; ctx.fillRect(sx, sy, sw, sh);
   ctx.fillStyle = 'rgba(60,80,160,0.35)'; ctx.fillRect(sx, sy, sw, sh);
   ctx.fillStyle = '#6366f1';
-  ctx.font = '7px "Courier New",monospace'; ctx.textAlign='center';
-  ctx.fillText('SCREEN', sx+sw/2, sy+sh/2+3);
+  ctx.font = '6px "Courier New",monospace'; ctx.textAlign='center';
+  ctx.fillText('SCR', sx+sw/2, sy+sh/2+2);
 }
 
 function drawOfficeFurniture(ctx, r, deskColor='#8B6535') {
   ctx.imageSmoothingEnabled = false;
   const cx = r.x + r.w / 2;
+  // Compact layout for 160×130px offices
 
-  // ── BOOKSHELF (left wall) ──────────────────────────────────────────────
-  const sx = r.x + WT + 4, sy = r.y + WT + 4, sw = 22, sh = r.h - WT*2 - 8;
-  ctx.fillStyle = '#5a3e1e'; ctx.fillRect(sx, sy, sw, sh);         // dark wood body
-  ctx.fillStyle = '#3d2a10'; ctx.fillRect(sx, sy, sw, 3);          // top rail
-  ctx.fillStyle = '#3d2a10'; ctx.fillRect(sx, sy + sh - 3, sw, 3); // bottom rail
-  // shelves
-  const shelfColors = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#e67e22','#1abc9c','#e91e63'];
-  const shelfH = 4, bookH = 14;
-  for (let i = 0; i * (bookH + shelfH) + 6 < sh - 6; i++) {
-    const by2 = sy + 6 + i * (bookH + shelfH);
-    // shelf board
-    ctx.fillStyle = '#6b4a1e'; ctx.fillRect(sx, by2 + bookH, sw, shelfH);
-    // book spines (4 per shelf)
-    for (let b = 0; b < 4; b++) {
-      ctx.fillStyle = shelfColors[(i * 4 + b) % shelfColors.length];
-      ctx.fillRect(sx + 1 + b * 5, by2 + 1, 4, bookH - 1);
-      ctx.fillStyle = 'rgba(255,255,255,0.18)';
-      ctx.fillRect(sx + 1 + b * 5, by2 + 1, 1, bookH - 1);
+  // ── SMALL BOOKSHELF (top-left corner) ──────────────────────────────────
+  const sx = r.x + WT + 2, sy = r.y + WT + 2, sw = 16, sh = Math.min(40, r.h - WT*2 - 4);
+  ctx.fillStyle = '#5a3e1e'; ctx.fillRect(sx, sy, sw, sh);
+  ctx.fillStyle = '#3d2a10'; ctx.fillRect(sx, sy, sw, 2);
+  const shelfColors = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#e67e22'];
+  for (let i = 0; i * 9 + 4 < sh - 4; i++) {
+    const by2 = sy + 4 + i * 9;
+    ctx.fillStyle = '#6b4a1e'; ctx.fillRect(sx, by2 + 6, sw, 3);
+    for (let b = 0; b < 3; b++) {
+      ctx.fillStyle = shelfColors[(i*3+b)%shelfColors.length];
+      ctx.fillRect(sx + 1 + b*5, by2+1, 4, 5);
     }
   }
 
-  // ── DESK (pixel art dark wood) ─────────────────────────────────────────
+  // ── DESK ───────────────────────────────────────────────────────────────
   const dk = deskColor || '#8B6535';
   const dkDark = '#5a3e1e';
-  const deskX = cx - 36, deskY = r.y + 40, deskW = 72, deskH = 44;
-  // desk surface
+  const deskX = cx - 34, deskY = r.y + WT + 4, deskW = 68, deskH = 36;
   ctx.fillStyle = dk; ctx.fillRect(deskX, deskY, deskW, deskH);
-  // wood grain lines
   ctx.fillStyle = 'rgba(0,0,0,0.1)';
   for (let g = 0; g < deskW; g += 8) ctx.fillRect(deskX + g, deskY, 1, deskH);
-  // desk edge
-  ctx.fillStyle = dkDark; ctx.fillRect(deskX, deskY + deskH - 4, deskW, 4);
-  // desk legs (pixel art)
-  ctx.fillStyle = dkDark;
-  ctx.fillRect(deskX + 2,      deskY + deskH, 6, 8);
-  ctx.fillRect(deskX + deskW - 8, deskY + deskH, 6, 8);
+  ctx.fillStyle = dkDark; ctx.fillRect(deskX, deskY + deskH - 3, deskW, 3);
 
   // ── MONITOR ────────────────────────────────────────────────────────────
-  const mX = cx - 18, mY = deskY + 5;
-  ctx.fillStyle = '#1a1a2e'; ctx.fillRect(mX, mY, 36, 24);           // bezel
-  ctx.fillStyle = '#0a1628'; ctx.fillRect(mX+2, mY+2, 32, 18);       // screen bg
-  ctx.fillStyle = '#1a4a8a'; ctx.fillRect(mX+2, mY+2, 32, 18);       // screen glow
-  ctx.fillStyle = 'rgba(100,180,255,0.55)'; ctx.fillRect(mX+2,mY+2,32,18); // blue tint
-  // screen pixel highlights
-  ctx.fillStyle = 'rgba(255,255,255,0.12)';
-  ctx.fillRect(mX+3, mY+3, 10, 2);
-  // monitor stand (pixel art)
-  ctx.fillStyle = '#333'; ctx.fillRect(cx - 3, mY + 24, 6, 6);
-  ctx.fillStyle = '#444'; ctx.fillRect(cx - 8, mY + 30, 16, 3);
-  // keyboard pixel art
-  ctx.fillStyle = '#ccc'; ctx.fillRect(deskX + 4, deskY + 32, 30, 8);
-  ctx.fillStyle = '#aaa'; ctx.fillRect(deskX + 5, deskY + 33, 28, 6);
-  // key rows (small rects)
+  ctx.fillStyle = '#1a1a2e'; ctx.fillRect(cx - 16, deskY + 3, 32, 21);
+  ctx.fillStyle = '#1a4a8a'; ctx.fillRect(cx - 14, deskY + 5, 28, 15);
+  ctx.fillStyle = 'rgba(100,180,255,0.55)'; ctx.fillRect(cx - 14, deskY + 5, 28, 15);
+  ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(cx - 13, deskY + 6, 8, 2);
+  ctx.fillStyle = '#333'; ctx.fillRect(cx - 3, deskY + 24, 6, 5);
+  ctx.fillStyle = '#444'; ctx.fillRect(cx - 7, deskY + 29, 14, 2);
+  // Keyboard
+  ctx.fillStyle = '#bbb'; ctx.fillRect(deskX + 3, deskY + 26, 24, 6);
   ctx.fillStyle = '#888';
-  for (let k = 0; k < 6; k++) ctx.fillRect(deskX + 6 + k*4, deskY + 34, 3, 2);
-  for (let k = 0; k < 6; k++) ctx.fillRect(deskX + 6 + k*4, deskY + 37, 3, 2);
+  for (let k = 0; k < 4; k++) ctx.fillRect(deskX + 4 + k*5, deskY + 28, 4, 2);
 
-  // ── OFFICE CHAIR ───────────────────────────────────────────────────────
-  const chX = cx, chY = deskY + deskH + 10;
-  // seat
-  ctx.fillStyle = '#37474f'; ctx.fillRect(chX - 12, chY, 24, 14);
-  ctx.fillStyle = '#546e7a'; ctx.fillRect(chX - 11, chY + 1, 22, 4);
-  // back rest
-  ctx.fillStyle = '#37474f'; ctx.fillRect(chX - 10, chY - 16, 20, 16);
-  ctx.fillStyle = '#546e7a'; ctx.fillRect(chX - 9,  chY - 15, 18, 4);
-  // arms
-  ctx.fillStyle = '#263238'; ctx.fillRect(chX - 14, chY - 4,  4, 12);
-  ctx.fillStyle = '#263238'; ctx.fillRect(chX + 10, chY - 4,  4, 12);
-  // base + wheels (pixel crosses)
-  ctx.fillStyle = '#555';
-  ctx.fillRect(chX - 1,  chY + 14, 2, 8);
-  ctx.fillRect(chX - 10, chY + 20, 20, 2);
-  ctx.fillRect(chX - 1,  chY + 20, 2, 6);
-  [[chX-10,chY+22],[chX+8,chY+22],[chX-1,chY+26]].forEach(([wx,wy]) => {
-    ctx.fillStyle = '#222'; ctx.fillRect(wx - 2, wy, 4, 4);
-  });
+  // ── CHAIR ──────────────────────────────────────────────────────────────
+  const chY = deskY + deskH + 6;
+  ctx.fillStyle = '#37474f'; ctx.fillRect(cx - 10, chY, 20, 12);
+  ctx.fillStyle = '#546e7a'; ctx.fillRect(cx - 9,  chY+1, 18, 4);
+  ctx.fillStyle = '#37474f'; ctx.fillRect(cx - 8,  chY - 13, 16, 13);
+  ctx.fillStyle = '#546e7a'; ctx.fillRect(cx - 7,  chY - 12, 14, 4);
+  ctx.fillStyle = '#263238';
+  ctx.fillRect(cx - 12, chY - 4, 4, 10); ctx.fillRect(cx + 8, chY - 4, 4, 10);
 
-  // ── PLANT (pixel art) ─────────────────────────────────────────────────
-  const pX = r.x + r.w - 20, pY = r.y + r.h - 34;
-  ctx.fillStyle = '#8B5E3C'; ctx.fillRect(pX - 7, pY + 10, 14, 10); // pot body
-  ctx.fillStyle = '#6B4423'; ctx.fillRect(pX - 9, pY + 8,  18, 4);  // pot rim
-  ctx.fillStyle = '#5a3e1e'; ctx.fillRect(pX - 6, pY + 20, 12, 4);  // pot base
-  // leaves (pixel art circles via rects)
-  ctx.fillStyle = '#1a6b35';
-  ctx.fillRect(pX - 6, pY - 2,  12, 12);
-  ctx.fillRect(pX - 2, pY - 8,  8,  8);
-  ctx.fillStyle = '#27ae60';
-  ctx.fillRect(pX - 4, pY,      8,  8);
-  ctx.fillRect(pX - 1, pY - 6,  5,  6);
-  ctx.fillStyle = '#2ecc71';
-  ctx.fillRect(pX - 2, pY + 1,  4,  4); // highlight leaves
+  // ── PLANT (corner) ─────────────────────────────────────────────────────
+  const pX = r.x + r.w - 16, pY = r.y + r.h - 26;
+  ctx.fillStyle = '#8B5E3C'; ctx.fillRect(pX - 6, pY + 8, 12, 8);
+  ctx.fillStyle = '#6B4423'; ctx.fillRect(pX - 7, pY + 7, 14, 3);
+  ctx.fillStyle = '#1a6b35'; ctx.fillRect(pX - 5, pY, 10, 10);
+  ctx.fillStyle = '#27ae60'; ctx.fillRect(pX - 3, pY + 2, 6, 6);
+  ctx.fillStyle = '#2ecc71'; ctx.fillRect(pX - 1, pY + 3, 3, 3);
+
+  // ── "E to claim" prompt (if unclaimed) ────────────────────────────────
+  const oData = officeData[r.id];
+  if (!oData && player && player.x >= r.x && player.x <= r.x+r.w && player.y >= r.y && player.y <= r.y+r.h) {
+    ctx.fillStyle = 'rgba(79,70,229,0.9)';
+    ctx.fillRect(cx - 48, r.y + r.h - 22, 96, 14);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 8px "Courier New", monospace'; ctx.textAlign = 'center';
+    ctx.fillText('[ E ] Claim this office', cx, r.y + r.h - 11);
+  }
+  // ── "E to sit" (if it's mine) ─────────────────────────────────────────
+  if (oData?.owner_user_id === currentUser?.id && !isSitting &&
+      player && player.x >= r.x && player.x <= r.x+r.w && player.y >= r.y && player.y <= r.y+r.h) {
+    ctx.fillStyle = 'rgba(22,163,74,0.9)';
+    ctx.fillRect(cx - 36, r.y + r.h - 22, 72, 14);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 8px "Courier New", monospace'; ctx.textAlign = 'center';
+    ctx.fillText('[ E ] Sit down', cx, r.y + r.h - 11);
+  }
 }
 function drawLunchFurniture(ctx, r) {
   ctx.imageSmoothingEnabled = false;
@@ -2700,6 +2733,124 @@ function drawWhiteboardRoom(ctx, r) {
   ctx.fillStyle = 'rgba(80,80,180,0.6)';
   ctx.font = 'bold 11px "Courier New", monospace'; ctx.textAlign = 'center';
   ctx.fillText('Shared Whiteboard', r.x + r.w/2, r.y + r.h - 14);
+}
+
+function drawMusicRoom(ctx, r) {
+  ctx.imageSmoothingEnabled = false;
+  const cx = r.x + r.w / 2;
+
+  // ── STAGE AREA (darker raised platform) ──────────────────────────────
+  ctx.fillStyle = '#0d0620'; ctx.fillRect(r.x + WT + 4, r.y + WT + 4, r.w - WT*2 - 8, 60);
+  ctx.fillStyle = '#2d1060'; ctx.fillRect(r.x + WT + 4, r.y + WT + 4, r.w - WT*2 - 8, 4);
+  ctx.fillStyle = 'rgba(124,58,237,0.15)'; ctx.fillRect(r.x + WT + 4, r.y + WT + 4, r.w - WT*2 - 8, 60);
+
+  // ── DRUM KIT (left stage) ────────────────────────────────────────────
+  const dx = r.x + 80, dy = r.y + 20;
+  // bass drum
+  ctx.fillStyle = '#2a0a4a'; ctx.fillRect(dx, dy + 22, 38, 28);
+  ctx.fillStyle = '#3d0f6e'; ctx.fillRect(dx + 2, dy + 24, 34, 24);
+  ctx.fillStyle = '#7c3aed'; ctx.fillRect(dx + 4, dy + 26, 30, 4); // top shine
+  // snare
+  ctx.fillStyle = '#888'; ctx.fillRect(dx + 44, dy + 28, 26, 14);
+  ctx.fillStyle = '#ccc'; ctx.fillRect(dx + 44, dy + 28, 26, 4);
+  // hi-hat cymbal
+  ctx.fillStyle = '#b8860b'; ctx.fillRect(dx + 6, dy + 14, 28, 4);
+  ctx.fillStyle = '#DAA520'; ctx.fillRect(dx + 7, dy + 14, 26, 2);
+  // crash cymbal
+  ctx.fillStyle = '#b8860b'; ctx.fillRect(dx + 50, dy + 10, 22, 3);
+  ctx.fillStyle = '#DAA520'; ctx.fillRect(dx + 51, dy + 10, 20, 1);
+
+  // ── GUITAR (centre-left stage) ───────────────────────────────────────
+  const gx = r.x + 200, gy = r.y + 16;
+  // body
+  ctx.fillStyle = '#8B2500'; ctx.fillRect(gx - 8, gy + 20, 22, 36);
+  ctx.fillStyle = '#BF3500'; ctx.fillRect(gx - 6, gy + 22, 18, 32);
+  ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(gx - 6, gy + 22, 6, 10);
+  // neck
+  ctx.fillStyle = '#5a3e1e'; ctx.fillRect(gx, gy, 4, 24);
+  // strings (3 thin lines)
+  ctx.fillStyle = '#aaa';
+  ctx.fillRect(gx + 1, gy + 2, 1, 50); ctx.fillRect(gx + 2, gy + 2, 1, 50); ctx.fillRect(gx + 3, gy + 2, 1, 50);
+  // sound hole
+  ctx.fillStyle = '#200800'; ctx.fillRect(gx, gy + 34, 8, 8);
+
+  // ── KEYBOARD/PIANO (centre stage) ───────────────────────────────────
+  const kx = r.x + 280, ky = r.y + 36;
+  // stand
+  ctx.fillStyle = '#111'; ctx.fillRect(kx - 4, ky + 18, 4, 22); ctx.fillRect(kx + 84, ky + 18, 4, 22);
+  // body
+  ctx.fillStyle = '#111'; ctx.fillRect(kx, ky, 88, 20);
+  ctx.fillStyle = '#222'; ctx.fillRect(kx + 1, ky + 1, 86, 18);
+  // white keys
+  ctx.fillStyle = '#f0f0f0';
+  for (let ki = 0; ki < 11; ki++) ctx.fillRect(kx + 2 + ki * 8, ky + 4, 7, 14);
+  // black keys
+  ctx.fillStyle = '#111';
+  [0,1,3,4,5,7,8,10].forEach(ki => ctx.fillRect(kx + 6 + ki * 8, ky + 4, 5, 8));
+  // screen/display
+  ctx.fillStyle = '#001122'; ctx.fillRect(kx + 60, ky, 26, 10);
+  ctx.fillStyle = 'rgba(0,200,100,0.6)'; ctx.fillRect(kx + 61, ky + 1, 24, 8);
+
+  // ── SPEAKERS (either side) ───────────────────────────────────────────
+  [[r.x + WT + 4, r.y + WT + 10], [r.x + r.w - WT - 28, r.y + WT + 10]].forEach(([sx, sy]) => {
+    ctx.fillStyle = '#111'; ctx.fillRect(sx, sy, 24, 52);
+    ctx.fillStyle = '#222'; ctx.fillRect(sx + 1, sy + 1, 22, 50);
+    // woofer (large circle pixel art)
+    ctx.fillStyle = '#333'; ctx.fillRect(sx + 3, sy + 3, 18, 18);
+    ctx.fillStyle = '#444'; ctx.fillRect(sx + 5, sy + 5, 14, 14);
+    ctx.fillStyle = '#555'; ctx.fillRect(sx + 7, sy + 7, 10, 10);
+    ctx.fillStyle = '#333'; ctx.fillRect(sx + 9, sy + 9, 6, 6);
+    // tweeter
+    ctx.fillStyle = '#555'; ctx.fillRect(sx + 7, sy + 24, 10, 8);
+    ctx.fillStyle = '#666'; ctx.fillRect(sx + 8, sy + 25, 8, 6);
+    // LED strip
+    const ledPhase = (frame >> 2) % 3;
+    ['#7c3aed','#a78bfa','#7c3aed'].forEach((c,li) => {
+      ctx.fillStyle = c; ctx.fillRect(sx + 3 + li * 6, sy + 34, 5, 3);
+      ctx.globalAlpha = (li === ledPhase) ? 1 : 0.3;
+      ctx.fillRect(sx + 3 + li * 6, sy + 34, 5, 3);
+      ctx.globalAlpha = 1;
+    });
+  });
+
+  // ── VINYL RECORD PLAYER (right side) ────────────────────────────────
+  const vx = r.x + r.w - 120, vy = r.y + 24;
+  ctx.fillStyle = '#111'; ctx.fillRect(vx, vy, 60, 48);
+  ctx.fillStyle = '#1a1a2e'; ctx.fillRect(vx + 2, vy + 2, 56, 44);
+  // vinyl disc
+  ctx.fillStyle = '#222'; ctx.fillRect(vx + 8, vy + 4, 36, 36);
+  ctx.fillStyle = '#333'; ctx.fillRect(vx + 12, vy + 8, 28, 28);
+  ctx.fillStyle = '#5a2a8a'; ctx.fillRect(vx + 16, vy + 12, 20, 20);
+  ctx.fillStyle = '#7c3aed'; ctx.fillRect(vx + 20, vy + 16, 12, 12);
+  ctx.fillStyle = '#e0e0e0'; ctx.fillRect(vx + 23, vy + 19, 6, 6);
+  // label
+  ctx.fillStyle = '#ff6b6b'; ctx.fillRect(vx + 24, vy + 20, 4, 4);
+  // spin animation
+  const spinOff = (frame >> 3) % 4;
+  ctx.fillStyle = 'rgba(255,255,255,0.1)';
+  ctx.fillRect(vx + 14 + spinOff, vy + 6, 2, 2);
+  // tonearm
+  ctx.fillStyle = '#888'; ctx.fillRect(vx + 42, vy + 6, 2, 20);
+  ctx.fillRect(vx + 42, vy + 24, 12, 2);
+  // needle tip
+  ctx.fillStyle = '#ddd'; ctx.fillRect(vx + 52, vy + 24, 2, 4);
+
+  // ── NOW PLAYING DISPLAY ───────────────────────────────────────────────
+  const song = nowPlaying;
+  ctx.fillStyle = 'rgba(10,4,24,0.9)';
+  ctx.fillRect(r.x + WT + 4, r.y + r.h - 28, r.w - WT*2 - 8, 20);
+  ctx.fillStyle = song ? '#a78bfa' : '#4a3a6a';
+  ctx.font = 'bold 9px "Courier New", monospace'; ctx.textAlign = 'center';
+  ctx.fillText(song ? `♪ ${song} ♪` : '[ E ] Set Now Playing', cx, r.y + r.h - 13);
+
+  // "E to set now playing" prompt when inside room
+  if (player && player.x >= r.x && player.x <= r.x+r.w && player.y >= r.y && player.y <= r.y+r.h) {
+    ctx.fillStyle = 'rgba(124,58,237,0.8)';
+    ctx.fillRect(cx - 70, r.y + WT + 68, 140, 16);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 9px "Courier New", monospace'; ctx.textAlign = 'center';
+    ctx.fillText('[ E ] Change Now Playing', cx, r.y + WT + 80);
+  }
 }
 
 // ══════════════════════════════════════════════
@@ -2938,9 +3089,44 @@ function sendReaction(emoji) {
 }
 
 // ══════════════════════════════════════════════
+// SITTING MECHANIC 💺
+// ══════════════════════════════════════════════
+function sitDown(deskId) {
+  isSitting = true; sittingAt = deskId;
+  updateSittingAt(deskId);
+}
+
+function standUp() {
+  isSitting = false; sittingAt = null;
+  updateSittingAt(null);
+}
+
+async function updateSittingAt(val) {
+  if (!currentUser) return;
+  await sb.from('presence').update({ sitting_at: val }).eq('user_id', currentUser.id);
+}
+
+// ══════════════════════════════════════════════
+// MUSIC ROOM — NOW PLAYING 🎵
+// ══════════════════════════════════════════════
+async function setNowPlaying(song) {
+  nowPlaying = song;
+  // Find music office row — save to offices table using 'music' as room_id
+  await sb.from('offices').upsert(
+    { room_id: 'music', now_playing: song },
+    { onConflict: 'room_id' }
+  ).catch(() => {});
+}
+
+async function loadNowPlaying() {
+  const { data } = await sb.from('offices').select('now_playing').eq('room_id', 'music').single();
+  nowPlaying = data?.now_playing || '';
+}
+
+// ══════════════════════════════════════════════
 // GO KART 🏎️
 // ══════════════════════════════════════════════
-function isOutdoor(x, y) { return x < BX1 - 4 || x > BX2 + 4 || y < BY1 - 4; }
+function isOutdoor(x, y) { return x < BX1 - 4 || x > BX2 + 4 || y < BY1 - 4 || y > BY2 + 4; }
 
 function mountKart() {
   inKart = true;
@@ -2950,8 +3136,8 @@ function mountKart() {
 function dismountKart() {
   inKart = false;
   document.getElementById('kart-hint').style.display = 'none';
-  // Move player just inside the entrance gap
-  player.x = 600; player.y = BY1 + PR + 8;
+  // Move player just inside the entrance gap (new centre = 900)
+  player.x = 900; player.y = BY1 + PR + 8;
 }
 
 function drawKart(ctx, x, y, name, isLocal, cfg) {
@@ -3380,68 +3566,24 @@ function drawNoticeBoard(ctx) {
   });
 }
 
-// ── Pixel art room details: windows, ceiling lights, door frames ────────────
+// ── Pixel art room details: ceiling lights, door frames ────────────────────
 function drawRoomDetails(ctx) {
   ctx.imageSmoothingEnabled = false;
 
   ROOMS.forEach(r => {
-    const rx = r.x + WT/2, ry = r.y + WT/2, rw = r.w - WT, rh = r.h - WT;
-
     // ── CEILING LIGHT (pixel yellow glow square) ─────────────────────
     const lx = r.x + r.w/2, ly = r.y + WT/2 + 22;
-    // outer glow (faint)
     ctx.fillStyle = 'rgba(255,240,150,0.12)';
     ctx.fillRect(lx - 14, ly - 14, 28, 28);
-    // light fixture (pixel art)
     ctx.fillStyle = '#b8902a';
-    ctx.fillRect(lx - 8, ly - 2, 16, 4); // bar
+    ctx.fillRect(lx - 8, ly - 2, 16, 4);
     ctx.fillStyle = '#ffe87a';
-    ctx.fillRect(lx - 6, ly + 2, 12, 6); // bulb
+    ctx.fillRect(lx - 6, ly + 2, 12, 6);
     ctx.fillStyle = '#fff9c4';
-    ctx.fillRect(lx - 4, ly + 3, 4, 3);  // shine
-
-    // ── WINDOWS (on outer walls only) ────────────────────────────────
-    const onTopEdge    = r.y <= BY1 + 2;
-    const onBottomEdge = r.y + r.h >= BY2 - 2;
-    const onLeftEdge   = r.x <= BX1 + 2;
-    const onRightEdge  = r.x + r.w >= BX2 - 2;
-
-    function drawWindow(wx, wy) {
-      // sill (warm wood)
-      ctx.fillStyle = '#8B6535'; ctx.fillRect(wx - 14, wy + 18, 28, 4);
-      // outer frame
-      ctx.fillStyle = '#c8a060'; ctx.fillRect(wx - 13, wy - 4, 26, 24);
-      // pane bg (sky blue)
-      ctx.fillStyle = '#5bb8d4'; ctx.fillRect(wx - 11, wy - 2, 22, 20);
-      // sky gradient feel
-      ctx.fillStyle = '#8dd4e8'; ctx.fillRect(wx - 11, wy - 2, 22, 8);
-      // window cross-frame
-      ctx.fillStyle = '#c8a060';
-      ctx.fillRect(wx - 1, wy - 2, 2, 20); // vertical
-      ctx.fillRect(wx - 11, wy + 7, 22, 2); // horizontal
-      // glass shine pixels
-      ctx.fillStyle = 'rgba(255,255,255,0.55)';
-      ctx.fillRect(wx - 9, wy, 4, 3);
-      ctx.fillRect(wx + 3, wy + 10, 3, 3);
-    }
-
-    if (onTopEdge) {
-      // one window centred near top of room
-      drawWindow(r.x + r.w * 0.5, r.y + WT + 8);
-    }
-    if (onBottomEdge) {
-      drawWindow(r.x + r.w * 0.5, r.y + rh - 16);
-    }
-    if (onLeftEdge) {
-      drawWindow(r.x + WT + 10, r.y + r.h * 0.45);
-    }
-    if (onRightEdge) {
-      drawWindow(r.x + rw - 4, r.y + r.h * 0.45);
-    }
+    ctx.fillRect(lx - 4, ly + 3, 4, 3);
   });
 
   // ── DOOR FRAMES (warm wood colour at each door gap) ──────────────────
-  const doorW = DOOR_HALF * 2;
   const doorFrameColor = '#8B6535';
   const doorFrameHL    = '#c8a060';
 
@@ -3463,15 +3605,19 @@ function drawRoomDetails(ctx) {
     }
   }
 
-  // Hallway 1 top wall doors (y=280): team HQ → hallway 1
-  [270, 600, 930].forEach(dx => drawDoorFrame(dx, HALL1_Y1, true));
-  // Hallway 1 bottom wall doors (y=340): offices + meeting room
-  [BX1+OFF_W/2, BX1+OFF_W+OFF_W/2, BX1+OFF_W*2+OFF_W/2, BX1+OFF_W*3+OFF_W/2].forEach(dx => drawDoorFrame(dx, HALL1_Y2, true));
-  drawDoorFrame(PRIV_X2 + (BX2 - PRIV_X2) / 2, HALL1_Y2, true); // meeting room top
-  // Meeting room south wall door (y=580)
-  drawDoorFrame(PRIV_X2 + (BX2 - PRIV_X2) / 2, MID_Y2, true);
-  // Hallway 2 bottom wall doors (y=640): bottom rooms
-  [260, 615, 955].forEach(dx => drawDoorFrame(dx, HALL2_Y2, true));
+  // Hallway 1 top (y=300): team HQ doors + meeting room door
+  [280, 700, 1120].forEach(dx => drawDoorFrame(dx, HALL1_Y1, true));
+  drawDoorFrame(MEET_X1 + (BX2-MEET_X1)/2, HALL1_Y1, true);
+
+  // Hallway 1 bottom (y=360): 5 row A office doors + lunch door
+  OFF_DOORS_A.forEach(dx => drawDoorFrame(dx, HALL1_Y2, true));
+  drawDoorFrame(OFF_END + (BX2-OFF_END)/2, HALL1_Y2, true);
+
+  // Hallway 2 top (y=620): 5 row B office doors (south walls of offices)
+  OFF_DOORS_B.forEach(dx => drawDoorFrame(dx, MID_Y2, true));
+
+  // Hallway 2 bottom (y=680): games, music, whiteboard doors
+  [GAMES_DOOR, MUSIC_DOOR, WB_DOOR].forEach(dx => drawDoorFrame(dx, HALL2_Y2, true));
 
   // ── HALLWAY PLANTS ────────────────────────────────────────────────────
   function drawHallPlant(hx, hy) {
@@ -3481,10 +3627,9 @@ function drawRoomDetails(ctx) {
     ctx.fillStyle = '#1e7a38'; ctx.fillRect(hx - 4, hy - 12, 10, 10);
     ctx.fillStyle = '#27ae60'; ctx.fillRect(hx - 2, hy - 8,  6,  6);
   }
-  // scatter a few plants along the hallways
   const hall1cy = (HALL1_Y1 + HALL1_Y2) / 2, hall2cy = (HALL2_Y1 + HALL2_Y2) / 2;
-  [[120,hall1cy],[500,hall1cy],[850,hall1cy],[1060,hall1cy],
-   [120,hall2cy],[500,hall2cy],[850,hall2cy],[1060,hall2cy],
+  [[400,hall1cy],[800,hall1cy],[1200,hall1cy],[1600,hall1cy],
+   [400,hall2cy],[800,hall2cy],[1200,hall2cy],[1600,hall2cy],
   ].forEach(([hx, hy]) => drawHallPlant(hx, hy));
 }
 
@@ -3510,9 +3655,10 @@ function drawDoorLabels(ctx) {
     const oData = officeData[r.id];
     if (!oData) return;
     const doorX = r.x + r.w / 2;
-    // all 4 offices open onto Hallway 1 at y=340
-    const doorY = HALL1_Y2;
-    const labelY = doorY + 16;
+    // Row A (office1-5) open onto hallway 1 (y=360), Row B (office6-10) open onto hallway 2 (y=620)
+    const isRowA = r.y === MID_Y1;
+    const doorY = isRowA ? HALL1_Y2 : MID_Y2;
+    const labelY = isRowA ? doorY + 16 : doorY - 8;
     const name = oData.owner_name;
     const tw = ctx.measureText(name).width;
     const lw = tw + 16, lh = 14;
@@ -3740,9 +3886,9 @@ function drawWorld(ctx) {
   // ── OUTDOOR AREA ──────────────────────────────────────────────────────────
   drawOutdoorArea(ctx);
 
-  // ── HALLWAY FLOORS (grey tile) ────────────────────────────────────────────
-  drawTileFloor(ctx, BX1+WT/2, HALL1_Y1+WT/2, BX2-BX1-WT, HALL1_Y2-HALL1_Y1-WT, '#c8c2b4', '#bdb8aa', 20);
-  drawTileFloor(ctx, BX1+WT/2, HALL2_Y1+WT/2, BX2-BX1-WT, HALL2_Y2-HALL2_Y1-WT, '#c8c2b4', '#bdb8aa', 20);
+  // ── HALLWAY FLOORS ────────────────────────────────────────────────────────
+  drawTileFloor(ctx, BX1, HALL1_Y1, BX2-BX1, HALL1_Y2-HALL1_Y1, '#c8c2b4', '#bdb8aa', 20);
+  drawTileFloor(ctx, BX1, HALL2_Y1, BX2-BX1, HALL2_Y2-HALL2_Y1, '#c8c2b4', '#bdb8aa', 20);
 
   // ── ROOMS ────────────────────────────────────────────────────────────────
   ROOMS.forEach(r => {
@@ -3774,6 +3920,7 @@ function drawWorld(ctx) {
     if (r.type === 'office')     drawOfficeFurniture(ctx, r, oData?.desk_color);
     if (r.type === 'lunch')      drawLunchFurniture(ctx, r);
     if (r.type === 'games')      drawGamesFurniture(ctx, r);
+    if (r.type === 'music')      drawMusicRoom(ctx, r);
     if (r.type === 'whiteboard') drawWhiteboardRoom(ctx, r);
     if (oData && r.type === 'office') drawOfficeNameplate(ctx, r, oData.owner_name);
   });
@@ -3796,10 +3943,10 @@ function drawWorld(ctx) {
   drawEditOverlay(ctx);
 
   // ── OUTER FRAME ─────────────────────────────────────────────────────────
-  drawBrickWall(ctx, 54, 54,    WW-108, WT);       // top
-  drawBrickWall(ctx, 54, WH-62, WW-108, WT);       // bottom
-  drawBrickWall(ctx, 54, 54,    WT, WH-108);       // left
-  drawBrickWall(ctx, WW-62, 54, WT, WH-108);       // right
+  drawBrickWall(ctx, BX1-4, BY1-4, BX2-BX1+8, WT);       // top
+  drawBrickWall(ctx, BX1-4, BY2-4, BX2-BX1+8, WT);       // bottom
+  drawBrickWall(ctx, BX1-4, BY1-4, WT, BY2-BY1+8);       // left
+  drawBrickWall(ctx, BX2-4,  BY1-4, WT, BY2-BY1+8);      // right
 }
 
 // ══════════════════════════════════════════════
@@ -3860,6 +4007,8 @@ canvas.addEventListener('click', e => {
   if (wx >= BOARD_X && wx <= BOARD_X + BOARD_W && wy >= BOARD_Y && wy <= BOARD_Y + BOARD_H) {
     openAnnouncePanel();
   }
+  // Close side panel if open
+  if (sidePanelOpen) toggleSidePanel();
 });
 
 canvas.addEventListener('dblclick', e => {
@@ -3869,7 +4018,7 @@ canvas.addEventListener('dblclick', e => {
   const wy = (e.clientY - rect.top  - offY) / scale;
   handleEditDblClick(wx, wy);
 });
-let player    = { x: 600, y: 170 };
+let player    = { x: 700, y: 200 };
 let playerCfg = { name: 'Player', skin: '#FDBCB4', outfit: '#4f46e5' };
 let keys = {}, currentRoom = '', frame = 0, isMoving = false, gameRunning = false;
 
@@ -3883,7 +4032,14 @@ let gongHitCooldown = 0;           // frames until gong can be hit again
 let gongAnim        = null;        // { name, life, maxLife, particles[] }
 let inKart          = false;
 const KART_SPEED    = 6;
-const GONG_X        = 1070, GONG_Y = 165, GONG_R = 42; // position in team HQ
+const GONG_X        = 1200, GONG_Y = 185, GONG_R = 42; // position in team HQ
+
+// ── Sitting mechanic ─────────────────────────────────────────────────────
+let isSitting   = false;
+let sittingAt   = null;   // desk identifier string when seated
+
+// ── Music room ───────────────────────────────────────────────────────────
+let nowPlaying  = '';     // currently playing song (displayed above music room)
 
 // ── Office editor state ───────────────────────────────────────────────────
 const EDIT_GRID = 40;
@@ -3942,14 +4098,42 @@ window.addEventListener('keydown', e => {
   if ((e.key === 'e' || e.key === 'E') && tag !== 'INPUT' && tag !== 'TEXTAREA' && gameRunning) {
     // Kart dismount takes priority
     if (inKart) { dismountKart(); return; }
+    // Stand up if sitting
+    if (isSitting) { standUp(); return; }
     // Gong interaction
     const gdx = player.x - GONG_X, gdy = player.y - GONG_Y;
-    if (gdx*gdx + gdy*gdy < GONG_R * GONG_R * 3.5) hitGong();
+    if (gdx*gdx + gdy*gdy < GONG_R * GONG_R * 3.5) { hitGong(); return; }
     // Dog interaction
     const dog = activePets.find(p => p.isShared);
     if (dog) {
       const dx = player.x - dog.x, dy = player.y - dog.y;
-      if (dx*dx + dy*dy < 72*72) showDogMessage();
+      if (dx*dx + dy*dy < 72*72) { showDogMessage(); return; }
+    }
+    // Music room — set now playing
+    const musicRoom = ROOMS.find(r => r.type === 'music');
+    if (musicRoom && player.x >= musicRoom.x && player.x <= musicRoom.x + musicRoom.w &&
+        player.y >= musicRoom.y && player.y <= musicRoom.y + musicRoom.h) {
+      const song = prompt('Now Playing 🎵 (leave blank to clear):', nowPlaying || '');
+      if (song !== null) { setNowPlaying(song.trim()); }
+      return;
+    }
+    // Office claiming (if unclaimed) or sitting at desk
+    const officeRoom = currentOfficeRoom();
+    if (officeRoom) {
+      const oData = officeData[officeRoom.id];
+      if (!oData) {
+        // Unclaimed — claim it
+        claimCurrentOffice(); return;
+      } else if (oData.owner_user_id === currentUser?.id) {
+        // It's ours — sit at desk
+        sitDown(officeRoom.id + ':desk'); return;
+      }
+    }
+    // Team HQ open-plan desks — sit
+    const teamRoom = ROOMS.find(r => r.type === 'team');
+    if (teamRoom && player.x >= teamRoom.x && player.x <= teamRoom.x + teamRoom.w &&
+        player.y >= teamRoom.y && player.y <= teamRoom.y + teamRoom.h) {
+      sitDown('team:desk'); return;
     }
   }
   // W = wave at nearest player
@@ -3967,18 +4151,25 @@ window.addEventListener('keyup', e => {
 });
 
 // ══════════════════════════════════════════════
-// HUD UPDATE
+// HAMBURGER TOGGLE + HUD UPDATE
 // ══════════════════════════════════════════════
+let sidePanelOpen = false;
+function toggleSidePanel() {
+  sidePanelOpen = !sidePanelOpen;
+  document.getElementById('side-panel').classList.toggle('open', sidePanelOpen);
+}
+
 function updateHUD() {
-  const mySC = STATUS[myStatus]?.color || '#22c55e';
+  const mySC  = STATUS[myStatus]?.color || '#22c55e';
   const myLoc = roomAt(player.x, player.y);
+  const mySeat = isSitting ? ' 💺' : '';
 
   // Self row first
   let rows = `
     <div class="member-row">
       <div class="member-dot" style="background:${playerCfg.outfit}">${playerCfg.name[0].toUpperCase()}</div>
       <div style="flex:1;min-width:0">
-        <div class="member-name">${playerCfg.name} <span style="font-size:9px;color:#aaa">(you)</span></div>
+        <div class="member-name">${playerCfg.name}${mySeat} <span style="font-size:9px;color:#aaa">(you)</span></div>
         <div class="member-loc">${myLoc}</div>
       </div>
       <div class="status-dot" style="background:${mySC}" title="${STATUS[myStatus]?.label || 'Active'}"></div>
@@ -3986,13 +4177,14 @@ function updateHUD() {
 
   // Other players
   for (const p of Object.values(otherPlayers)) {
-    const sc  = STATUS[p.status]?.color || '#22c55e';
-    const loc = roomAt(p.x, p.y);
+    const sc   = STATUS[p.status]?.color || '#22c55e';
+    const loc  = roomAt(p.x, p.y);
+    const seat = p.sitting_at ? ' 💺' : '';
     rows += `
       <div class="member-row">
         <div class="member-dot" style="background:${p.outfit}">${p.name[0].toUpperCase()}</div>
         <div style="flex:1;min-width:0">
-          <div class="member-name">${p.name}</div>
+          <div class="member-name">${p.name}${seat}</div>
           <div class="member-loc">${loc}</div>
         </div>
         <div class="status-dot" style="background:${sc}" title="${STATUS[p.status]?.label || 'Active'}"></div>
