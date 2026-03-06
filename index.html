@@ -146,7 +146,7 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
 /* ── SLIDE-OUT SIDE PANEL ── */
 #side-panel {
   position: fixed; top: 0; right: -290px; width: 270px; height: 100vh;
-  background: rgba(16,16,30,0.98);
+  background: linear-gradient(160deg, rgba(20,16,40,0.99) 0%, rgba(12,12,28,0.99) 100%);
   border-left: 2px solid #3a3a5a;
   box-shadow: -4px 0 24px rgba(0,0,0,0.6);
   transition: right 0.25s ease;
@@ -838,6 +838,10 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
         <div class="swatch" data-c="#374151" style="background:#374151"></div>
       </div>
     </div>
+    <div class="setup-section" id="hair-section">
+      <label class="setup-label">Hair Colour</label>
+      <div class="swatch-row" id="hair-swatches"></div>
+    </div>
     <button class="btn-primary" id="setup-btn">Enter the Office →</button>
   </div>
 </div>
@@ -883,7 +887,7 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
 
 <div id="room-tag" style="display:none">Hallway<span id="vibe-badge" style="display:none"></span></div>
 <div id="hint" style="display:none">⬆ ⬇ ⬅ ➡ Move &nbsp;·&nbsp; W = Wave 👋 &nbsp;·&nbsp; R = React 💬 &nbsp;·&nbsp; E = Interact / Sit 💺 &nbsp;·&nbsp; Space = Sticky note</div>
-<div id="version-tag">v4.3 — 6 Mar 2026</div>
+<div id="version-tag">v4.4 — 6 Mar 2026</div>
 <div id="nearby-badge"></div>
 <button id="discord-btn" onclick="openDiscord()">🎙️ Join Voice Chat</button>
 <button id="claim-btn" onclick="claimCurrentOffice()">🏠 Claim This Office</button>
@@ -1244,6 +1248,31 @@ const getSignupOutfit = initSwatches('signup-outfit-swatches', '#4f46e5');
 const getSetupSkin    = initSwatches('setup-skin-swatches',    '#FDBCB4');
 const getSetupOutfit  = initSwatches('setup-outfit-swatches',  '#4f46e5');
 
+const HAIR_COLORS = ['#2d1505','#5c3317','#8B6914','#D4A85A','#e8d5b7','#e05c20','#1a1a1a','#c0392b'];
+let selectedHair = '#2d1505';
+function buildHairSwatches() {
+  const c = document.getElementById('hair-swatches');
+  if (!c) return;
+  c.innerHTML = '';
+  HAIR_COLORS.forEach(hc => {
+    const d = document.createElement('div');
+    d.className = 'color-swatch' + (hc === selectedHair ? ' active' : '');
+    d.style.background = hc;
+    d.style.width = '28px'; d.style.height = '28px';
+    d.style.border = hc === selectedHair ? '3px solid #818cf8' : '2px solid #444';
+    d.style.cursor = 'pointer'; d.style.borderRadius = '4px';
+    d.addEventListener('click', () => {
+      selectedHair = hc;
+      document.querySelectorAll('#hair-swatches .color-swatch').forEach(s => {
+        s.style.border = '2px solid #444'; s.classList.remove('active');
+      });
+      d.style.border = '3px solid #818cf8'; d.classList.add('active');
+    });
+    c.appendChild(d);
+  });
+}
+buildHairSwatches();
+
 // ══════════════════════════════════════════════
 // AUTH: SIGN UP
 // ══════════════════════════════════════════════
@@ -1303,7 +1332,7 @@ document.getElementById('setup-btn').addEventListener('click', async () => {
   const isAdmin = currentUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
   const { data } = await sb.from('profiles').upsert({
     user_id: currentUser.id, name,
-    skin: getSetupSkin(), outfit: getSetupOutfit(),
+    skin: getSetupSkin(), outfit: getSetupOutfit(), hair: selectedHair,
     role: isAdmin ? 'admin' : 'member',
     approved: isAdmin,
   }).select().single();
@@ -2177,7 +2206,7 @@ function teardownRealtime() {
 async function enterGame() {
   showScreen('game');
   if (currentProfile.role === 'admin') document.getElementById('hud-admin-btn').style.display = 'block';
-  playerCfg = { name: currentProfile.name, skin: currentProfile.skin, outfit: currentProfile.outfit };
+  playerCfg = { name: currentProfile.name, skin: currentProfile.skin, outfit: currentProfile.outfit, hair: currentProfile.hair || '#2d1505' };
   initOfficeToolbar();
   await loadOffices();
   await Promise.all([loadStickyNotes(), loadAnnouncements(), loadPets(), loadGongCount(), loadFloorTiles(), loadCustomWalls(), loadNowPlaying()]);
@@ -2327,6 +2356,16 @@ function drawOutdoorArea(ctx) {
 
   // Go kart track — grey ring from canvas edge to building edge
   const TO = 8, TI = 80; // outer/inner inset
+  // Grass blades — random darker green rectangles
+  ctx.fillStyle = '#2d5a18';
+  const grassSeed = 42;
+  for (let i = 0; i < 600; i++) {
+    const gx = ((i * 7919 + grassSeed) % WW);
+    const gy = ((i * 6271 + grassSeed) % WH);
+    // Only in outdoor corners (not on the track or building)
+    if (gx > TI-5 && gx < WW-TI+5 && gy > TI-5 && gy < WH-TI+5) continue;
+    ctx.fillRect(gx, gy, 2 + (i%3), 1);
+  }
   const strips = [
     [TO, TO,     WW-TO*2, TI-TO],     // top
     [TO, WH-TI,  WW-TO*2, TI-TO],     // bottom
@@ -2366,17 +2405,26 @@ function drawOutdoorArea(ctx) {
 
   // Pixel art trees
   function drawTree(tx, ty) {
-    ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(tx-8, ty+12, 16, 4);
-    ctx.fillStyle = '#4a2e0a'; ctx.fillRect(tx-3, ty+6, 6, 16);
-    ctx.fillStyle = '#1a5e28'; ctx.fillRect(tx-14, ty-2, 28, 14);
-    ctx.fillRect(tx-10, ty-10, 20, 10);
-    ctx.fillRect(tx-6,  ty-16, 12, 8);
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.fillRect(tx-10, ty+20, 20, 5);
+    // Trunk
+    ctx.fillStyle = '#6B4226'; ctx.fillRect(tx-4, ty+8, 8, 16);
+    ctx.fillStyle = '#8B5E3C'; ctx.fillRect(tx-3, ty+8, 3, 16); // highlight
+    // Outer canopy (dark green)
+    ctx.fillStyle = '#1a5e28';
+    ctx.fillRect(tx-14, ty-4, 28, 14);
+    ctx.fillRect(tx-10, ty-12, 20, 10);
+    ctx.fillRect(tx-6, ty-18, 12, 8);
+    ctx.fillRect(tx-16, ty+2, 32, 12);
+    // Inner canopy highlight (lighter green, offset)
     ctx.fillStyle = '#27ae60';
-    ctx.fillRect(tx-12, ty,    24, 10);
-    ctx.fillRect(tx-8,  ty-8,  16, 8);
-    ctx.fillRect(tx-4,  ty-14, 8,  6);
+    ctx.fillRect(tx-10, ty-2, 20, 10);
+    ctx.fillRect(tx-7, ty-10, 14, 8);
+    ctx.fillRect(tx-4, ty-16, 8, 6);
+    // Highlight spot
     ctx.fillStyle = '#52d68a';
-    ctx.fillRect(tx-8, ty+1, 4, 3);
+    ctx.fillRect(tx-8, ty-1, 5, 4);
+    ctx.fillRect(tx-5, ty-9, 4, 3);
   }
   [
     [38,38],[WW-38,38],[38,WH-38],[WW-38,WH-38],
@@ -2385,6 +2433,22 @@ function drawOutdoorArea(ctx) {
     [35,200],[35,450],[35,700],
     [WW-35,200],[WW-35,450],[WW-35,700],
   ].forEach(([tx,ty]) => drawTree(tx, ty));
+
+  // Flower patches
+  function drawFlower(fx, fy, col) {
+    ctx.fillStyle = '#3a6b20'; ctx.fillRect(fx, fy+4, 2, 4); // stem
+    ctx.fillStyle = col;
+    ctx.fillRect(fx-2, fy+2, 2, 2); ctx.fillRect(fx+2, fy+2, 2, 2);
+    ctx.fillRect(fx-1, fy, 4, 2);   ctx.fillRect(fx-1, fy+4, 4, 2);
+    ctx.fillStyle = '#FFD700'; ctx.fillRect(fx, fy+2, 2, 2); // centre
+  }
+  const flowerColors = ['#e74c3c','#e91e63','#9c27b0','#ff9800','#ffffff'];
+  const flowerSpots = [[60,60],[60,80],[80,60],[WW-60,60],[WW-60,80],[WW-80,60],[60,WH-60],[WW-60,WH-60],[140,WH-50],[250,50],[450,50],[WW-250,50],[WW-150,50]];
+  flowerSpots.forEach(([fx,fy]) => {
+    for (let fi = 0; fi < 4; fi++) {
+      drawFlower(fx + fi*10, fy + (fi%2)*8, flowerColors[(fx+fi)%flowerColors.length]);
+    }
+  });
 }
 
 // ── OPEN TEAM AREA: 12 pixel art desks in 3 rows of 4 ─────────────────────
@@ -2505,10 +2569,13 @@ function drawOfficeFurniture(ctx, r, deskColor='#8B6535') {
   const shelfColors = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#e67e22'];
   for (let i = 0; i * 9 + 4 < sh - 4; i++) {
     const by2 = sy + 4 + i * 9;
-    ctx.fillStyle = '#6b4a1e'; ctx.fillRect(sx, by2 + 6, sw, 3);
+    ctx.fillStyle = '#6b4a1e'; ctx.fillRect(sx, by2 + 6, sw, 3); // shelf board
     for (let b = 0; b < 3; b++) {
-      ctx.fillStyle = shelfColors[(i*3+b)%shelfColors.length];
-      ctx.fillRect(sx + 1 + b*5, by2+1, 4, 5);
+      const bookH = 4 + (b + i) % 3; // varied book height
+      const bColor = shelfColors[(i*3+b)%shelfColors.length];
+      ctx.fillStyle = bColor; ctx.fillRect(sx + 1 + b*5, by2+1, 4, bookH);
+      // Book spine highlight
+      ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.fillRect(sx + 1 + b*5, by2+1, 1, bookH);
     }
   }
 
@@ -2516,16 +2583,28 @@ function drawOfficeFurniture(ctx, r, deskColor='#8B6535') {
   const dk = deskColor || '#8B6535';
   const dkDark = '#5a3e1e';
   const deskX = cx - 34, deskY = r.y + WT + 4, deskW = 68, deskH = 36;
+  ctx.shadowColor = 'rgba(0,0,0,0.25)'; ctx.shadowBlur = 6; ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 3;
   ctx.fillStyle = dk; ctx.fillRect(deskX, deskY, deskW, deskH);
+  ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
   ctx.fillStyle = 'rgba(0,0,0,0.1)';
   for (let g = 0; g < deskW; g += 8) ctx.fillRect(deskX + g, deskY, 1, deskH);
   ctx.fillStyle = dkDark; ctx.fillRect(deskX, deskY + deskH - 3, deskW, 3);
+  // Desk top highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(deskX, deskY, deskW, 2);
+  // Desk bottom shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(deskX, deskY+deskH-2, deskW, 2);
 
   // ── MONITOR ────────────────────────────────────────────────────────────
+  ctx.shadowColor = 'rgba(0,0,0,0.25)'; ctx.shadowBlur = 6; ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 3;
   ctx.fillStyle = '#1a1a2e'; ctx.fillRect(cx - 16, deskY + 3, 32, 21);
-  ctx.fillStyle = '#1a4a8a'; ctx.fillRect(cx - 14, deskY + 5, 28, 15);
-  ctx.fillStyle = 'rgba(100,180,255,0.55)'; ctx.fillRect(cx - 14, deskY + 5, 28, 15);
-  ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(cx - 13, deskY + 6, 8, 2);
+  ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+  // Monitor glow — radial gradient screen
+  const monGrad = ctx.createRadialGradient(cx, deskY+12, 2, cx, deskY+12, 16);
+  monGrad.addColorStop(0, 'rgba(120,200,255,0.9)');
+  monGrad.addColorStop(1, 'rgba(20,60,140,0.95)');
+  ctx.fillStyle = monGrad; ctx.fillRect(cx - 14, deskY + 5, 28, 15);
+  // Screen reflection
+  ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(cx - 13, deskY + 6, 10, 3);
   ctx.fillStyle = '#333'; ctx.fillRect(cx - 3, deskY + 24, 6, 5);
   ctx.fillStyle = '#444'; ctx.fillRect(cx - 7, deskY + 29, 14, 2);
   // Keyboard
@@ -2534,21 +2613,47 @@ function drawOfficeFurniture(ctx, r, deskColor='#8B6535') {
   for (let k = 0; k < 4; k++) ctx.fillRect(deskX + 4 + k*5, deskY + 28, 4, 2);
 
   // ── CHAIR ──────────────────────────────────────────────────────────────
-  const chY = deskY + deskH + 6;
-  ctx.fillStyle = '#37474f'; ctx.fillRect(cx - 10, chY, 20, 12);
-  ctx.fillStyle = '#546e7a'; ctx.fillRect(cx - 9,  chY+1, 18, 4);
-  ctx.fillStyle = '#37474f'; ctx.fillRect(cx - 8,  chY - 13, 16, 13);
-  ctx.fillStyle = '#546e7a'; ctx.fillRect(cx - 7,  chY - 12, 14, 4);
+  ctx.shadowColor = 'rgba(0,0,0,0.25)'; ctx.shadowBlur = 6; ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 3;
+  const chY = deskY + deskH + 5;
+  // Base legs (5-point star approximated)
+  ctx.fillStyle = '#1a1a1a';
+  [[-8,8],[8,8],[0,12],[-10,4],[10,4]].forEach(([lx,ly]) => {
+    ctx.fillRect(cx + lx - 1, chY + ly, 3, 5);
+    // Wheel dot
+    ctx.fillStyle = '#333'; ctx.fillRect(cx + lx - 2, chY + ly + 4, 4, 3);
+    ctx.fillStyle = '#1a1a1a';
+  });
+  ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+  ctx.fillStyle = '#5a6a72'; ctx.fillRect(cx - 4, chY + 4, 8, 8); // centre hub
+  // Seat cushion
+  ctx.fillStyle = '#37474f'; ctx.fillRect(cx - 11, chY - 6, 22, 12);
+  ctx.fillStyle = '#546e7a'; ctx.fillRect(cx - 10, chY - 5, 20, 5); // highlight
+  ctx.fillStyle = '#263238'; ctx.fillRect(cx - 10, chY + 4, 20, 2); // shadow
+  // Back rest
+  ctx.fillStyle = '#37474f'; ctx.fillRect(cx - 9, chY - 20, 18, 14);
+  ctx.fillStyle = '#546e7a'; ctx.fillRect(cx - 8, chY - 19, 16, 5); // highlight
+  // Armrests
   ctx.fillStyle = '#263238';
-  ctx.fillRect(cx - 12, chY - 4, 4, 10); ctx.fillRect(cx + 8, chY - 4, 4, 10);
+  ctx.fillRect(cx - 14, chY - 10, 4, 10); ctx.fillRect(cx + 10, chY - 10, 4, 10);
+  ctx.fillStyle = '#37474f';
+  ctx.fillRect(cx - 14, chY - 12, 5, 3); ctx.fillRect(cx + 10, chY - 12, 5, 3);
 
   // ── PLANT (corner) ─────────────────────────────────────────────────────
-  const pX = r.x + r.w - 16, pY = r.y + r.h - 26;
-  ctx.fillStyle = '#8B5E3C'; ctx.fillRect(pX - 6, pY + 8, 12, 8);
-  ctx.fillStyle = '#6B4423'; ctx.fillRect(pX - 7, pY + 7, 14, 3);
-  ctx.fillStyle = '#1a6b35'; ctx.fillRect(pX - 5, pY, 10, 10);
-  ctx.fillStyle = '#27ae60'; ctx.fillRect(pX - 3, pY + 2, 6, 6);
-  ctx.fillStyle = '#2ecc71'; ctx.fillRect(pX - 1, pY + 3, 3, 3);
+  const pX = r.x + r.w - 16, pY = r.y + r.h - 28;
+  // Pot
+  ctx.fillStyle = '#c1440e'; ctx.fillRect(pX - 7, pY + 10, 14, 10);
+  ctx.fillStyle = '#d4521a'; ctx.fillRect(pX - 6, pY + 10, 4, 10); // highlight side
+  ctx.fillStyle = '#8B2E06'; ctx.fillRect(pX + 4, pY + 10, 3, 10); // shadow side
+  ctx.fillStyle = '#a33a0c'; ctx.fillRect(pX - 8, pY + 9, 16, 3);  // rim
+  // Soil
+  ctx.fillStyle = '#3d2a10'; ctx.fillRect(pX - 6, pY + 10, 12, 3);
+  // Leaves — multiple filled rects at angles simulating ellipses
+  const leafColors = ['#1a6b35','#27ae60','#1e8c45','#2ecc71'];
+  [[0,-8,6,5],[4,-10,5,4],[-4,-10,5,4],[2,-13,4,4],[-2,-13,4,4]].forEach(([lx,ly,lw,lh],li) => {
+    ctx.fillStyle = leafColors[li % leafColors.length];
+    ctx.fillRect(pX + lx - lw/2, pY + ly, lw, lh);
+  });
+  ctx.fillStyle = '#52d68a'; ctx.fillRect(pX - 1, pY - 7, 2, 3); // highlight leaf
 
   // ── "E to claim" prompt (if unclaimed) ────────────────────────────────
   const oData = officeData[r.id];
@@ -3375,26 +3480,21 @@ function drawCarpetFloor(ctx, rx, ry, rw, rh, color) {
 }
 
 function drawTileBWFloor(ctx, rx, ry, rw, rh) {
-  const TS = 24;
-  for (let col = Math.floor(rx / TS); col < Math.ceil((rx + rw) / TS); col++) {
-    for (let row = Math.floor(ry / TS); row < Math.ceil((ry + rh) / TS); row++) {
-      const tx = col * TS, ty = row * TS;
-      const cx = Math.max(tx, rx), cy = Math.max(ty, ry);
-      const cw = Math.min(tx + TS, rx + rw) - cx, ch = Math.min(ty + TS, ry + rh) - cy;
-      if (cw <= 0 || ch <= 0) continue;
-      ctx.fillStyle = (col + row) % 2 === 0 ? '#f4f4f4' : '#1e1e30';
-      ctx.fillRect(cx, cy, cw, ch);
+  // Warm beige tile base
+  ctx.fillStyle = '#F5ECD7';
+  ctx.fillRect(rx, ry, rw, rh);
+  // Tile grout lines (16×16 grid, 1px darker beige lines)
+  ctx.fillStyle = '#D9C9A8';
+  for (let x = rx; x < rx + rw; x += 16) ctx.fillRect(x, ry, 1, rh);
+  for (let y = ry; y < ry + rh; y += 16) ctx.fillRect(rx, y, rw, 1);
+  // Subtle tile variation — every other tile slightly warmer
+  for (let tx = rx; tx < rx + rw; tx += 16) {
+    for (let ty = ry; ty < ry + rh; ty += 16) {
+      if ((Math.floor((tx-rx)/16) + Math.floor((ty-ry)/16)) % 2 === 0) {
+        ctx.fillStyle = 'rgba(255,230,180,0.06)';
+        ctx.fillRect(tx+1, ty+1, 14, 14);
+      }
     }
-  }
-  // Grout lines
-  ctx.strokeStyle = 'rgba(100,100,140,0.35)'; ctx.lineWidth = 1;
-  for (let col = Math.floor(rx / TS); col <= Math.ceil((rx + rw) / TS); col++) {
-    const lx = col * TS; if (lx < rx || lx > rx + rw) continue;
-    ctx.beginPath(); ctx.moveTo(lx, ry); ctx.lineTo(lx, ry + rh); ctx.stroke();
-  }
-  for (let row = Math.floor(ry / TS); row <= Math.ceil((ry + rh) / TS); row++) {
-    const ly = row * TS; if (ly < ry || ly > ry + rh) continue;
-    ctx.beginPath(); ctx.moveTo(rx, ly); ctx.lineTo(rx + rw, ly); ctx.stroke();
   }
 }
 
@@ -3782,6 +3882,14 @@ function drawRoomDetails(ctx) {
   [[400,hall1cy],[800,hall1cy],[1200,hall1cy],[1600,hall1cy],
    [400,hall2cy],[800,hall2cy],[1200,hall2cy],[1600,hall2cy],
   ].forEach(([hx, hy]) => drawHallPlant(hx, hy));
+
+  // Skirting boards — thin lighter line at base of room interior walls
+  ctx.fillStyle = 'rgba(255,255,255,0.07)';
+  ROOMS.forEach(r => {
+    ctx.fillRect(r.x + WT, r.y + r.h - WT - 2, r.w - WT*2, 2);
+    ctx.fillRect(r.x + WT, r.y + WT, 2, r.h - WT*2);
+    ctx.fillRect(r.x + r.w - WT - 2, r.y + WT, 2, r.h - WT*2);
+  });
 }
 
 function drawOfficeNameplate(ctx, r, ownerName) {
@@ -3835,13 +3943,17 @@ function drawDoorLabels(ctx) {
   });
 }
 
-function drawChar(ctx, x, y, skin, outfit, name, status, isPlayer=false, isMoving=false, mood=null) {
+function drawChar(ctx, x, y, skin, outfit, name, status, isPlayer=false, isMoving=false, mood=null, hair='#2d1505') {
   ctx.imageSmoothingEnabled = false;
-  const wf = isMoving ? (frame % 20 < 10 ? 2 : -2) : 0; // walk cycle leg offset
+  const walkPhase = isMoving ? Math.floor(frame / 5) % 4 : 0;
+  const wf = [0, 3, 0, -3][walkPhase]; // 4-frame cycle: neutral, left forward, neutral, right forward
+  const armSwing = [0, -2, 0, 2][walkPhase];
 
   // === SHADOW ===
-  ctx.fillStyle = 'rgba(0,0,0,0.20)';
+  ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 8; ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 4;
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
   ctx.fillRect(x - 10, y + 34, 20, 4);
+  ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
 
   // === SHOES ===
   ctx.fillStyle = '#111';
@@ -3862,16 +3974,20 @@ function drawChar(ctx, x, y, skin, outfit, name, status, isPlayer=false, isMovin
   // body shadow stripe
   ctx.fillStyle = 'rgba(0,0,0,0.12)';
   ctx.fillRect(x - 8, y + 18, 16, 2);
+  // Body shading — darker right side
+  ctx.fillStyle = 'rgba(0,0,0,0.10)'; ctx.fillRect(x + 4, y + 6, 4, 14);
+  // Body highlight — lighter left
+  ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(x - 8, y + 6, 4, 14);
 
   // === ARMS ===
   ctx.fillStyle = outfit;
-  ctx.fillRect(x - 12, y + 7, 4, 10); // left arm
-  ctx.fillRect(x + 8,  y + 7, 4, 10); // right arm
+  ctx.fillRect(x - 12, y + 7 + armSwing, 4, 10); // left arm
+  ctx.fillRect(x + 8,  y + 7 - armSwing, 4, 10); // right arm
 
   // === HANDS ===
   ctx.fillStyle = skin;
-  ctx.fillRect(x - 12, y + 16, 4, 4); // left hand
-  ctx.fillRect(x + 8,  y + 16, 4, 4); // right hand
+  ctx.fillRect(x - 12, y + 16 + armSwing, 4, 4); // left hand
+  ctx.fillRect(x + 8,  y + 16 - armSwing, 4, 4); // right hand
 
   // === NECK ===
   ctx.fillStyle = skin;
@@ -3883,9 +3999,13 @@ function drawChar(ctx, x, y, skin, outfit, name, status, isPlayer=false, isMovin
   // ear nubs
   ctx.fillRect(x - 9, y - 4, 2, 4);
   ctx.fillRect(x + 7, y - 4, 2, 4);
+  // Head highlight — top-left shine
+  ctx.fillStyle = 'rgba(255,255,255,0.20)'; ctx.fillRect(x - 5, y - 7, 5, 4);
+  // Head shadow — right side
+  ctx.fillStyle = 'rgba(0,0,0,0.10)'; ctx.fillRect(x + 3, y - 6, 3, 10);
 
   // === HAIR ===
-  ctx.fillStyle = '#2d1505';
+  ctx.fillStyle = hair || '#2d1505';
   ctx.fillRect(x - 7, y - 10, 14, 5); // top hair
   ctx.fillRect(x - 9, y - 8,  3, 6);  // left sideburn
   ctx.fillRect(x + 6, y - 8,  3, 6);  // right sideburn
@@ -3930,12 +4050,14 @@ function drawChar(ctx, x, y, skin, outfit, name, status, isPlayer=false, isMovin
   const tw = ctx.measureText(name).width;
   const tagW = tw + 22, tagH = 16;
   const tagX = x - tagW / 2, tagY = y - 26;
-  ctx.fillStyle = isPlayer ? 'rgba(79,70,229,0.92)' : 'rgba(15,15,30,0.82)';
-  ctx.fillRect(tagX, tagY, tagW, tagH);
-  // 1px pixel border
+  ctx.fillStyle = isPlayer ? 'rgba(79,70,229,0.92)' : 'rgba(15,15,30,0.86)';
+  // Drop shadow for name tag
+  ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 6; ctx.shadowOffsetX = 1; ctx.shadowOffsetY = 2;
+  rrect(ctx, tagX, tagY, tagW, tagH, 5); ctx.fill();
+  ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
   ctx.strokeStyle = isPlayer ? 'rgba(165,180,252,0.7)' : 'rgba(255,255,255,0.18)';
   ctx.lineWidth = 1;
-  ctx.strokeRect(tagX, tagY, tagW, tagH);
+  rrect(ctx, tagX, tagY, tagW, tagH, 5); ctx.stroke();
   ctx.fillStyle = '#fff';
   ctx.fillText(name, x, tagY + 11);
   // status dot (square for pixel art)
@@ -3945,6 +4067,8 @@ function drawChar(ctx, x, y, skin, outfit, name, status, isPlayer=false, isMovin
 
   // === MOOD EMOJI above name tag ===
   if (mood && MOOD_EMOJI[mood]) {
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath(); ctx.arc(x, tagY - 8, 9, 0, Math.PI*2); ctx.fill();
     ctx.font = '13px serif';
     ctx.textAlign = 'center';
     ctx.fillText(MOOD_EMOJI[mood], x, tagY - 4);
@@ -3997,31 +4121,44 @@ function drawTileFloor(ctx, rx, ry, rw, rh, color1, color2, tileSize=16) {
 
 // ── Pixel brick wall helper ─────────────────────────────────────────────────
 function drawBrickWall(ctx, wx, wy, ww, wh) {
-  const BH = 8, BW = 20; // brick height / width in px
-  ctx.fillStyle = '#2e2e42';
+  ctx.imageSmoothingEnabled = false;
+  // Base wall colour
+  ctx.fillStyle = '#2a2a3a';
   ctx.fillRect(wx, wy, ww, wh);
-  // drop shadow (right + bottom edge)
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.fillRect(wx + ww, wy + 3, 3, wh);
-  ctx.fillRect(wx + 3, wy + wh, ww, 3);
-  // brick rows
-  for (let row = 0; row * BH < wh; row++) {
-    const offset = (row % 2 === 0) ? 0 : BW / 2;
-    for (let col = -1; col * BW < ww + BW; col++) {
-      const bx = wx + col * BW + offset, by = wy + row * BH;
-      const bw = Math.min(BW - 2, wx + ww - bx - 1), bh = BH - 1;
-      if (bw <= 0 || bh <= 0) continue;
-      const cx = Math.max(bx, wx), cy = Math.max(by, wy);
-      const cw2 = Math.min(bx + bw, wx + ww) - cx;
-      const ch2 = Math.min(by + bh, wy + wh) - cy;
-      if (cw2 <= 0 || ch2 <= 0) continue;
-      ctx.fillStyle = '#3a3a52';
-      ctx.fillRect(cx, cy, cw2, ch2);
-      // highlight on top brick edge
-      ctx.fillStyle = 'rgba(255,255,255,0.06)';
-      ctx.fillRect(cx, cy, cw2, 1);
+  // Brick pattern — alternating rows, 2 shades
+  const brickH = 7, brickW = 20, mortar = 1;
+  for (let row = 0; row * (brickH + mortar) < wh; row++) {
+    const ry = wy + row * (brickH + mortar);
+    const offset = (row % 2) * (brickW / 2);
+    ctx.fillStyle = row % 3 === 0 ? '#32324a' : '#2e2e42';
+    for (let bx = wx - offset; bx < wx + ww; bx += brickW + mortar) {
+      const bLeft = Math.max(bx, wx);
+      const bRight = Math.min(bx + brickW, wx + ww);
+      if (bRight > bLeft) ctx.fillRect(bLeft, ry, bRight - bLeft, Math.min(brickH, wy+wh-ry));
     }
+    // Mortar line (slightly lighter)
+    ctx.fillStyle = 'rgba(255,255,255,0.04)';
+    ctx.fillRect(wx, ry + brickH, ww, mortar);
   }
+  // Top highlight edge
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx.fillRect(wx, wy, ww, 1);
+}
+
+// ── Room ambient lighting overlay ───────────────────────────────────────────
+function drawRoomLighting(ctx, r) {
+  // Ceiling light — warm glow from top-centre
+  const lg = ctx.createRadialGradient(r.x + r.w/2, r.y + 20, 10, r.x + r.w/2, r.y + 20, Math.max(r.w, r.h) * 0.7);
+  lg.addColorStop(0, 'rgba(255,240,180,0.08)');
+  lg.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = lg;
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  // Corner darkening
+  const cg = ctx.createRadialGradient(r.x + r.w/2, r.y + r.h/2, Math.min(r.w,r.h)*0.3, r.x + r.w/2, r.y + r.h/2, Math.max(r.w,r.h)*0.85);
+  cg.addColorStop(0, 'rgba(0,0,0,0)');
+  cg.addColorStop(1, 'rgba(0,0,0,0.13)');
+  ctx.fillStyle = cg;
+  ctx.fillRect(r.x, r.y, r.w, r.h);
 }
 
 // ── Darken a hex colour by `amount` (0–1) ──────────────────────────────────
@@ -4055,6 +4192,13 @@ function drawWorld(ctx) {
   // ── HALLWAY FLOORS ────────────────────────────────────────────────────────
   drawTileFloor(ctx, BX1, HALL1_Y1, BX2-BX1, HALL1_Y2-HALL1_Y1, '#c8c2b4', '#bdb8aa', 20);
   drawTileFloor(ctx, BX1, HALL2_Y1, BX2-BX1, HALL2_Y2-HALL2_Y1, '#c8c2b4', '#bdb8aa', 20);
+  // Hallway tile grid (warm grey)
+  ctx.fillStyle = 'rgba(0,0,0,0.06)';
+  for (let hx = BX1; hx < BX2; hx += 16) ctx.fillRect(hx, HALL1_Y1, 1, HALL1_Y2-HALL1_Y1);
+  for (let hy = HALL1_Y1; hy < HALL1_Y2; hy += 16) ctx.fillRect(BX1, hy, BX2-BX1, 1);
+  ctx.fillStyle = 'rgba(0,0,0,0.06)';
+  for (let hx = BX1; hx < BX2; hx += 16) ctx.fillRect(hx, HALL2_Y1, 1, HALL2_Y2-HALL2_Y1);
+  for (let hy = HALL2_Y1; hy < HALL2_Y2; hy += 16) ctx.fillRect(BX1, hy, BX2-BX1, 1);
 
   // ── ROOMS ────────────────────────────────────────────────────────────────
   ROOMS.forEach(r => {
@@ -4070,6 +4214,9 @@ function drawWorld(ctx) {
     } else {
       drawTileFloor(ctx, rx, ry, rw, rh, floorBase, floorDark, 16);
     }
+
+    // room ambient lighting overlay
+    drawRoomLighting(ctx, r);
 
     // accent inner border
     ctx.strokeStyle = r.accent; ctx.lineWidth = 2;
@@ -4451,11 +4598,11 @@ function loop() {
   // Other players (kart or character)
   for (const p of Object.values(otherPlayers)) {
     if (p.inKart) drawKart(ctx, p.x, p.y, p.name, false, p);
-    else drawChar(ctx, p.x, p.y, p.skin, p.outfit, p.name, p.status || 'active', false, false, p.mood);
+    else drawChar(ctx, p.x, p.y, p.skin, p.outfit, p.name, p.status || 'active', false, false, p.mood, p.hair || '#2d1505');
   }
   // Local player (kart or character)
   if (inKart) drawKart(ctx, player.x, player.y, playerCfg.name, true, playerCfg);
-  else drawChar(ctx, player.x, player.y, playerCfg.skin, playerCfg.outfit, playerCfg.name, myStatus, true, isMoving, currentProfile?.mood);
+  else drawChar(ctx, player.x, player.y, playerCfg.skin, playerCfg.outfit, playerCfg.name, myStatus, true, isMoving, currentProfile?.mood, playerCfg.hair || '#2d1505');
 
   // Floating emojis (waves + reactions)
   drawFloatingEmojis(ctx);
