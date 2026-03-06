@@ -856,8 +856,20 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
 <div id="side-panel">
   <div id="side-panel-inner">
     <button id="side-panel-close" onclick="toggleSidePanel()">✕</button>
+    <div id="my-points-bar" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;background:rgba(255,215,0,0.08);border:1px solid rgba(255,215,0,0.25);border-radius:8px;padding:7px 10px">
+      <span style="font-size:18px">⭐</span>
+      <div style="flex:1">
+        <div style="font-size:11px;color:#aaa">Your Points</div>
+        <div id="my-points-val" style="font-size:17px;font-weight:700;color:#FFD700">0</div>
+      </div>
+    </div>
     <h3>👥 Team</h3>
     <div id="member-list"></div>
+    <hr class="hud-divider">
+    <div style="margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">⭐ Top Points</div>
+      <div id="points-leaderboard" style="display:flex;flex-direction:column;gap:3px"></div>
+    </div>
     <hr class="hud-divider">
     <div class="status-section">
       <label>Your Status</label>
@@ -887,7 +899,7 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
 
 <div id="room-tag" style="display:none">Hallway<span id="vibe-badge" style="display:none"></span></div>
 <div id="hint" style="display:none">⬆ ⬇ ⬅ ➡ Move &nbsp;·&nbsp; W = Wave 👋 &nbsp;·&nbsp; R = React 💬 &nbsp;·&nbsp; E = Interact / Sit 💺 &nbsp;·&nbsp; Space = Sticky note</div>
-<div id="version-tag">v4.4 — 6 Mar 2026</div>
+<div id="version-tag">v4.5 — 6 Mar 2026</div>
 <div id="nearby-badge"></div>
 <button id="discord-btn" onclick="openDiscord()">🎙️ Join Voice Chat</button>
 <button id="claim-btn" onclick="claimCurrentOffice()">🏠 Claim This Office</button>
@@ -1848,6 +1860,7 @@ async function submitStickyNote() {
   if (error) { alert('Could not save note: ' + error.message); return; }
   stickyNotes.push(data);
   closeStickyPopup();
+  awardPoints(2, 'sticky_note_posted');
 }
 
 async function deleteStickyNote(noteId) {
@@ -2116,7 +2129,10 @@ function setupRealtime() {
 
   // Broadcast: wave 👋
   realtimeChannel.on('broadcast', { event: 'wave' }, ({ payload }) => {
-    if (payload.to_id === currentUser.id) showWaveNotif(payload.from_name);
+    if (payload.to_id === currentUser.id) {
+      showWaveNotif(payload.from_name);
+      awardPoints(3, 'wave_received');  // earn pts when someone waves at you
+    }
     const src = payload.from_id === currentUser.id ? player : otherPlayers[payload.from_id];
     if (src) spawnFloatingEmoji('👋', src.x, src.y - 24, 'wave');
   });
@@ -2125,7 +2141,11 @@ function setupRealtime() {
   realtimeChannel.on('broadcast', { event: 'reaction' }, ({ payload }) => {
     if (payload.user_id === currentUser.id) return; // already shown locally
     const src = otherPlayers[payload.user_id];
-    if (src) spawnFloatingEmoji(payload.emoji, src.x, src.y - 24, 'reaction');
+    if (src) {
+      spawnFloatingEmoji(payload.emoji, src.x, src.y - 24, 'reaction');
+      // If the reaction targets the local player (nearest player at reaction time), award pts
+      if (payload.target_id === currentUser.id) awardPoints(2, 'reaction_received');
+    }
   });
 
   // Broadcast: gong 🔔
@@ -2209,14 +2229,17 @@ async function enterGame() {
   playerCfg = { name: currentProfile.name, skin: currentProfile.skin, outfit: currentProfile.outfit, hair: currentProfile.hair || '#2d1505' };
   initOfficeToolbar();
   await loadOffices();
-  await Promise.all([loadStickyNotes(), loadAnnouncements(), loadPets(), loadGongCount(), loadFloorTiles(), loadCustomWalls(), loadNowPlaying()]);
+  await Promise.all([loadStickyNotes(), loadAnnouncements(), loadPets(), loadGongCount(), loadFloorTiles(), loadCustomWalls(), loadNowPlaying(), loadPoints(), loadLeaderboard()]);
   setupRealtime();
   startIdleDetection();
   updateHUD();
   updateClaimUI();
   refreshMoodUI();
   syncInterval = setInterval(resync, 30000);
-  setInterval(loadNowPlaying, 30000);   // reload music URL every 30s so new tracks appear
+  setInterval(loadNowPlaying, 30000);      // reload music URL every 30s
+  setInterval(loadLeaderboard, 60000);     // refresh leaderboard every 60s
+  setInterval(tickOfficeTime, 60000);      // check 30-min presence reward every minute
+  checkDailyCheckin();                     // award daily login points
   if (!gameRunning) { gameRunning = true; loop(); }
 }
 
@@ -3052,6 +3075,7 @@ async function hitGong() {
   realtimeChannel?.send({ type: 'broadcast', event: 'gong', payload: { name: playerCfg.name } });
   gongCount++;
   triggerGongAnim(playerCfg.name);
+  awardPoints(5, 'gong_hit');
 }
 
 function triggerGongAnim(name) {
@@ -3214,9 +3238,15 @@ function sendReaction(emoji) {
   document.getElementById('emoji-picker').style.display = 'none';
   if (!currentUser) return;
   spawnFloatingEmoji(emoji, player.x, player.y - 28, 'reaction');
+  // Find nearest player to tag as target
+  let nearestId = null, nearDist = Infinity;
+  for (const [uid, p] of Object.entries(otherPlayers)) {
+    const d = (p.x-player.x)**2 + (p.y-player.y)**2;
+    if (d < nearDist) { nearDist = d; nearestId = uid; }
+  }
   realtimeChannel?.send({
     type: 'broadcast', event: 'reaction',
-    payload: { user_id: currentUser.id, emoji },
+    payload: { user_id: currentUser.id, emoji, target_id: nearestId },
   });
 }
 
@@ -3236,6 +3266,72 @@ function standUp() {
 async function updateSittingAt(val) {
   if (!currentUser) return;
   await sb.from('presence').update({ sitting_at: val }).eq('user_id', currentUser.id);
+}
+
+// ══════════════════════════════════════════════
+// POINTS SYSTEM ⭐
+// ══════════════════════════════════════════════
+async function awardPoints(amount, reason) {
+  if (!currentUser) return;
+  myPoints += amount;
+  // Floating animation above player
+  pointsFloats.push({ x: player.x, y: player.y - 40, label: `+${amount} ⭐`, life: 100, maxLife: 100 });
+  // Save to DB
+  await sb.from('points_log').insert({ user_id: currentUser.id, amount, reason }).catch(() => {});
+  await sb.from('profiles').update({ points: myPoints }).eq('id', currentUser.id).catch(() => {});
+  updateHUD();
+}
+
+async function loadPoints() {
+  if (!currentUser) return;
+  const { data } = await sb.from('profiles').select('points').eq('id', currentUser.id).single();
+  myPoints = data?.points ?? 0;
+}
+
+async function loadLeaderboard() {
+  const { data } = await sb.from('profiles').select('name, points').order('points', { ascending: false }).limit(5);
+  pointsLeaderboard = data || [];
+  updateHUD();
+}
+
+function updatePointsFloats() {
+  for (const p of pointsFloats) { p.y -= 0.7; p.life--; }
+  pointsFloats = pointsFloats.filter(p => p.life > 0);
+}
+
+function drawPointsFloats(ctx) {
+  ctx.save();
+  ctx.font = 'bold 13px "Courier New", monospace';
+  ctx.textAlign = 'center';
+  for (const p of pointsFloats) {
+    const t = p.life / p.maxLife;
+    ctx.globalAlpha = t > 0.7 ? 1 : t / 0.7;
+    ctx.fillStyle = '#FFD700';
+    ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 4;
+    ctx.fillText(p.label, p.x, p.y);
+  }
+  ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+// Daily login reward (once per calendar day)
+async function checkDailyCheckin() {
+  if (dailyCheckinDone) return;
+  const key = `checkin_${currentUser.id}_${new Date().toDateString()}`;
+  if (localStorage.getItem(key)) return;
+  localStorage.setItem(key, '1');
+  dailyCheckinDone = true;
+  await awardPoints(10, 'daily_login');
+}
+
+// 30-minute presence reward
+function tickOfficeTime() {
+  if (!officeTimeStart) { officeTimeStart = Date.now(); return; }
+  if (officeTimeRewarded) return;
+  if (Date.now() - officeTimeStart >= 30 * 60 * 1000) {
+    officeTimeRewarded = true;
+    awardPoints(15, '30min_presence');
+  }
 }
 
 // ══════════════════════════════════════════════
@@ -4354,6 +4450,14 @@ let sittingAt   = null;   // desk identifier string when seated
 // ── Music room ───────────────────────────────────────────────────────────
 let nowPlaying  = '';     // currently playing song (displayed above music room)
 
+// ── Points system ⭐ ──────────────────────────────────────────────────────
+let myPoints        = 0;
+let pointsLeaderboard = [];          // [{name, points}] top 5
+let pointsFloats    = [];            // floating +N⭐ animations
+let dailyCheckinDone = false;        // prevent multiple daily logins
+let officeTimeStart  = null;         // for 30-min presence reward
+let officeTimeRewarded = false;
+
 // ── Office editor state ───────────────────────────────────────────────────
 const EDIT_GRID = 40;
 const FLOOR_TYPES = ['wood','carpet-blue','carpet-red','carpet-green','carpet-purple','tile','concrete','default'];
@@ -4503,6 +4607,22 @@ function updateHUD() {
       </div>`;
   }
   document.getElementById('member-list').innerHTML = rows;
+
+  // Points badge
+  const ptEl = document.getElementById('my-points-val');
+  if (ptEl) ptEl.textContent = myPoints.toLocaleString();
+
+  // Leaderboard
+  const lbEl = document.getElementById('points-leaderboard');
+  if (lbEl && pointsLeaderboard.length) {
+    const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+    lbEl.innerHTML = pointsLeaderboard.map((p, i) => `
+      <div style="display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0">
+        <span style="width:18px;text-align:center">${medals[i] || i+1}</span>
+        <span style="flex:1;color:#e2d9f3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</span>
+        <span style="color:#FFD700;font-weight:700">${(p.points||0).toLocaleString()} ⭐</span>
+      </div>`).join('');
+  }
 }
 
 // ══════════════════════════════════════════════
@@ -4532,6 +4652,7 @@ function loop() {
 
   updateFloatingEmojis();
   updateMusicNotes();
+  updatePointsFloats();
 
   if (!blocked(nx, player.y)) player.x = nx;
   if (!blocked(player.x, ny)) player.y = ny;
@@ -4606,6 +4727,9 @@ function loop() {
 
   // Floating emojis (waves + reactions)
   drawFloatingEmojis(ctx);
+
+  // Points float animations (+N ⭐)
+  drawPointsFloats(ctx);
 
   // Gong full-screen animation (drawn in world-space before restore)
   drawGongAnim(ctx);
@@ -4690,6 +4814,10 @@ function handleGameEvent(ev, payload) {
   }
   if (ev === 'end') {
     gameInProgress = false; gameInProgressType = null; gameInProgressHost = null;
+    // Award points to winner
+    if (payload.winner && currentUser && payload.winner === currentUser.id) {
+      awardPoints(20, `game_win_${payload.game}`);
+    }
     if (payload.game === 'tictactoe') tttOnEnd(payload);
     if (payload.game === 'darts')     dartsOnEnd(payload);
     if (payload.game === 'pingpong')  ppOnEnd(payload);
