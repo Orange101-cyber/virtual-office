@@ -900,9 +900,12 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
 <div id="room-tag" style="display:none">Hallway<span id="vibe-badge" style="display:none"></span></div>
 <div id="hint" style="display:none">⬆ ⬇ ⬅ ➡ / WASD = Move &nbsp;·&nbsp; F = Wave 👋 &nbsp;·&nbsp; R = React 💬 &nbsp;·&nbsp; E = Interact / Sit / Stand 💺 &nbsp;·&nbsp; Space = Sticky note</div>
 <div id="sitting-hud" style="display:none;position:fixed;bottom:50px;left:50%;transform:translateX(-50%);background:rgba(15,15,30,0.92);border:1px solid rgba(99,102,241,0.5);border-radius:10px;padding:8px 20px;color:#e2d9f3;font-size:13px;font-weight:600;text-align:center;z-index:150">
-  💺 Sitting &nbsp;·&nbsp; <span id="sitting-timer">⏱ 0:00</span> &nbsp;·&nbsp; <span style="color:#a5b4fc">Press E to stand up</span>
+  💺 Sitting &nbsp;·&nbsp; <span id="sitting-timer">⏱ 0:00</span> &nbsp;·&nbsp; <span style="color:#a5b4fc">Press E or Esc to stand up</span>
 </div>
-<div id="version-tag">v4.8 — 6 Mar 2026</div>
+<div id="carry-hud" style="display:none;position:fixed;top:16px;left:50%;transform:translateX(-50%);background:rgba(5,5,20,0.92);border:2px solid #f59e0b;border-radius:10px;padding:8px 20px;color:#fde68a;font-size:13px;font-weight:700;text-align:center;z-index:200">
+  📦 Carrying: <span id="carry-label"></span> &nbsp;·&nbsp; <span style="color:#94a3b8">E = place &nbsp;·&nbsp; Esc = cancel &nbsp;·&nbsp; Del = remove (admin)</span>
+</div>
+<div id="version-tag">v4.9 — 6 Mar 2026</div>
 <div id="nearby-badge"></div>
 <button id="discord-btn" onclick="openDiscord()">🎙️ Join Voice Chat</button>
 <button id="claim-btn" onclick="claimCurrentOffice()">🏠 Claim This Office</button>
@@ -952,7 +955,15 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
   <button onclick="sendReaction('😮')">😮</button>
 </div>
 <!-- KART MODE HINT -->
-<div id="kart-hint">🏎️ GO KART MODE — Arrow keys to drive · E to dismount</div>
+<div id="kart-hint">🏎️ GO KART MODE — Arrow keys / WASD to drive &nbsp;·&nbsp; E or Esc to exit track</div>
+<div id="kart-lap-hud" style="display:none;position:fixed;top:60px;right:16px;background:rgba(5,5,20,0.92);border:2px solid #FFD700;border-radius:10px;padding:10px 14px;min-width:160px;z-index:200;font-family:'Courier New',monospace">
+  <div style="color:#FFD700;font-weight:700;font-size:12px;margin-bottom:6px">🏁 Kart Leaderboard</div>
+  <div id="kart-lap-board"></div>
+  <div style="border-top:1px solid #333;margin-top:8px;padding-top:6px;display:flex;justify-content:space-between">
+    <span id="kart-lap-count" style="color:#e2d9f3;font-size:11px;font-weight:700">Lap 0</span>
+    <span id="kart-best" style="color:#86efac;font-size:11px"></span>
+  </div>
+</div>
 
 <!-- MUSIC ROOM PANEL -->
 <div id="music-panel" style="display:none;position:fixed;inset:0;background:rgba(5,2,15,0.88);z-index:300;align-items:center;justify-content:center;flex-direction:column">
@@ -971,6 +982,22 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
       <button onclick="clearMusicUrl()" style="background:#3a1a5e;color:#a78bfa;border:1px solid #7c3aed;border-radius:6px;padding:8px 12px;cursor:pointer">Clear</button>
     </div>
     <p style="color:#5a4a7a;font-size:11px;margin:0">Supports youtube.com/watch?v=…, youtu.be/…, and playlist links. Anyone can change the track.</p>
+  </div>
+</div>
+
+<!-- POINTS SHOP PANEL -->
+<div id="shop-panel" style="display:none;position:fixed;inset:0;background:rgba(10,0,20,0.85);z-index:300;align-items:center;justify-content:center">
+  <div style="background:#0e0e1e;border:2px solid #ec4899;border-radius:14px;padding:24px 28px;width:520px;max-width:95vw;display:flex;flex-direction:column;gap:14px;max-height:88vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h2 style="color:#f9a8d4;margin:0;font-size:17px">🏪 Points Shop</h2>
+      <button onclick="closeShopPanel()" style="background:none;border:none;color:#f9a8d4;font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <div id="shop-balance" style="background:rgba(255,215,0,0.1);border:1px solid rgba(255,215,0,0.3);border-radius:8px;padding:8px 12px;font-size:14px;font-weight:700;color:#fde68a"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" id="shop-items-grid"></div>
+    <div>
+      <div style="font-size:11px;color:#666;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Your Purchases</div>
+      <div id="shop-purchases-list" style="font-size:12px;color:#a78bfa"></div>
+    </div>
   </div>
 </div>
 
@@ -1774,7 +1801,7 @@ async function saveWhiteboardData(showIndicator = false) {
   const wbc = document.getElementById('wb-canvas');
   if (!wbc) return;
   const dataUrl = wbc.toDataURL('image/png');
-  await sb.from('whiteboard').update({ canvas_data: dataUrl, updated_at: new Date().toISOString() }).eq('id', 1);
+  await sb.from('whiteboard').upsert({ id: 1, canvas_data: dataUrl, updated_at: new Date().toISOString() }, { onConflict: 'id' });
   if (showIndicator) showWbSaved();
 }
 
@@ -2264,6 +2291,11 @@ function setupRealtime() {
     renderCoolerResponses();
   });
 
+  // Broadcast: office objects updated 🖐️
+  realtimeChannel.on('broadcast', { event: 'objects_update' }, async () => {
+    await loadOfficeObjects();
+  });
+
   // Broadcast: photo wall updated 📸
   realtimeChannel.on('broadcast', { event: 'photo_update' }, async () => {
     await loadPhotoWall();
@@ -2347,7 +2379,7 @@ async function enterGame() {
   playerCfg = { name: currentProfile.name, skin: currentProfile.skin, outfit: currentProfile.outfit, hair: currentProfile.hair || '#2d1505' };
   initOfficeToolbar();
   await loadOffices();
-  await Promise.all([loadStickyNotes(), loadAnnouncements(), loadPets(), loadGongCount(), loadFloorTiles(), loadCustomWalls(), loadNowPlaying(), loadPoints(), loadLeaderboard(), loadMeetingBookings(), loadPhotoWall()]);
+  await Promise.all([loadStickyNotes(), loadAnnouncements(), loadPets(), loadGongCount(), loadFloorTiles(), loadCustomWalls(), loadNowPlaying(), loadPoints(), loadLeaderboard(), loadMeetingBookings(), loadPhotoWall(), loadOfficeObjects()]);
   preloadPhotoImages();
   setupRealtime();
   startIdleDetection();
@@ -2359,6 +2391,7 @@ async function enterGame() {
   setInterval(loadLeaderboard, 60000);     // refresh leaderboard every 60s
   setInterval(tickOfficeTime, 60000);      // check 30-min presence reward every minute
   setInterval(() => { loadMeetingBookings(); }, 60000); // auto-expire bookings check
+  setInterval(loadOfficeObjects, 30000);   // sync object positions every 30s
   checkDailyCheckin();                     // award daily login points
   if (!gameRunning) { gameRunning = true; loop(); }
 }
@@ -2401,6 +2434,13 @@ const BOT_W    = (BX2 - BX1) / 4; // = 425
 const GAMES_X2 = BX1 + BOT_W;     // = 475
 const MUSIC_X2 = BX1 + BOT_W * 2; // = 900
 const LUNCH_X2 = BX1 + BOT_W * 3; // = 1325
+// Vertical hallway centre column (replaces offices 3 & 8)
+const VHX1 = BX1 + 2*OFF_W;         // 730 — left wall of vertical hallway
+const VHX2 = BX1 + 3*OFF_W;         // 1070 — right wall of vertical hallway
+const VERT_HALL_W = VHX2 - VHX1;    // 340px
+// Whiteboard is now half-width; Points Shop fills the other half
+const WB_W   = Math.floor(BOT_W / 2); // 212
+const SHOP_X = LUNCH_X2 + WB_W;       // 1537
 
 // 10 private office floor/accent colours
 const OFF_COLORS10 = [
@@ -2414,25 +2454,26 @@ const OFF_COLORS10 = [
 
 const ROOMS = [
   // Top section
-  { id:'team',      name:'Campaigns You Love HQ', x:BX1,             y:BY1,     w:1360,  h:250, floor:'#EDF5FF', accent:'#4f46e5', type:'team'    },
-  { id:'meeting',   name:'📅 Meeting Room',        x:MEET_X1,         y:BY1,     w:340,   h:250, floor:'#F0F4FF', accent:'#6366f1', type:'meeting' },
-  // Row A offices (y=360..490)
-  { id:'office1',   name:'Office 1',  x:BX1+0*OFF_W, y:MID_Y1,    w:OFF_W, h:130, floor:OFF_COLORS10[0][0], accent:OFF_COLORS10[0][1], type:'office' },
-  { id:'office2',   name:'Office 2',  x:BX1+1*OFF_W, y:MID_Y1,    w:OFF_W, h:130, floor:OFF_COLORS10[1][0], accent:OFF_COLORS10[1][1], type:'office' },
-  { id:'office3',   name:'Office 3',  x:BX1+2*OFF_W, y:MID_Y1,    w:OFF_W, h:130, floor:OFF_COLORS10[2][0], accent:OFF_COLORS10[2][1], type:'office' },
-  { id:'office4',   name:'Office 4',  x:BX1+3*OFF_W, y:MID_Y1,    w:OFF_W, h:130, floor:OFF_COLORS10[3][0], accent:OFF_COLORS10[3][1], type:'office' },
-  { id:'office5',   name:'Office 5',  x:BX1+4*OFF_W, y:MID_Y1,    w:OFF_W, h:130, floor:OFF_COLORS10[4][0], accent:OFF_COLORS10[4][1], type:'office' },
-  // Row B offices (y=490..620)
-  { id:'office6',   name:'Office 6',  x:BX1+0*OFF_W, y:OFF_ROW_B, w:OFF_W, h:130, floor:OFF_COLORS10[5][0], accent:OFF_COLORS10[5][1], type:'office' },
-  { id:'office7',   name:'Office 7',  x:BX1+1*OFF_W, y:OFF_ROW_B, w:OFF_W, h:130, floor:OFF_COLORS10[6][0], accent:OFF_COLORS10[6][1], type:'office' },
-  { id:'office8',   name:'Office 8',  x:BX1+2*OFF_W, y:OFF_ROW_B, w:OFF_W, h:130, floor:OFF_COLORS10[7][0], accent:OFF_COLORS10[7][1], type:'office' },
-  { id:'office9',   name:'Office 9',  x:BX1+3*OFF_W, y:OFF_ROW_B, w:OFF_W, h:130, floor:OFF_COLORS10[8][0], accent:OFF_COLORS10[8][1], type:'office' },
-  { id:'office10',  name:'Office 10', x:BX1+4*OFF_W, y:OFF_ROW_B, w:OFF_W, h:130, floor:OFF_COLORS10[9][0], accent:OFF_COLORS10[9][1], type:'office' },
-  // Bottom 4 rooms
-  { id:'games',     name:'🎮 Games Room', x:BX1,      y:BOT_Y1, w:BOT_W, h:170, floor:'#E8F5E9', accent:'#43A047', type:'games'      },
-  { id:'music',     name:'🎵 Music Room', x:GAMES_X2,  y:BOT_Y1, w:BOT_W, h:170, floor:'#1a0a2e', accent:'#7c3aed', type:'music'      },
-  { id:'lunch',     name:'🍕 Lunch Room', x:MUSIC_X2,  y:BOT_Y1, w:BOT_W, h:170, floor:'#FFFDE7', accent:'#F9A825', type:'lunch'      },
-  { id:'whiteboard',name:'🎨 Whiteboard', x:LUNCH_X2,  y:BOT_Y1, w:BOT_W, h:170, floor:'#F0F4FF', accent:'#6366f1', type:'whiteboard' },
+  { id:'team',      name:'Campaigns You Love HQ', x:BX1,     y:BY1, w:1360,  h:250, floor:'#EDF5FF', accent:'#4f46e5', type:'team'    },
+  { id:'meeting',   name:'📅 Meeting Room',        x:MEET_X1, y:BY1, w:340,   h:250, floor:'#F0F4FF', accent:'#6366f1', type:'meeting' },
+  // Row A offices — col 2 (730–1070) is now the vertical hallway corridor
+  { id:'office1',  name:'Office 1', x:BX1+0*OFF_W, y:MID_Y1,    w:OFF_W, h:130, floor:OFF_COLORS10[0][0], accent:OFF_COLORS10[0][1], type:'office' },
+  { id:'office2',  name:'Office 2', x:BX1+1*OFF_W, y:MID_Y1,    w:OFF_W, h:130, floor:OFF_COLORS10[1][0], accent:OFF_COLORS10[1][1], type:'office' },
+  // office3 removed — corridor space
+  { id:'office4',  name:'Office 3', x:BX1+3*OFF_W, y:MID_Y1,    w:OFF_W, h:130, floor:OFF_COLORS10[3][0], accent:OFF_COLORS10[3][1], type:'office' },
+  { id:'office5',  name:'Office 4', x:BX1+4*OFF_W, y:MID_Y1,    w:OFF_W, h:130, floor:OFF_COLORS10[4][0], accent:OFF_COLORS10[4][1], type:'office' },
+  // Row B offices — col 2 corridor
+  { id:'office6',  name:'Office 5', x:BX1+0*OFF_W, y:OFF_ROW_B, w:OFF_W, h:130, floor:OFF_COLORS10[5][0], accent:OFF_COLORS10[5][1], type:'office' },
+  { id:'office7',  name:'Office 6', x:BX1+1*OFF_W, y:OFF_ROW_B, w:OFF_W, h:130, floor:OFF_COLORS10[6][0], accent:OFF_COLORS10[6][1], type:'office' },
+  // office8 removed — corridor space
+  { id:'office9',  name:'Office 7', x:BX1+3*OFF_W, y:OFF_ROW_B, w:OFF_W, h:130, floor:OFF_COLORS10[8][0], accent:OFF_COLORS10[8][1], type:'office' },
+  { id:'office10', name:'Office 8', x:BX1+4*OFF_W, y:OFF_ROW_B, w:OFF_W, h:130, floor:OFF_COLORS10[9][0], accent:OFF_COLORS10[9][1], type:'office' },
+  // Bottom row — whiteboard halved, Points Shop added
+  { id:'games',      name:'🎮 Games Room',   x:BX1,      y:BOT_Y1, w:BOT_W, h:170, floor:'#E8F5E9', accent:'#43A047', type:'games'      },
+  { id:'music',      name:'🎵 Music Room',   x:GAMES_X2, y:BOT_Y1, w:BOT_W, h:170, floor:'#1a0a2e', accent:'#7c3aed', type:'music'      },
+  { id:'lunch',      name:'🍕 Lunch Room',   x:MUSIC_X2, y:BOT_Y1, w:BOT_W, h:170, floor:'#FFFDE7', accent:'#F9A825', type:'lunch'      },
+  { id:'whiteboard', name:'🎨 Whiteboard',   x:LUNCH_X2, y:BOT_Y1, w:WB_W,  h:170, floor:'#F0F4FF', accent:'#6366f1', type:'whiteboard' },
+  { id:'shop',       name:'🏪 Points Shop',  x:SHOP_X,   y:BOT_Y1, w:BX2-SHOP_X, h:170, floor:'#1a0a1a', accent:'#ec4899', type:'shop' },
 ];
 
 // ── WALLS ──────────────────────────────────────────────────────────────────
@@ -2447,40 +2488,43 @@ hWall(BX1, BX2, BY1, [900]);
 hSeg(BX1, BX2, BY2);
 vSeg(BY1, BY2, BX1); vSeg(BY1, BY2, BX2);
 
-// y=300: team HQ / hallway 1 — 3 doors in team area, 1 in meeting area
-hWall(BX1, MEET_X1, HALL1_Y1, [280, 700, 1120]);
-hWall(MEET_X1, BX2, HALL1_Y1, [MEET_X1 + (BX2-MEET_X1)/2]);  // meeting door
+// y=300: HQ / hallway 1 — leave VHX1..VHX2 open for the vertical corridor
+hWall(BX1, VHX1,   HALL1_Y1, [280, 700]);            // left of corridor (2 doors)
+hWall(VHX2, MEET_X1, HALL1_Y1, [1120]);              // right of corridor
+hWall(MEET_X1, BX2, HALL1_Y1, [MEET_X1 + (BX2-MEET_X1)/2]);
 
 // Vertical divider: team HQ / meeting room
 vSeg(BY1, HALL1_Y1, MEET_X1);
 
-// y=360: hallway 1 / offices (full width — 5 row A office doors centred in each office)
-const OFF_DOORS_A = [0,1,2,3,4].map(i => BX1 + i*OFF_W + OFF_W/2);
-hWall(BX1, BX2, HALL1_Y2, OFF_DOORS_A);
+// y=360: hallway 1 / offices — corridor section is open (no wall 730..1070)
+const OFF_DOORS_LEFT  = [BX1 + 0*OFF_W + OFF_W/2, BX1 + 1*OFF_W + OFF_W/2]; // [220, 560]
+const OFF_DOORS_RIGHT = [BX1 + 3*OFF_W + OFF_W/2, BX1 + 4*OFF_W + OFF_W/2]; // [1240, 1580]
+hWall(BX1,  VHX1, HALL1_Y2, OFF_DOORS_LEFT);
+hWall(VHX2, BX2,  HALL1_Y2, OFF_DOORS_RIGHT);
 
-// y=490: divider between office row A and row B — doors at centre of each column so players can traverse
-const OFF_DOORS_AB = [0,1,2,3,4].map(i => BX1 + i*OFF_W + OFF_W/2);
-hWall(BX1, BX2, OFF_ROW_B, OFF_DOORS_AB);
+// y=490: row A / row B divider — open in corridor
+hWall(BX1,  VHX1, OFF_ROW_B, OFF_DOORS_LEFT);
+hWall(VHX2, BX2,  OFF_ROW_B, OFF_DOORS_RIGHT);
 
-// y=620: offices bottom / hallway 2 — 5 row B office doors (south wall of each office)
-const OFF_DOORS_B = [0,1,2,3,4].map(i => BX1 + i*OFF_W + OFF_W/2);
-hWall(BX1, BX2, MID_Y2, OFF_DOORS_B);
+// y=620: offices / hallway 2 — open in corridor
+hWall(BX1,  VHX1, MID_Y2, OFF_DOORS_LEFT);
+hWall(VHX2, BX2,  MID_Y2, OFF_DOORS_RIGHT);
 
-// y=680: hallway 2 / bottom row — 4 doors (games, music, lunch, whiteboard)
-const GAMES_DOOR = Math.round(BX1 + BOT_W/2);          // 262 (center of games)
-const MUSIC_DOOR = Math.round(BX1 + BOT_W*1.5);         // 687 (center of music)
-const LUNCH_DOOR = Math.round(BX1 + BOT_W*2.5);         // 1112 (center of lunch)
-const WB_DOOR    = Math.round(BX1 + BOT_W*3.5);         // 1537 (center of whiteboard)
-hWall(BX1, BX2, HALL2_Y2, [GAMES_DOOR, MUSIC_DOOR, LUNCH_DOOR, WB_DOOR]);
+// y=680: hallway 2 / bottom row — 5 doors (games, music, [open mid], lunch, whiteboard, shop)
+const GAMES_DOOR = Math.round(BX1 + BOT_W*0.5);   // 262
+const MUSIC_DOOR = Math.round(BX1 + BOT_W*1.5);   // 687
+const LUNCH_DOOR = Math.round(BX1 + BOT_W*2.5);   // 1112
+const WB_DOOR    = Math.round(LUNCH_X2 + WB_W/2); // 1431 (whiteboard centre)
+const SHOP_DOOR  = Math.round(SHOP_X + (BX2-SHOP_X)/2); // ~1643
+hWall(BX1, BX2, HALL2_Y2, [GAMES_DOOR, MUSIC_DOOR, LUNCH_DOOR, WB_DOOR, SHOP_DOOR]);
 
-// Vertical dividers between row A offices (full height of row A)
-[1,2,3,4].forEach(i => vSeg(MID_Y1, OFF_ROW_B, BX1 + i*OFF_W));
-// Vertical dividers between row B offices (full height of row B)
-[1,2,3,4].forEach(i => vSeg(OFF_ROW_B, MID_Y2, BX1 + i*OFF_W));
-// Bottom row dividers (4 rooms, 3 internal dividers)
+// Vertical dividers: office columns — x=390,730,1070,1410 (730&1070 form corridor walls)
+[1,2,3,4].forEach(i => vSeg(MID_Y1, MID_Y2, BX1 + i*OFF_W));
+// Bottom row dividers — whiteboard split, shop added
 vSeg(BOT_Y1, BY2, GAMES_X2);
 vSeg(BOT_Y1, BY2, MUSIC_X2);
 vSeg(BOT_Y1, BY2, LUNCH_X2);
+vSeg(BOT_Y1, BY2, SHOP_X);   // whiteboard / shop divider
 
 function circleRect(cx,cy,r,rx,ry,rw,rh) { const nx=Math.max(rx,Math.min(cx,rx+rw)),ny=Math.max(ry,Math.min(cy,ry+rh)); const dx=cx-nx,dy=cy-ny; return dx*dx+dy*dy<r*r; }
 function blocked(x,y) {
@@ -2497,54 +2541,85 @@ function drawOutdoorArea(ctx) {
   // Grass base
   drawTileFloor(ctx, 0, 0, WW, WH, '#3a6b20', '#336018', 18);
 
-  // Go kart track — grey ring from canvas edge to building edge
-  const TO = 8, TI = 80; // outer/inner inset
-  // Grass blades — random darker green rectangles
-  ctx.fillStyle = '#2d5a18';
-  const grassSeed = 42;
-  for (let i = 0; i < 600; i++) {
-    const gx = ((i * 7919 + grassSeed) % WW);
-    const gy = ((i * 6271 + grassSeed) % WH);
-    // Only in outdoor corners (not on the track or building)
-    if (gx > TI-5 && gx < WW-TI+5 && gy > TI-5 && gy < WH-TI+5) continue;
-    ctx.fillRect(gx, gy, 2 + (i%3), 1);
-  }
-  const strips = [
-    [TO, TO,     WW-TO*2, TI-TO],     // top
-    [TO, WH-TI,  WW-TO*2, TI-TO],     // bottom
-    [TO, TI,     TI-TO,   WH-TI*2],   // left
-    [WW-TI, TI,  TI-TO,   WH-TI*2],   // right
-  ];
-  strips.forEach(([sx,sy,sw,sh]) => {
-    ctx.fillStyle = '#3a3a3a'; ctx.fillRect(sx, sy, sw, sh);
-    ctx.fillStyle = '#484848'; ctx.fillRect(sx+2, sy+2, sw-4, sh-4);
-  });
-  // White track edge lines
-  ctx.fillStyle = '#ccc';
-  ctx.fillRect(TO, TO, WW-TO*2, 2); ctx.fillRect(TO, WH-TO-2, WW-TO*2, 2);
-  ctx.fillRect(TO, TO, 2, WH-TO*2); ctx.fillRect(WW-TO-2, TO, 2, WH-TO*2);
-  ctx.fillRect(TI-2, TI, 2, WH-TI*2); ctx.fillRect(WW-TI, TI, 2, WH-TI*2);
-  ctx.fillRect(TI, TI-2, WW-TI*2, 2); ctx.fillRect(TI, WH-TI, WW-TI*2, 2);
-  // Yellow dashed centre line
-  ctx.fillStyle = '#FFD700';
-  const CM = TO + Math.floor((TI-TO)/2);
-  for (let x = TO+6; x < WW-TI; x += 22)  ctx.fillRect(x, CM-1, 12, 2); // top
-  for (let x = TI;   x < WW-TO; x += 22)  ctx.fillRect(x, CM-1, 12, 2); // top right
-  for (let x = TO+6; x < WW-TI; x += 22)  ctx.fillRect(x, WH-CM-1, 12, 2); // bottom
-  for (let x = TI;   x < WW-TO; x += 22)  ctx.fillRect(x, WH-CM-1, 12, 2);
-  for (let y = TI+6; y < WH-TI; y += 22)  ctx.fillRect(CM-1, y, 2, 12); // left/right
-  for (let y = TI+6; y < WH-TI; y += 22)  ctx.fillRect(WW-CM-1, y, 2, 12);
-  // Coloured corner curbs (alternating red/white)
-  const curb = TI-TO;
-  [[TO,TO],[WW-TI,TO],[TO,WH-TI],[WW-TI,WH-TI]].forEach(([cx,cy], idx) => {
-    const cols = ['#e74c3c','#fff','#e74c3c','#fff','#e74c3c','#fff'];
-    const seg = Math.floor(curb/6);
-    cols.forEach((c,i) => {
+  // Go kart track — curved-corner ring
+  const TO = 8, TI = 80, CR = 60; // outer/inner inset, corner radius
+  const CM = TO + Math.floor((TI-TO)/2); // centre-line offset from edge
+
+  // ── TRACK ASPHALT (outer rounded rect minus inner rounded rect) ──────────
+  ctx.fillStyle = '#3a3a3a';
+  ctx.beginPath();
+  // Outer boundary (rounded)
+  ctx.moveTo(TO+CR, TO);
+  ctx.lineTo(WW-TO-CR, TO); ctx.arcTo(WW-TO, TO, WW-TO, TO+CR, CR);
+  ctx.lineTo(WW-TO, WH-TO-CR); ctx.arcTo(WW-TO, WH-TO, WW-TO-CR, WH-TO, CR);
+  ctx.lineTo(TO+CR, WH-TO); ctx.arcTo(TO, WH-TO, TO, WH-TO-CR, CR);
+  ctx.lineTo(TO, TO+CR); ctx.arcTo(TO, TO, TO+CR, TO, CR);
+  ctx.closePath();
+  // Inner boundary (counter-clockwise cutout)
+  ctx.moveTo(TI+CR, TI);
+  ctx.arcTo(TI, TI, TI, TI+CR, CR);
+  ctx.lineTo(TI, WH-TI-CR); ctx.arcTo(TI, WH-TI, TI+CR, WH-TI, CR);
+  ctx.lineTo(WW-TI-CR, WH-TI); ctx.arcTo(WW-TI, WH-TI, WW-TI, WH-TI-CR, CR);
+  ctx.lineTo(WW-TI, TI+CR); ctx.arcTo(WW-TI, TI, WW-TI-CR, TI, CR);
+  ctx.lineTo(TI+CR, TI);
+  ctx.closePath();
+  ctx.fill('evenodd');
+
+  // Lighter tread texture
+  ctx.fillStyle = '#484848';
+  // straight sections interior highlight
+  ctx.fillRect(TO+2, TO+CR, WW-TO*2-4, TI-TO-4); // top
+  ctx.fillRect(TO+2, WH-TI+2, WW-TO*2-4, TI-TO-4); // bottom
+  ctx.fillRect(TO+2, TO+CR, TI-TO-4, WH-TO*2-CR*2); // left
+  ctx.fillRect(WW-TI+2, TO+CR, TI-TO-4, WH-TO*2-CR*2); // right
+
+  // ── EDGE LINES ───────────────────────────────────────────────────────────
+  ctx.strokeStyle = '#ddd'; ctx.lineWidth = 2;
+  // Outer edge
+  ctx.beginPath();
+  ctx.moveTo(TO+CR, TO); ctx.lineTo(WW-TO-CR, TO); ctx.arcTo(WW-TO,TO,WW-TO,TO+CR,CR);
+  ctx.lineTo(WW-TO,WH-TO-CR); ctx.arcTo(WW-TO,WH-TO,WW-TO-CR,WH-TO,CR);
+  ctx.lineTo(TO+CR,WH-TO); ctx.arcTo(TO,WH-TO,TO,WH-TO-CR,CR);
+  ctx.lineTo(TO,TO+CR); ctx.arcTo(TO,TO,TO+CR,TO,CR);
+  ctx.closePath(); ctx.stroke();
+  // Inner edge
+  ctx.beginPath();
+  ctx.moveTo(TI+CR,TI); ctx.lineTo(WW-TI-CR,TI); ctx.arcTo(WW-TI,TI,WW-TI,TI+CR,CR);
+  ctx.lineTo(WW-TI,WH-TI-CR); ctx.arcTo(WW-TI,WH-TI,WW-TI-CR,WH-TI,CR);
+  ctx.lineTo(TI+CR,WH-TI); ctx.arcTo(TI,WH-TI,TI,WH-TI-CR,CR);
+  ctx.lineTo(TI,TI+CR); ctx.arcTo(TI,TI,TI+CR,TI,CR);
+  ctx.closePath(); ctx.stroke();
+
+  // ── YELLOW DASHED CENTRE LINE ─────────────────────────────────────────────
+  ctx.setLineDash([14, 10]); ctx.lineWidth = 2; ctx.strokeStyle = '#FFD700';
+  ctx.beginPath();
+  ctx.moveTo(CM+CR, CM); ctx.lineTo(WW-CM-CR,CM); ctx.arcTo(WW-CM,CM,WW-CM,CM+CR,CR);
+  ctx.lineTo(WW-CM,WH-CM-CR); ctx.arcTo(WW-CM,WH-CM,WW-CM-CR,WH-CM,CR);
+  ctx.lineTo(CM+CR,WH-CM); ctx.arcTo(CM,WH-CM,CM,WH-CM-CR,CR);
+  ctx.lineTo(CM,CM+CR); ctx.arcTo(CM,CM,CM+CR,CM,CR);
+  ctx.closePath(); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // ── COLOURED CORNER CURBS ─────────────────────────────────────────────────
+  const curbCols = ['#e74c3c','#fff','#e74c3c','#fff','#e74c3c','#fff'];
+  const curbSeg = Math.floor((TI-TO)/6);
+  [[TO,TO,1,1],[WW-TI,TO,-1,1],[TO,WH-TI,1,-1],[WW-TI,WH-TI,-1,-1]].forEach(([cx2,cy2,dx,dy]) => {
+    curbCols.forEach((c, i) => {
       ctx.fillStyle = c;
-      ctx.fillRect(cx+i*seg, cy, seg, 4);
-      ctx.fillRect(cx, cy+i*seg, 4, seg);
+      ctx.fillRect(cx2 + dx*(i*curbSeg), cy2, curbSeg, 4*dy || 4);
+      ctx.fillRect(cx2, cy2 + dy*(i*curbSeg), 4*dx || 4, curbSeg);
     });
   });
+
+  // Grass blades (between inner track boundary and building)
+  ctx.fillStyle = '#2d5a18';
+  for (let i = 0; i < 400; i++) {
+    const gx = ((i * 7919 + 42) % WW);
+    const gy = ((i * 6271 + 42) % WH);
+    if (gx > TI && gx < WW-TI && gy > TI && gy < WH-TI) continue; // not on grass
+    if (gx > TO && gx < WW-TO && gy > TO && gy < WH-TO) continue;  // not on track
+    ctx.fillRect(gx, gy, 2 + (i%3), 1);
+  }
 
   // Pixel art trees
   function drawTree(tx, ty) {
@@ -3486,6 +3561,237 @@ function tickOfficeTime() {
 }
 
 // ══════════════════════════════════════════════
+// GRAB-AND-MOVE OBJECTS 🖐️
+// ══════════════════════════════════════════════
+const DEFAULT_OBJECTS = [];
+// Seed: plant, chair, lamp for each room
+(function seedObjects() {
+  const seed = [
+    { id:'plant_team1',  type:'plant', label:'Plant',  x:200, y:200 },
+    { id:'plant_team2',  type:'plant', label:'Plant',  x:1100, y:200 },
+    { id:'lamp_team1',   type:'lamp',  label:'Lamp',   x:350, y:100 },
+    { id:'plant_hall1',  type:'plant', label:'Plant',  x:500, y:330 },
+    { id:'plant_hall2',  type:'plant', label:'Plant',  x:1350, y:330 },
+    { id:'plant_games1', type:'plant', label:'Plant',  x:120, y:730 },
+    { id:'chair_games1', type:'chair', label:'Chair',  x:200, y:750 },
+    { id:'lamp_games1',  type:'lamp',  label:'Lamp',   x:70,  y:700 },
+    { id:'plant_lunch1', type:'plant', label:'Plant',  x:1000, y:720 },
+    { id:'chair_lunch1', type:'chair', label:'Chair',  x:1050, y:780 },
+    { id:'lamp_lunch1',  type:'lamp',  label:'Lamp',   x:960,  y:700 },
+    { id:'plant_music1', type:'plant', label:'Plant',  x:540, y:720 },
+    { id:'lamp_music1',  type:'lamp',  label:'Lamp',   x:490, y:700 },
+    { id:'plant_wb1',    type:'plant', label:'Plant',  x:1380, y:720 },
+    { id:'lamp_wb1',     type:'lamp',  label:'Lamp',   x:1340, y:700 },
+    { id:'plant_shop1',  type:'plant', label:'Plant',  x:1580, y:720 },
+    { id:'lamp_shop1',   type:'lamp',  label:'Lamp',   x:1630, y:700 },
+  ];
+  seed.forEach(o => DEFAULT_OBJECTS.push({ ...o, removed: false }));
+})();
+
+let officeObjects = [];    // merged from DB + defaults
+let carryingObject = null; // {id, type, label, x, y}
+let carryBounce = 0;
+
+async function loadOfficeObjects() {
+  const { data } = await sb.from('office_objects').select('*');
+  const dbMap = {};
+  (data || []).forEach(r => { dbMap[r.id] = r; });
+  officeObjects = DEFAULT_OBJECTS.map(def => {
+    const db = dbMap[def.id];
+    if (db) return { ...def, x: db.x, y: db.y, removed: db.removed || false };
+    return { ...def };
+  });
+  // Also include any extra objects added via DB that aren't in defaults
+  (data || []).forEach(r => {
+    if (!DEFAULT_OBJECTS.find(d => d.id === r.id) && !r.removed)
+      officeObjects.push({ id: r.id, type: r.type, label: r.label, x: r.x, y: r.y, removed: r.removed });
+  });
+}
+
+async function saveObjectPosition(id, x, y) {
+  await sb.from('office_objects').upsert({ id, x, y, removed: false }, { onConflict: 'id' });
+  realtimeChannel?.send({ type:'broadcast', event:'objects_update', payload:{} });
+}
+
+async function deleteObject(id) {
+  await sb.from('office_objects').upsert({ id, removed: true, x:0, y:0 }, { onConflict: 'id' });
+  officeObjects = officeObjects.filter(o => o.id !== id);
+  carryingObject = null;
+  document.getElementById('carry-hud').style.display = 'none';
+  realtimeChannel?.send({ type:'broadcast', event:'objects_update', payload:{} });
+}
+
+function pickUpObject(obj) {
+  carryingObject = { ...obj };
+  document.getElementById('carry-label').textContent = obj.label;
+  document.getElementById('carry-hud').style.display = 'block';
+  // Remove from world temporarily
+  officeObjects = officeObjects.filter(o => o.id !== obj.id);
+}
+
+function placeObject() {
+  if (!carryingObject) return;
+  const obj = { ...carryingObject, x: player.x, y: player.y };
+  officeObjects.push(obj);
+  saveObjectPosition(obj.id, obj.x, obj.y);
+  carryingObject = null;
+  document.getElementById('carry-hud').style.display = 'none';
+}
+
+function drawOfficeObjects(ctx) {
+  ctx.imageSmoothingEnabled = false;
+  for (const obj of officeObjects) {
+    if (obj.removed) continue;
+    drawMoveableObject(ctx, obj.x, obj.y, obj.type, obj.label);
+    // Proximity pick-up hint
+    if (player && Math.hypot(player.x-obj.x, player.y-obj.y) < 44 && !carryingObject) {
+      ctx.save();
+      ctx.font = 'bold 8px Segoe UI'; ctx.textAlign = 'center';
+      const lbl = '🖐️ Press E';
+      const lw = ctx.measureText(lbl).width + 10;
+      ctx.fillStyle = 'rgba(245,158,11,0.9)';
+      rrect(ctx, obj.x - lw/2, obj.y - 32, lw, 13, 4); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.fillText(lbl, obj.x, obj.y - 22);
+      ctx.restore();
+    }
+  }
+  // Draw carried object following player
+  if (carryingObject) {
+    carryBounce = (carryBounce + 0.2) % (Math.PI * 2);
+    const by = Math.sin(carryBounce) * 4;
+    drawMoveableObject(ctx, player.x, player.y - 32 + by, carryingObject.type, carryingObject.label);
+  }
+}
+
+function drawMoveableObject(ctx, x, y, type, label) {
+  ctx.save(); ctx.imageSmoothingEnabled = false;
+  if (type === 'plant') {
+    // Pot
+    ctx.fillStyle = '#b45309'; ctx.fillRect(x-6, y+2, 12, 8);
+    ctx.fillStyle = '#92400e'; ctx.fillRect(x-7, y+1, 14, 3);
+    // Soil
+    ctx.fillStyle = '#3d2008'; ctx.fillRect(x-5, y+2, 10, 2);
+    // Leaves
+    ctx.fillStyle = '#166534'; ctx.fillRect(x-8, y-14, 16, 10);
+    ctx.fillStyle = '#15803d'; ctx.fillRect(x-5, y-18, 10, 8);
+    ctx.fillStyle = '#22c55e'; ctx.fillRect(x-3, y-20, 6, 5);
+  } else if (type === 'chair') {
+    ctx.fillStyle = '#7c3aed';
+    ctx.fillRect(x-9, y-8, 18, 3);  // back rest
+    ctx.fillRect(x-8, y-2, 16, 10); // seat
+    ctx.fillStyle = '#4c1d95';
+    ctx.fillRect(x-9, y-8, 3, 10); ctx.fillRect(x+6, y-8, 3, 10); // legs
+    ctx.fillRect(x-7, y+7, 4, 5); ctx.fillRect(x+3, y+7, 4, 5);   // front legs
+  } else if (type === 'lamp') {
+    // Base
+    ctx.fillStyle = '#334155'; ctx.fillRect(x-5, y+5, 10, 4);
+    // Pole
+    ctx.fillStyle = '#475569'; ctx.fillRect(x-1, y-10, 2, 16);
+    // Shade
+    ctx.fillStyle = '#fde68a'; ctx.fillRect(x-7, y-18, 14, 8);
+    ctx.fillStyle = '#fef3c7'; ctx.fillRect(x-5, y-16, 10, 4);
+    // Glow
+    ctx.fillStyle = 'rgba(253,230,138,0.15)'; ctx.fillRect(x-12, y-18, 24, 12);
+  }
+  ctx.restore();
+  // Label (tiny, below object)
+  ctx.save(); ctx.font = '7px Segoe UI'; ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillText(label, x, y+14); ctx.restore();
+}
+
+// ══════════════════════════════════════════════
+// POINTS SHOP 🏪
+// ══════════════════════════════════════════════
+const SHOP_ITEMS = [
+  { id:'gold_outline', label:'Gold Name Tag', desc:'Shiny gold border around your name', cost:50, icon:'✨' },
+  { id:'rainbow_tag',  label:'Rainbow Tag',   desc:'Animated rainbow name tag',          cost:120, icon:'🌈' },
+  { id:'crown',        label:'Crown Badge',   desc:'👑 crown shown above your head',     cost:80,  icon:'👑' },
+  { id:'confetti',     label:'Confetti Wave', desc:'Confetti burst when you wave',       cost:60,  icon:'🎊' },
+  { id:'vip_status',   label:'VIP Status',    desc:'VIP badge in the player list',       cost:200, icon:'💎' },
+  { id:'fast_kart',    label:'Turbo Kart',    desc:'+2 speed boost on the kart track',   cost:150, icon:'🚀' },
+];
+let myPurchases = []; // array of item ids bought
+
+async function loadMyPurchases() {
+  const { data } = await sb.from('shop_purchases').select('item_id').eq('user_id', currentUser.id);
+  myPurchases = (data || []).map(r => r.item_id);
+}
+
+async function buyItem(itemId) {
+  if (myPurchases.includes(itemId)) return;
+  const item = SHOP_ITEMS.find(i => i.id === itemId);
+  if (!item) return;
+  // Check balance
+  const { data: pts } = await sb.from('points').select('total').eq('user_id', currentUser.id).single();
+  const balance = pts?.total || 0;
+  if (balance < item.cost) { alert(`Not enough points! You need ${item.cost} ⭐ (you have ${balance})`); return; }
+  // Deduct
+  await sb.from('points').update({ total: balance - item.cost }).eq('user_id', currentUser.id);
+  await sb.from('shop_purchases').insert({ user_id: currentUser.id, item_id: itemId, item_label: item.label });
+  myPurchases.push(itemId);
+  renderShopPanel();
+  awardPoints(-item.cost, 'shop_purchase'); // negative = deduction
+}
+
+async function openShopPanel() {
+  await loadMyPurchases();
+  renderShopPanel();
+  document.getElementById('shop-panel').style.display = 'flex';
+}
+
+function closeShopPanel() { document.getElementById('shop-panel').style.display = 'none'; }
+
+async function renderShopPanel() {
+  const { data: pts } = await sb.from('points').select('total').eq('user_id', currentUser?.id).single();
+  const balance = pts?.total || 0;
+  document.getElementById('shop-balance').textContent = `⭐ Your Balance: ${balance} points`;
+  const grid = document.getElementById('shop-items-grid');
+  grid.innerHTML = SHOP_ITEMS.map(item => {
+    const owned = myPurchases.includes(item.id);
+    return `<div style="background:rgba(236,72,153,0.08);border:1px solid ${owned?'#86efac':'rgba(236,72,153,0.3)'};border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:6px">
+      <div style="font-size:22px;text-align:center">${item.icon}</div>
+      <div style="font-size:13px;font-weight:700;color:#f9a8d4;text-align:center">${item.label}</div>
+      <div style="font-size:11px;color:#888;text-align:center">${item.desc}</div>
+      <div style="font-size:12px;color:#fde68a;text-align:center;font-weight:700">⭐ ${item.cost}</div>
+      ${owned
+        ? '<div style="text-align:center;color:#86efac;font-size:12px;font-weight:700">✓ Owned</div>'
+        : `<button onclick="buyItem('${item.id}')" style="background:#be185d;color:#fff;border:none;border-radius:5px;padding:6px;font-size:12px;font-weight:600;cursor:pointer">Buy</button>`}
+    </div>`;
+  }).join('');
+  const pList = document.getElementById('shop-purchases-list');
+  pList.textContent = myPurchases.length
+    ? myPurchases.map(id => SHOP_ITEMS.find(i=>i.id===id)?.label).filter(Boolean).join(' · ')
+    : 'No purchases yet.';
+}
+
+function drawShopRoom(ctx, r) {
+  ctx.imageSmoothingEnabled = false;
+  const cx = r.x + r.w/2, cy = r.y + r.h/2;
+  // Display shelf (top wall)
+  ctx.fillStyle = '#2d0a2e'; ctx.fillRect(r.x + WT + 4, r.y + WT + 4, r.w - WT*2 - 8, 30);
+  const icons = ['✨','👑','🌈','🎊','💎','🚀'];
+  icons.forEach((ic, i) => {
+    const ix = r.x + WT + 8 + i * 26;
+    if (ix + 20 > r.x + r.w - WT) return;
+    ctx.font = '14px serif'; ctx.textAlign='center';
+    ctx.fillText(ic, ix + 10, r.y + WT + 25);
+  });
+  // Counter
+  ctx.fillStyle = '#7c1557'; ctx.fillRect(cx - 40, cy - 5, 80, 20);
+  ctx.fillStyle = '#be185d'; ctx.fillRect(cx - 38, cy - 4, 76, 6);
+  ctx.fillStyle = '#fde68a'; ctx.font='bold 8px Segoe UI'; ctx.textAlign='center';
+  ctx.fillText('SHOP', cx, cy + 10);
+  // E prompt
+  if (player && player.x >= r.x && player.x <= r.x+r.w && player.y >= r.y && player.y <= r.y+r.h) {
+    ctx.fillStyle = 'rgba(236,72,153,0.88)';
+    ctx.font = 'bold 8px Segoe UI';
+    const lbl = '[ E ] Browse Shop'; const lw2 = ctx.measureText(lbl).width + 12;
+    rrect(ctx, cx - lw2/2, r.y + r.h - 28, lw2, 13, 4); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.fillText(lbl, cx, r.y + r.h - 18);
+  }
+}
+
+// ══════════════════════════════════════════════
 // WATER COOLER 💧
 // ══════════════════════════════════════════════
 function openCoolerPanel() {
@@ -3528,6 +3834,24 @@ function submitCoolerResponse() {
     payload:{ user_id: currentUser.id, name: playerCfg.name, text } });
   renderCoolerResponses();
   document.getElementById('cooler-response').value = '';
+}
+
+function drawFinishLine(ctx) {
+  // Checkered finish line at top of track near kart exit
+  const fx = FINISH_LINE_X, fy = FINISH_LINE_Y;
+  const fw = 60, fh = 8;
+  ctx.save();
+  for (let i = 0; i < 8; i++) {
+    const dark = (i % 2 === 0);
+    ctx.fillStyle = dark ? '#111' : '#fff';
+    ctx.fillRect(fx - fw/2 + i*(fw/8), fy - fh/2, fw/8, fh/2);
+    ctx.fillStyle = dark ? '#fff' : '#111';
+    ctx.fillRect(fx - fw/2 + i*(fw/8), fy, fw/8, fh/2);
+  }
+  // "START/FINISH" label
+  ctx.fillStyle = '#FFD700'; ctx.font='bold 7px "Courier New",monospace'; ctx.textAlign='center';
+  ctx.fillText('START/FINISH', fx, fy - fh/2 - 3);
+  ctx.restore();
 }
 
 function drawWaterCooler(ctx) {
@@ -4000,14 +4324,70 @@ function isOutdoor(x, y) { return x < BX1 - 4 || x > BX2 + 4 || y < BY1 - 4 || y
 
 function mountKart() {
   inKart = true;
+  kartLapCount = 0; kartLapStart = null; kartAtLine = false;
   document.getElementById('kart-hint').style.display = 'block';
+  document.getElementById('kart-lap-hud').style.display = 'block';
+  loadKartLeaderboard();
 }
 
 function dismountKart() {
   inKart = false;
+  kartLapStart = null; kartAtLine = false;
   document.getElementById('kart-hint').style.display = 'none';
-  // Move player just inside the entrance gap (new centre = 900)
+  document.getElementById('kart-lap-hud').style.display = 'none';
   player.x = 900; player.y = BY1 + PR + 8;
+}
+
+async function loadKartLeaderboard() {
+  const { data } = await sb.from('kart_laps')
+    .select('player_name,lap_time_ms')
+    .order('lap_time_ms', { ascending: true })
+    .limit(5);
+  kartLapBoard = data || [];
+  renderKartHUD();
+}
+
+async function recordLap(ms) {
+  await sb.from('kart_laps').insert({
+    user_id: currentUser.id,
+    player_name: playerCfg.name,
+    lap_time_ms: ms,
+  });
+  await loadKartLeaderboard();
+}
+
+function fmtLap(ms) {
+  const s = Math.floor(ms / 1000), h = Math.floor((ms % 1000) / 10);
+  return `${s}.${h.toString().padStart(2,'0')}s`;
+}
+
+function renderKartHUD() {
+  const el = document.getElementById('kart-lap-board');
+  if (!el) return;
+  el.innerHTML = kartLapBoard.length
+    ? kartLapBoard.map((r,i) => `<div style="display:flex;gap:8px;font-size:11px"><span style="color:#FFD700">#${i+1}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.player_name}</span><span style="color:#86efac">${fmtLap(r.lap_time_ms)}</span></div>`).join('')
+    : '<div style="color:#555;font-size:11px">No laps yet!</div>';
+  document.getElementById('kart-lap-count').textContent = `Lap ${kartLapCount}`;
+  document.getElementById('kart-best').textContent = kartBestMs ? `Best: ${fmtLap(kartBestMs)}` : '';
+}
+
+function tickKartLap() {
+  if (!inKart) return;
+  const nearLine = Math.abs(player.x - FINISH_LINE_X) < 55 && player.y < FINISH_LINE_Y + 12 && player.y > FINISH_LINE_Y - 20;
+  if (nearLine && !kartAtLine) {
+    kartAtLine = true;
+    if (kartLapStart !== null) {
+      const ms = Date.now() - kartLapStart;
+      kartLapCount++;
+      if (kartBestMs === null || ms < kartBestMs) kartBestMs = ms;
+      spawnFloatingEmoji(`🏁 ${fmtLap(ms)}`, player.x, player.y - 40, 'lap');
+      recordLap(ms);
+    }
+    kartLapStart = Date.now();
+    renderKartHUD();
+  } else if (!nearLine) {
+    kartAtLine = false;
+  }
 }
 
 function drawKart(ctx, x, y, name, isLocal, cfg) {
@@ -4470,7 +4850,7 @@ function drawRoomDetails(ctx) {
     }
   }
 
-  // Top outer wall — go-kart exit door at x=900
+  // Top outer wall — go-kart exit door at x=900 (centre of vertical corridor)
   drawDoorFrame(900, BY1, true);
   ctx.save();
   ctx.fillStyle = 'rgba(255,215,0,0.9)';
@@ -4490,11 +4870,13 @@ function drawRoomDetails(ctx) {
   [280, 700, 1120].forEach(dx => drawDoorFrame(dx, HALL1_Y1, true));
   drawDoorFrame(MEET_X1 + (BX2-MEET_X1)/2, HALL1_Y1, true);
 
-  // Hallway 1 bottom (y=360): 5 row A office doors (full width, no separate lunch door)
-  OFF_DOORS_A.forEach(dx => drawDoorFrame(dx, HALL1_Y2, true));
+  // Hallway 1 bottom (y=360): 4 row A office doors (col3 is corridor, no door)
+  OFF_DOORS_LEFT.forEach(dx => drawDoorFrame(dx, HALL1_Y2, true));
+  OFF_DOORS_RIGHT.forEach(dx => drawDoorFrame(dx, HALL1_Y2, true));
 
-  // Hallway 2 top (y=620): 5 row B office doors (south walls of offices)
-  OFF_DOORS_B.forEach(dx => drawDoorFrame(dx, MID_Y2, true));
+  // Hallway 2 top (y=620): 4 row B office doors (col3 is corridor)
+  OFF_DOORS_LEFT.forEach(dx => drawDoorFrame(dx, MID_Y2, true));
+  OFF_DOORS_RIGHT.forEach(dx => drawDoorFrame(dx, MID_Y2, true));
 
   // Hallway 2 bottom (y=680): games, music, lunch, whiteboard doors (4 rooms)
   [GAMES_DOOR, MUSIC_DOOR, LUNCH_DOOR, WB_DOOR].forEach(dx => drawDoorFrame(dx, HALL2_Y2, true));
@@ -4887,15 +5269,26 @@ function drawWorld(ctx) {
   drawOutdoorArea(ctx);
 
   // ── HALLWAY FLOORS ────────────────────────────────────────────────────────
+  // Horizontal hallways
   drawTileFloor(ctx, BX1, HALL1_Y1, BX2-BX1, HALL1_Y2-HALL1_Y1, '#c8c2b4', '#bdb8aa', 20);
   drawTileFloor(ctx, BX1, HALL2_Y1, BX2-BX1, HALL2_Y2-HALL2_Y1, '#c8c2b4', '#bdb8aa', 20);
-  // Hallway tile grid (warm grey)
+  // Vertical corridor strip (office rows, centre column)
+  drawTileFloor(ctx, VHX1, HALL1_Y2, VERT_HALL_W, MID_Y2-HALL1_Y2, '#c8c2b4', '#bdb8aa', 20);
+  // Hallway tile grid lines
   ctx.fillStyle = 'rgba(0,0,0,0.06)';
   for (let hx = BX1; hx < BX2; hx += 16) ctx.fillRect(hx, HALL1_Y1, 1, HALL1_Y2-HALL1_Y1);
   for (let hy = HALL1_Y1; hy < HALL1_Y2; hy += 16) ctx.fillRect(BX1, hy, BX2-BX1, 1);
-  ctx.fillStyle = 'rgba(0,0,0,0.06)';
   for (let hx = BX1; hx < BX2; hx += 16) ctx.fillRect(hx, HALL2_Y1, 1, HALL2_Y2-HALL2_Y1);
   for (let hy = HALL2_Y1; hy < HALL2_Y2; hy += 16) ctx.fillRect(BX1, hy, BX2-BX1, 1);
+  // Vertical corridor grid + dashed centre line
+  for (let hx = VHX1; hx < VHX2; hx += 16) ctx.fillRect(hx, HALL1_Y2, 1, MID_Y2-HALL1_Y2);
+  for (let hy = HALL1_Y2; hy < MID_Y2; hy += 16) ctx.fillRect(VHX1, hy, VERT_HALL_W, 1);
+  ctx.fillStyle = 'rgba(255,215,0,0.5)';
+  for (let vy = HALL1_Y2+8; vy < MID_Y2; vy += 22) ctx.fillRect(GONG_X - 1, vy, 2, 12); // dashed centre
+  // "CORRIDOR" label
+  ctx.fillStyle = 'rgba(180,165,130,0.5)';
+  ctx.font = 'bold 9px "Courier New",monospace'; ctx.textAlign='center';
+  ctx.fillText('─ CORRIDOR ─', (VHX1+VHX2)/2, (HALL1_Y2+OFF_ROW_B)/2 + 4);
 
   // ── ROOMS ────────────────────────────────────────────────────────────────
   ROOMS.forEach(r => {
@@ -4932,6 +5325,7 @@ function drawWorld(ctx) {
     if (r.type === 'games')      drawGamesFurniture(ctx, r);
     if (r.type === 'music')      drawMusicRoom(ctx, r);
     if (r.type === 'whiteboard') drawWhiteboardRoom(ctx, r);
+    if (r.type === 'shop')       drawShopRoom(ctx, r);
     if (oData && r.type === 'office') drawOfficeNameplate(ctx, r, oData.owner_name);
   });
 
@@ -4942,6 +5336,8 @@ function drawWorld(ctx) {
   drawNoticeBoard(ctx);
   drawWaterCooler(ctx);
   drawPhotoWall(ctx);
+  drawOfficeObjects(ctx);
+  drawFinishLine(ctx);
 
   // ── PIXEL BRICK WALLS ───────────────────────────────────────────────────
   WALLS.forEach(w => drawBrickWall(ctx, w.x, w.y, w.w, w.h));
@@ -5043,13 +5439,22 @@ let gongCount       = 0;
 let gongHitCooldown = 0;           // frames until gong can be hit again
 let gongAnim        = null;        // { name, life, maxLife, particles[] }
 let inKart          = false;
-const KART_SPEED    = 6;
-const GONG_X        = 1200, GONG_Y = 185, GONG_R = 42; // position in team HQ
-// Water cooler position (Hallway 2, near lunch room entrance)
-const COOLER_X = Math.round(MUSIC_X2 + 40);   // ~940
-const COOLER_Y = Math.round(HALL2_Y1 + 30);   // ~650
-// Photo wall corkboard position (Team HQ, left side below notice board)
-const PHOTO_WALL_X = 450, PHOTO_WALL_Y = 60, PHOTO_WALL_W = 360, PHOTO_WALL_H = 180;
+const KART_SPEED    = 5;
+// ── Kart lap system ────────────────────────────────────────────────────────
+const FINISH_LINE_X = 900;          // x of finish line (kart exit gap)
+const FINISH_LINE_Y = BY1 - 14;     // just above top wall (≈36)
+let kartLapCount    = 0;
+let kartLapStart    = null;          // Date.now() at lap start
+let kartBestMs      = null;          // personal best ms
+let kartAtLine      = false;         // debounce flag
+let kartLapBoard    = [];            // [{name, ms}] loaded from DB
+// Gong: at hallway 1 × vertical corridor intersection
+const GONG_X = 900, GONG_Y = 330, GONG_R = 38;
+// Water cooler: inside Lunch Room
+const COOLER_X = Math.round(MUSIC_X2 + (LUNCH_X2 - MUSIC_X2) * 0.75); // ~1218
+const COOLER_Y = Math.round(BOT_Y1 + 55);
+// Photo wall corkboard — smaller, left side of HQ
+const PHOTO_WALL_X = 100, PHOTO_WALL_Y = 65, PHOTO_WALL_W = 280, PHOTO_WALL_H = 140;
 
 // ── Sitting mechanic ─────────────────────────────────────────────────────
 let isSitting   = false;
@@ -5160,8 +5565,12 @@ window.addEventListener('keydown', e => {
     if (gameRunning) openStickyPopup();
   }
   if (e.key === 'Escape') {
+    if (inKart) { dismountKart(); return; }
+    if (isSitting) { standUp(); return; }
+    if (carryingObject) { carryingObject = null; document.getElementById('carry-hud').style.display='none'; return; }
     if (editMode) { exitEditMode(); return; }
     closeStickyPopup(); closeAnnouncePanel(); closePetPicker(); closeWhiteboard();
+    closeShopPanel(); closeMeetingPanel(); closeCoolerPanel(); closePhotoPanel();
     if (emojiPickerOpen) { emojiPickerOpen = false; document.getElementById('emoji-picker').style.display = 'none'; }
   }
   if ((e.key === 'e' || e.key === 'E') && tag !== 'INPUT' && tag !== 'TEXTAREA' && gameRunning) {
@@ -5169,6 +5578,8 @@ window.addEventListener('keydown', e => {
     if (inKart) { dismountKart(); return; }
     // Stand up if sitting
     if (isSitting) { standUp(); return; }
+    // Carrying object — place it
+    if (carryingObject) { placeObject(); return; }
     // Gong interaction
     const gdx = player.x - GONG_X, gdy = player.y - GONG_Y;
     if (gdx*gdx + gdy*gdy < GONG_R * GONG_R * 3.5) { hitGong(); return; }
@@ -5192,6 +5603,15 @@ window.addEventListener('keydown', e => {
         player.y >= meetingRoom.y && player.y <= meetingRoom.y + meetingRoom.h) {
       openMeetingPanel();
       return;
+    }
+    // Grab nearby moveable object
+    const grabbed = officeObjects.find(o => !o.removed && Math.hypot(player.x-o.x, player.y-o.y) < 44);
+    if (grabbed) { pickUpObject(grabbed); return; }
+    // Points shop room
+    const shopRoom = ROOMS.find(r => r.type === 'shop');
+    if (shopRoom && player.x >= shopRoom.x && player.x <= shopRoom.x + shopRoom.w &&
+        player.y >= shopRoom.y && player.y <= shopRoom.y + shopRoom.h) {
+      openShopPanel(); return;
     }
     // Music room — open YouTube music panel
     const musicRoom = ROOMS.find(r => r.type === 'music');
@@ -5218,6 +5638,10 @@ window.addEventListener('keydown', e => {
         player.y >= teamRoom.y && player.y <= teamRoom.y + teamRoom.h) {
       sitDown('team:desk'); return;
     }
+  }
+  // Delete key while carrying — admin removes object
+  if (e.key === 'Delete' && carryingObject && currentProfile?.role === 'admin') {
+    deleteObject(carryingObject.id);
   }
   // F = wave at nearest player (was W — changed to avoid WASD conflict)
   if ((e.key === 'f' || e.key === 'F') && tag !== 'INPUT' && tag !== 'TEXTAREA' && gameRunning && !inKart && !isMoving) {
@@ -5315,6 +5739,7 @@ function loop() {
 
   // Auto-mount kart when player walks through the exit gap into outdoor area
   if (!inKart && isOutdoor(player.x, player.y)) mountKart();
+  tickKartLap();
 
   updateFloatingEmojis();
   updateMusicNotes();
