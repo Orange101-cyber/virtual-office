@@ -1770,10 +1770,10 @@ async function submitStickyNote() {
   if (!text || !pendingStickyRoom) { closeStickyPopup(); return; }
   const r = pendingStickyRoom;
   // Position near player, clamped inside room with margin
-  const nx = Math.max(r.x + NOTE_W/2 + 10,
-               Math.min(player.x + (Math.random()-0.5)*30, r.x + r.w - NOTE_W/2 - 10));
-  const ny = Math.max(r.y + NOTE_H/2 + 18,
-               Math.min(player.y + (Math.random()-0.5)*20, r.y + r.h - NOTE_H/2 - 10));
+  const nx = Math.round(Math.max(r.x + NOTE_W/2 + 10,
+               Math.min(player.x + (Math.random()-0.5)*30, r.x + r.w - NOTE_W/2 - 10)));
+  const ny = Math.round(Math.max(r.y + NOTE_H/2 + 18,
+               Math.min(player.y + (Math.random()-0.5)*20, r.y + r.h - NOTE_H/2 - 10)));
   const note = {
     user_id: currentUser.id, author_name: currentProfile.name,
     message: text, room_id: r.id, x: nx, y: ny, color: pendingStickyColor,
