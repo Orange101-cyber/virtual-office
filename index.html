@@ -405,6 +405,39 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
   pointer-events: none;
 }
 
+/* ── WAVE NOTIFICATION ── */
+#wave-notif {
+  position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
+  background: rgba(10,10,22,0.94); color: #a5f3fc; padding: 10px 20px;
+  border: 2px solid #2a2a48; font-size: 13px; font-weight: 700;
+  font-family: 'Courier New', monospace; display: none; z-index: 500;
+  box-shadow: 2px 2px 0 rgba(0,0,0,0.5); transition: opacity 0.4s;
+  pointer-events: none;
+}
+
+/* ── EMOJI REACTION PICKER ── */
+#emoji-picker {
+  position: fixed; bottom: 130px; left: 50%; transform: translateX(-50%);
+  background: rgba(10,10,22,0.96); border: 2px solid #3a3a5a;
+  display: none; gap: 6px; padding: 10px 14px; z-index: 600;
+  box-shadow: 2px 2px 0 rgba(0,0,0,0.5);
+}
+#emoji-picker button {
+  background: none; border: 2px solid transparent; color: white;
+  font-size: 22px; cursor: pointer; padding: 4px 6px; line-height: 1;
+  transition: border-color 0.15s;
+}
+#emoji-picker button:hover { border-color: #6366f1; background: rgba(99,102,241,0.2); }
+
+/* ── KART HINT ── */
+#kart-hint {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+  background: rgba(10,10,22,0.92); color: #fde68a; padding: 8px 18px;
+  border: 2px solid #2a2a48; font-size: 11px; font-weight: 700;
+  font-family: 'Courier New', monospace; display: none; z-index: 50;
+  box-shadow: 2px 2px 0 rgba(0,0,0,0.4); pointer-events: none;
+}
+
 /* ── WHITEBOARD ── */
 #wb-open-btn {
   position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
@@ -758,8 +791,8 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
 </div>
 
 <div id="room-tag" style="display:none">Hallway<span id="vibe-badge" style="display:none"></span></div>
-<div id="hint" style="display:none">⬆ ⬇ ⬅ ➡  Arrow keys to move<br>WASD also works</div>
-<div id="version-tag">v3.0 — 6 Mar 2026</div>
+<div id="hint" style="display:none">⬆ ⬇ ⬅ ➡ Move &nbsp;·&nbsp; W = Wave 👋 &nbsp;·&nbsp; R = React 💬 &nbsp;·&nbsp; E = Interact &nbsp;·&nbsp; Space = Sticky note</div>
+<div id="version-tag">v3.1 — 6 Mar 2026</div>
 <div id="nearby-badge"></div>
 <button id="discord-btn" onclick="openDiscord()">🎙️ Join Voice Chat</button>
 <button id="claim-btn" onclick="claimCurrentOffice()">🏠 Claim This Office</button>
@@ -795,6 +828,21 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
 <div id="pet-tooltip"></div>
 <!-- DOG MESSAGE TOAST -->
 <div id="dog-msg"></div>
+<!-- WAVE NOTIFICATION -->
+<div id="wave-notif"></div>
+<!-- EMOJI REACTION PICKER -->
+<div id="emoji-picker">
+  <button onclick="sendReaction('👍')">👍</button>
+  <button onclick="sendReaction('❤️')">❤️</button>
+  <button onclick="sendReaction('😂')">😂</button>
+  <button onclick="sendReaction('🔥')">🔥</button>
+  <button onclick="sendReaction('💯')">💯</button>
+  <button onclick="sendReaction('🎉')">🎉</button>
+  <button onclick="sendReaction('👀')">👀</button>
+  <button onclick="sendReaction('😮')">😮</button>
+</div>
+<!-- KART MODE HINT -->
+<div id="kart-hint">🏎️ GO KART MODE — Arrow keys to drive · E to dismount</div>
 
 <!-- WHITEBOARD OPEN BUTTON -->
 <button id="wb-open-btn" onclick="openWhiteboard()">✏️ Open Whiteboard</button>
@@ -1905,7 +1953,28 @@ function setupRealtime() {
     if (otherPlayers[payload.user_id]) {
       otherPlayers[payload.user_id].x = payload.x;
       otherPlayers[payload.user_id].y = payload.y;
+      otherPlayers[payload.user_id].inKart = !!payload.inKart;
     }
+  });
+
+  // Broadcast: wave 👋
+  realtimeChannel.on('broadcast', { event: 'wave' }, ({ payload }) => {
+    if (payload.to_id === currentUser.id) showWaveNotif(payload.from_name);
+    const src = payload.from_id === currentUser.id ? player : otherPlayers[payload.from_id];
+    if (src) spawnFloatingEmoji('👋', src.x, src.y - 24, 'wave');
+  });
+
+  // Broadcast: emoji reaction 💬
+  realtimeChannel.on('broadcast', { event: 'reaction' }, ({ payload }) => {
+    if (payload.user_id === currentUser.id) return; // already shown locally
+    const src = otherPlayers[payload.user_id];
+    if (src) spawnFloatingEmoji(payload.emoji, src.x, src.y - 24, 'reaction');
+  });
+
+  // Broadcast: gong 🔔
+  realtimeChannel.on('broadcast', { event: 'gong' }, ({ payload }) => {
+    gongCount++;
+    triggerGongAnim(payload.name);
   });
 
   // Broadcast: office claim/update/unclaim
@@ -1944,7 +2013,7 @@ function setupRealtime() {
     if (!realtimeChannel) return;
     realtimeChannel.send({
       type: 'broadcast', event: 'pos',
-      payload: { user_id: currentUser.id, x: player.x, y: player.y },
+      payload: { user_id: currentUser.id, x: player.x, y: player.y, inKart },
     });
   }, 100);
 }
@@ -1970,7 +2039,7 @@ async function enterGame() {
   playerCfg = { name: currentProfile.name, skin: currentProfile.skin, outfit: currentProfile.outfit };
   initOfficeToolbar();
   await loadOffices();
-  await Promise.all([loadStickyNotes(), loadAnnouncements(), loadPets()]);
+  await Promise.all([loadStickyNotes(), loadAnnouncements(), loadPets(), loadGongCount()]);
   setupRealtime();
   startIdleDetection();
   updateHUD();
@@ -2054,8 +2123,9 @@ function vSeg(y1,y2,x) { if(y2>y1) WALLS.push({x:x-WT/2,y:y1,w:WT,h:y2-y1}); }
 function hWall(x1,x2,y,gaps=[]) { let pos=x1; const gps=gaps.map(cx=>({s:cx-DOOR_HALF,e:cx+DOOR_HALF})).sort((a,b)=>a.s-b.s); for(const g of gps){hSeg(pos,g.s,y);pos=g.e;} hSeg(pos,x2,y); }
 function vWall(y1,y2,x,gaps=[]) { let pos=y1; const gps=gaps.map(cy=>({s:cy-DOOR_HALF,e:cy+DOOR_HALF})).sort((a,b)=>a.s-b.s); for(const g of gps){vSeg(pos,g.s,x);pos=g.e;} vSeg(pos,y2,x); }
 
-// Outer perimeter
-hSeg(BX1, BX2, BY1); hSeg(BX1, BX2, BY2);
+// Outer perimeter — top wall has a go-kart exit gap at x=600
+hWall(BX1, BX2, BY1, [600]);    // gap at centre (width = DOOR_HALF*2 = 48px)
+hSeg(BX1, BX2, BY2);
 vSeg(BY1, BY2, BX1); vSeg(BY1, BY2, BX2);
 
 // y=280: team HQ / hallway 1 (3 doors evenly spaced)
@@ -2086,7 +2156,7 @@ vSeg(BOT_Y1, BY2, LUNCH_X2);
 vSeg(BOT_Y1, BY2, GAMES_X2);
 
 function circleRect(cx,cy,r,rx,ry,rw,rh) { const nx=Math.max(rx,Math.min(cx,rx+rw)),ny=Math.max(ry,Math.min(cy,ry+rh)); const dx=cx-nx,dy=cy-ny; return dx*dx+dy*dy<r*r; }
-function blocked(x,y) { if(x-PR<82||x+PR>1118||y-PR<82||y+PR>758)return true; for(const w of WALLS)if(circleRect(x,y,PR,w.x,w.y,w.w,w.h))return true; return false; }
+function blocked(x,y) { if(x-PR<10||x+PR>WW-10||y-PR<10||y+PR>WH-10)return true; for(const w of WALLS)if(circleRect(x,y,PR,w.x,w.y,w.w,w.h))return true; return false; }
 function roomAt(x,y) { for(const r of ROOMS)if(x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h)return r.name; return 'Hallway'; }
 
 // ── OUTDOOR AREA (grass + go kart track + trees) ───────────────────────────
@@ -2551,6 +2621,251 @@ function drawWhiteboardRoom(ctx, r) {
   ctx.fillStyle = 'rgba(80,80,180,0.6)';
   ctx.font = 'bold 11px "Courier New", monospace'; ctx.textAlign = 'center';
   ctx.fillText('Shared Whiteboard', r.x + r.w/2, r.y + r.h - 14);
+}
+
+// ══════════════════════════════════════════════
+// GONG — LOAD + HIT + ANIMATE + DRAW
+// ══════════════════════════════════════════════
+async function loadGongCount() {
+  const { count } = await sb.from('gong_hits').select('*', { count: 'exact', head: true });
+  gongCount = count || 0;
+}
+
+async function hitGong() {
+  if (!currentUser || gongHitCooldown > 0) return;
+  gongHitCooldown = 360; // 6-second cooldown
+  await sb.from('gong_hits').insert({ user_id: currentUser.id, user_name: playerCfg.name });
+  realtimeChannel?.send({ type: 'broadcast', event: 'gong', payload: { name: playerCfg.name } });
+  gongCount++;
+  triggerGongAnim(playerCfg.name);
+}
+
+function triggerGongAnim(name) {
+  const particles = Array.from({ length: 28 }, () => ({
+    x: Math.random() * WW, y: Math.random() * WH,
+    vx: (Math.random() - 0.5) * 10, vy: (Math.random() - 0.5) * 10,
+    life: 140, color: ['#FFD700','#FF6B35','#ff4d4d','#00FF88','#a78bfa','#38bdf8'][Math.floor(Math.random()*6)],
+  }));
+  gongAnim = { name, life: 160, maxLife: 160, particles };
+}
+
+function drawGongAnim(ctx) {
+  if (!gongAnim) return;
+  const t = gongAnim.life / gongAnim.maxLife;
+  const alpha = t > 0.85 ? (1 - t) / 0.15 : t < 0.15 ? t / 0.15 : 1; // fade in+out
+  ctx.save();
+  // Dark overlay
+  ctx.globalAlpha = alpha * 0.6;
+  ctx.fillStyle = '#0a0a1a';
+  ctx.fillRect(0, 0, WW, WH);
+  // Particle confetti
+  for (const p of gongAnim.particles) {
+    p.x += p.vx; p.y += p.vy; p.vx *= 0.97; p.vy *= 0.97; p.life--;
+    ctx.globalAlpha = Math.max(0, p.life / 140) * alpha;
+    ctx.fillStyle = p.color; ctx.fillRect(p.x - 3, p.y - 3, 8, 8);
+  }
+  // Gong text
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#FFD700';
+  ctx.font = 'bold 72px "Courier New", monospace'; ctx.textAlign = 'center';
+  ctx.fillText('🔔 GONG! 🔔', WW / 2, WH / 2 - 30);
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 22px "Courier New", monospace';
+  ctx.fillText(`${gongAnim.name} just hit the gong! 🎉`, WW / 2, WH / 2 + 24);
+  ctx.fillStyle = 'rgba(255,215,0,0.4)';
+  ctx.font = 'bold 14px "Courier New", monospace';
+  ctx.fillText(`Total hits: ${gongCount}`, WW / 2, WH / 2 + 54);
+  ctx.restore();
+  gongAnim.life--;
+  if (gongAnim.life <= 0) gongAnim = null;
+}
+
+function drawGong(ctx) {
+  ctx.imageSmoothingEnabled = false;
+  const gx = GONG_X, gy = GONG_Y;
+  // Stand legs
+  ctx.fillStyle = '#7a5520';
+  ctx.fillRect(gx - 18, gy + 10, 5, 22);   // left leg
+  ctx.fillRect(gx + 13, gy + 10, 5, 22);   // right leg
+  ctx.fillRect(gx - 22, gy + 28, 50, 5);   // foot crossbar
+  ctx.fillRect(gx - 22, gy - 4, 50, 5);    // top crossbar
+  // Stand highlight
+  ctx.fillStyle = '#c8a060';
+  ctx.fillRect(gx - 22, gy - 4, 50, 2);
+  // Gong disc outer
+  ctx.fillStyle = '#b8860b'; ctx.fillRect(gx - 16, gy - 12, 32, 26);
+  // Gong disc inner (shiny)
+  ctx.fillStyle = '#DAA520'; ctx.fillRect(gx - 13, gy - 9, 26, 20);
+  // Gong disc centre boss
+  ctx.fillStyle = '#FFD700'; ctx.fillRect(gx - 6, gy - 3, 12, 10);
+  ctx.fillStyle = '#FFFACD'; ctx.fillRect(gx - 3, gy - 1, 5, 5);
+  // Gong disc rim shadow
+  ctx.fillStyle = '#5a3e00';
+  ctx.fillRect(gx - 16, gy + 14, 32, 2);
+  ctx.fillRect(gx + 16, gy - 12, 2, 26);
+  // Mallet resting
+  ctx.fillStyle = '#6B4226'; ctx.fillRect(gx + 20, gy - 8, 4, 20);
+  ctx.fillStyle = '#aaa';    ctx.fillRect(gx + 17, gy - 12, 10, 7);
+  ctx.fillStyle = '#ddd';    ctx.fillRect(gx + 18, gy - 11, 4, 3);
+  // Hit glow (first 1.5s after hit)
+  if (gongHitCooldown > 280) {
+    const gAlpha = (gongHitCooldown - 280) / 80 * 0.6;
+    ctx.globalAlpha = gAlpha;
+    ctx.fillStyle = '#FFD700'; ctx.fillRect(gx - 22, gy - 18, 54, 40);
+    ctx.globalAlpha = 1;
+  }
+  // Counter badge below gong
+  ctx.fillStyle = 'rgba(20,20,36,0.82)';
+  ctx.fillRect(gx - 28, gy + 36, 56, 14);
+  ctx.fillStyle = '#FFD700';
+  ctx.font = 'bold 9px "Courier New", monospace'; ctx.textAlign = 'center';
+  ctx.fillText(`🔔 × ${gongCount}`, gx, gy + 47);
+  // "E to GONG" prompt when player nearby
+  const ddx = player.x - gx, ddy = player.y - gy;
+  if (ddx*ddx + ddy*ddy < GONG_R * GONG_R * 4 && gongHitCooldown === 0) {
+    ctx.fillStyle = 'rgba(20,20,36,0.9)';
+    ctx.fillRect(gx - 30, gy - 36, 60, 14);
+    ctx.fillStyle = '#fde68a';
+    ctx.font = 'bold 9px "Courier New", monospace'; ctx.textAlign = 'center';
+    ctx.fillText('[ E ] GONG!', gx, gy - 25);
+  }
+}
+
+// ══════════════════════════════════════════════
+// FLOATING EMOJIS
+// ══════════════════════════════════════════════
+function spawnFloatingEmoji(emoji, x, y, type) {
+  const maxLife = type === 'reaction' ? 180 : 90;
+  floatingEmojis.push({ emoji, x, y, vy: -0.9, life: maxLife, maxLife, type });
+}
+
+function updateFloatingEmojis() {
+  for (const e of floatingEmojis) { e.y += e.vy; e.life--; }
+  floatingEmojis = floatingEmojis.filter(e => e.life > 0);
+}
+
+function drawFloatingEmojis(ctx) {
+  ctx.save();
+  for (const e of floatingEmojis) {
+    const alpha = e.life < 24 ? e.life / 24 : 1;
+    ctx.globalAlpha = alpha;
+    ctx.font = '22px serif'; ctx.textAlign = 'center';
+    ctx.fillText(e.emoji, e.x, e.y);
+  }
+  ctx.globalAlpha = 1; ctx.restore();
+}
+
+// ══════════════════════════════════════════════
+// WAVE 👋
+// ══════════════════════════════════════════════
+function sendWave() {
+  if (!currentUser || waveCooldown > 0 || !gameRunning) return;
+  // Find nearest player
+  let nearestId = null, nearestP = null, nearDist = Infinity;
+  for (const [uid, p] of Object.entries(otherPlayers)) {
+    const dx = p.x - player.x, dy = p.y - player.y, d = dx*dx + dy*dy;
+    if (d < 90*90 && d < nearDist) { nearestId = uid; nearestP = p; nearDist = d; }
+  }
+  if (!nearestP) return; // nobody nearby
+  waveCooldown = 120;
+  spawnFloatingEmoji('👋', player.x, player.y - 28, 'wave');
+  realtimeChannel?.send({
+    type: 'broadcast', event: 'wave',
+    payload: { from_id: currentUser.id, from_name: playerCfg.name, to_id: nearestId },
+  });
+}
+
+function showWaveNotif(fromName) {
+  const el = document.getElementById('wave-notif');
+  el.textContent = `👋 ${fromName} waved at you!`;
+  el.style.opacity = '1'; el.style.display = 'block';
+  clearTimeout(waveNotifTimer);
+  waveNotifTimer = setTimeout(() => {
+    el.style.opacity = '0';
+    setTimeout(() => { el.style.display = 'none'; }, 400);
+  }, 3000);
+}
+
+// ══════════════════════════════════════════════
+// EMOJI REACTIONS 💬
+// ══════════════════════════════════════════════
+function toggleEmojiPicker() {
+  if (!gameRunning) return;
+  emojiPickerOpen = !emojiPickerOpen;
+  document.getElementById('emoji-picker').style.display = emojiPickerOpen ? 'flex' : 'none';
+}
+
+function sendReaction(emoji) {
+  emojiPickerOpen = false;
+  document.getElementById('emoji-picker').style.display = 'none';
+  if (!currentUser) return;
+  spawnFloatingEmoji(emoji, player.x, player.y - 28, 'reaction');
+  realtimeChannel?.send({
+    type: 'broadcast', event: 'reaction',
+    payload: { user_id: currentUser.id, emoji },
+  });
+}
+
+// ══════════════════════════════════════════════
+// GO KART 🏎️
+// ══════════════════════════════════════════════
+function isOutdoor(x, y) { return x < BX1 - 4 || x > BX2 + 4 || y < BY1 - 4; }
+
+function mountKart() {
+  inKart = true;
+  document.getElementById('kart-hint').style.display = 'block';
+}
+
+function dismountKart() {
+  inKart = false;
+  document.getElementById('kart-hint').style.display = 'none';
+  // Move player just inside the entrance gap
+  player.x = 600; player.y = BY1 + PR + 8;
+}
+
+function drawKart(ctx, x, y, name, isLocal, cfg) {
+  ctx.imageSmoothingEnabled = false;
+  const bodyColor = isLocal ? (cfg?.outfit || '#4f46e5') : (cfg?.outfit || '#e74c3c');
+  // Kart body
+  ctx.fillStyle = bodyColor; ctx.fillRect(x - 12, y - 9, 24, 18);
+  // Cockpit
+  ctx.fillStyle = '#1a1a2e'; ctx.fillRect(x - 5, y - 13, 10, 7);
+  // Front spoiler
+  ctx.fillStyle = darkenHex(bodyColor, 0.2); ctx.fillRect(x - 14, y - 13, 28, 4);
+  // Rear spoiler
+  ctx.fillStyle = darkenHex(bodyColor, 0.2); ctx.fillRect(x - 14, y + 9, 28, 4);
+  // Wheels
+  ctx.fillStyle = '#111';
+  ctx.fillRect(x - 16, y - 10, 6, 7);  // front-left
+  ctx.fillRect(x + 10, y - 10, 6, 7);  // front-right
+  ctx.fillRect(x - 16, y + 3,  6, 7);  // rear-left
+  ctx.fillRect(x + 10, y + 3,  6, 7);  // rear-right
+  // Wheel shine
+  ctx.fillStyle = '#444';
+  ctx.fillRect(x - 15, y - 9, 2, 2); ctx.fillRect(x + 11, y - 9, 2, 2);
+  ctx.fillRect(x - 15, y + 4, 2, 2); ctx.fillRect(x + 11, y + 4, 2, 2);
+  // Driver head (tiny)
+  ctx.fillStyle = cfg?.skin || '#FDBCB4';
+  ctx.fillRect(x - 3, y - 7, 6, 5);
+  // Gold outline for local player
+  if (isLocal) {
+    ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 2;
+    ctx.strokeRect(x - 16, y - 14, 36, 32);
+  }
+  // Name tag
+  ctx.fillStyle = 'rgba(10,10,22,0.88)';
+  ctx.font = 'bold 9px "Courier New", monospace'; ctx.textAlign = 'center';
+  const tw = ctx.measureText(name).width + 8;
+  ctx.fillRect(x - tw/2, y - 28, tw, 12);
+  ctx.fillStyle = '#fde68a'; ctx.fillText(name, x, y - 19);
+  // Speed lines when moving
+  if (isLocal && isMoving) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 1;
+    for (let i = 0; i < 3; i++) {
+      const lx = x - 20 - i * 6, ly = y - 3 + i * 4;
+      ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx - 10, ly); ctx.stroke();
+    }
+  }
 }
 
 function drawStickyNotes(ctx) {
@@ -3059,6 +3374,7 @@ function drawWorld(ctx) {
 
   drawRoomDetails(ctx);
   drawDoorLabels(ctx);
+  drawGong(ctx);
   drawStickyNotes(ctx);
   drawNoticeBoard(ctx);
 
@@ -3124,6 +3440,18 @@ let player    = { x: 600, y: 170 };
 let playerCfg = { name: 'Player', skin: '#FDBCB4', outfit: '#4f46e5' };
 let keys = {}, currentRoom = '', frame = 0, isMoving = false, gameRunning = false;
 
+// ── Social interaction state ──────────────────────────────────────────────
+let floatingEmojis  = [];          // { emoji, x, y, vy, life, maxLife, type }
+let waveCooldown    = 0;           // frames until next wave
+let waveNotifTimer  = null;
+let emojiPickerOpen = false;
+let gongCount       = 0;
+let gongHitCooldown = 0;           // frames until gong can be hit again
+let gongAnim        = null;        // { name, life, maxLife, particles[] }
+let inKart          = false;
+const KART_SPEED    = 6;
+const GONG_X        = 1070, GONG_Y = 165, GONG_R = 42; // position in team HQ
+
 function resize() {
   canvas.width  = window.innerWidth;
   canvas.height = window.innerHeight;
@@ -3164,13 +3492,30 @@ window.addEventListener('keydown', e => {
     e.preventDefault();
     if (gameRunning) openStickyPopup();
   }
-  if (e.key === 'Escape') { closeStickyPopup(); closeAnnouncePanel(); closePetPicker(); closeWhiteboard(); }
-  if ((e.key === 'e' || e.key === 'E') && tag !== 'INPUT' && tag !== 'TEXTAREA') {
+  if (e.key === 'Escape') {
+    closeStickyPopup(); closeAnnouncePanel(); closePetPicker(); closeWhiteboard();
+    if (emojiPickerOpen) { emojiPickerOpen = false; document.getElementById('emoji-picker').style.display = 'none'; }
+  }
+  if ((e.key === 'e' || e.key === 'E') && tag !== 'INPUT' && tag !== 'TEXTAREA' && gameRunning) {
+    // Kart dismount takes priority
+    if (inKart) { dismountKart(); return; }
+    // Gong interaction
+    const gdx = player.x - GONG_X, gdy = player.y - GONG_Y;
+    if (gdx*gdx + gdy*gdy < GONG_R * GONG_R * 3.5) hitGong();
+    // Dog interaction
     const dog = activePets.find(p => p.isShared);
     if (dog) {
       const dx = player.x - dog.x, dy = player.y - dog.y;
       if (dx*dx + dy*dy < 72*72) showDogMessage();
     }
+  }
+  // W = wave at nearest player
+  if ((e.key === 'w' || e.key === 'W') && tag !== 'INPUT' && tag !== 'TEXTAREA' && gameRunning && !inKart) {
+    sendWave();
+  }
+  // R = toggle emoji reaction picker
+  if ((e.key === 'r' || e.key === 'R') && tag !== 'INPUT' && tag !== 'TEXTAREA' && gameRunning && !inKart) {
+    toggleEmojiPicker();
   }
 });
 window.addEventListener('keyup', e => {
@@ -3218,16 +3563,27 @@ function updateHUD() {
 // ══════════════════════════════════════════════
 function loop() {
   frame++;
+  // Cooldown ticks
+  if (waveCooldown > 0) waveCooldown--;
+  if (gongHitCooldown > 0) gongHitCooldown--;
+
+  const curSpeed = inKart ? KART_SPEED : SPEED;
   let nx = player.x, ny = player.y;
   if (!gameOverlayOpen) {
-    if (keys['ArrowLeft']  || keys['a']) nx -= SPEED;
-    if (keys['ArrowRight'] || keys['d']) nx += SPEED;
-    if (keys['ArrowUp']    || keys['w']) ny -= SPEED;
-    if (keys['ArrowDown']  || keys['s']) ny += SPEED;
+    if (keys['ArrowLeft']  || keys['a']) nx -= curSpeed;
+    if (keys['ArrowRight'] || keys['d']) nx += curSpeed;
+    // W key moves up only when NOT in kart (kart uses arrow keys; W = wave)
+    if (keys['ArrowUp']    || (!inKart && keys['w'])) ny -= curSpeed;
+    if (keys['ArrowDown']  || keys['s']) ny += curSpeed;
   }
 
   isMoving = (nx !== player.x || ny !== player.y);
-  if (isMoving) onMovement();
+  if (isMoving && !inKart) onMovement();
+
+  // Auto-mount kart when player walks through the exit gap into outdoor area
+  if (!inKart && isOutdoor(player.x, player.y)) mountKart();
+
+  updateFloatingEmojis();
 
   if (!blocked(nx, player.y)) player.x = nx;
   if (!blocked(player.x, ny)) player.y = ny;
@@ -3291,12 +3647,20 @@ function loop() {
 
   // Pets (drawn under players)
   drawPets(ctx);
-  // Other players
+  // Other players (kart or character)
   for (const p of Object.values(otherPlayers)) {
-    drawChar(ctx, p.x, p.y, p.skin, p.outfit, p.name, p.status || 'active', false, false, p.mood);
+    if (p.inKart) drawKart(ctx, p.x, p.y, p.name, false, p);
+    else drawChar(ctx, p.x, p.y, p.skin, p.outfit, p.name, p.status || 'active', false, false, p.mood);
   }
-  // Local player
-  drawChar(ctx, player.x, player.y, playerCfg.skin, playerCfg.outfit, playerCfg.name, myStatus, true, isMoving, currentProfile?.mood);
+  // Local player (kart or character)
+  if (inKart) drawKart(ctx, player.x, player.y, playerCfg.name, true, playerCfg);
+  else drawChar(ctx, player.x, player.y, playerCfg.skin, playerCfg.outfit, playerCfg.name, myStatus, true, isMoving, currentProfile?.mood);
+
+  // Floating emojis (waves + reactions)
+  drawFloatingEmojis(ctx);
+
+  // Gong full-screen animation (drawn in world-space before restore)
+  drawGongAnim(ctx);
 
   ctx.restore();
   requestAnimationFrame(loop);
