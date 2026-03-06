@@ -759,7 +759,7 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
 
 <div id="room-tag" style="display:none">Hallway<span id="vibe-badge" style="display:none"></span></div>
 <div id="hint" style="display:none">⬆ ⬇ ⬅ ➡  Arrow keys to move<br>WASD also works</div>
-<div id="version-tag">v2.4 — 6 Mar 2026</div>
+<div id="version-tag">v3.0 — 6 Mar 2026</div>
 <div id="nearby-badge"></div>
 <button id="discord-btn" onclick="openDiscord()">🎙️ Join Voice Chat</button>
 <button id="claim-btn" onclick="claimCurrentOffice()">🏠 Claim This Office</button>
@@ -972,15 +972,12 @@ const sb = createClient(
 const ADMIN_EMAIL = 'cameron@cylglobal.com';
 
 const DISCORD_CHANNELS = {
+  'Campaigns You Love HQ': 'https://discord.com/channels/1042249264123879454/1119058808073879602',
+  '📅 Meeting Room': 'https://discord.com/channels/1042249264123879454/1119058808073879602',
   'Office 1':  'https://discord.com/channels/1042249264123879454/1119058808073879602',
   'Office 2':  'https://discord.com/channels/1042249264123879454/1119058808073879602',
   'Office 3':  'https://discord.com/channels/1042249264123879454/1119058808073879602',
   'Office 4':  'https://discord.com/channels/1042249264123879454/1119058808073879602',
-  'Office 5':  'https://discord.com/channels/1042249264123879454/1119058808073879602',
-  'Office 6':  'https://discord.com/channels/1042249264123879454/1119058808073879602',
-  'Office 7':  'https://discord.com/channels/1042249264123879454/1119058808073879602',
-  'Office 8':  'https://discord.com/channels/1042249264123879454/1119058808073879602',
-  'Office 9':  'https://discord.com/channels/1042249264123879454/1119058808073879602',
   '🎨 Whiteboard': 'https://discord.com/channels/1042249264123879454/1119058808073879602',
   '🍕 Lunch Room': 'https://discord.com/channels/1042249264123879454/1119058808073879602',
   '🎮 Games Room': 'https://discord.com/channels/1042249264123879454/1119058808073879602',
@@ -1023,7 +1020,7 @@ const DESK_COLORS = ['#C8A97E','#D4B896','#E8C99A','#A07850','#8B6B4A','#6B4C2A'
 const NOTE_COLORS = ['#FEF08A','#FBCFE8','#BAE6FD','#BBF7D0'];
 const NOTE_W = 60, NOTE_H = 50;
 // Notice board world-coords (sits in HALL1: y=252–340, right side)
-const BOARD_X = 60,  BOARD_Y = 259, BOARD_W = 256, BOARD_H = 68;
+const BOARD_X = 640, BOARD_Y = 284, BOARD_W = 220, BOARD_H = 48;
 
 const PET_OPTIONS = [
   { emoji: '🐱', label: 'Cat'     },
@@ -1994,41 +1991,284 @@ sb.auth.getSession().then(({ data: { session } }) => {
 // ══════════════════════════════════════════════
 // GAME ENGINE
 // ══════════════════════════════════════════════
+// ══════════════════════════════════════════════
+// NEW FLOOR PLAN — v2.0 LAYOUT
+// ══════════════════════════════════════════════
 const WW = 1200, WH = 820, WT = 8, PR = 14, SPEED = 3;
-const COL     = [54, 272, 490, 708, 926, 1144];
-const ROW_TOP = [54, 252], ROW_MID = [340, 538], ROW_BOT = [626, 800];
-const HALL1   = [252, 340], HALL2 = [538, 626];
 const DOOR_HALF = 24;
-const ROOMS = [];
-const OFF_COLORS = [
-  ['#EFF6FF','#BFDBFE'],['#F0FDF4','#BBF7D0'],['#FFF7ED','#FED7AA'],
-  ['#FDF4FF','#E9D5FF'],['#FFF1F2','#FECDD3'],['#ECFEFF','#A5F3FC'],
-  ['#FEFCE8','#FEF08A'],['#F7FEE7','#D9F99D'],['#EFF6FF','#BAE6FD'],
-  ['#FDF2F8','#FBCFE8'],
-];
-for (let i = 0; i < 5; i++) ROOMS.push({ id:`office${i+1}`, name:`Office ${i+1}`, x:COL[i], y:ROW_TOP[0], w:COL[i+1]-COL[i], h:ROW_TOP[1]-ROW_TOP[0], floor:OFF_COLORS[i][0], accent:OFF_COLORS[i][1], type:'office' });
-for (let i = 0; i < 4; i++) ROOMS.push({ id:`office${i+6}`, name:`Office ${i+6}`, x:COL[i], y:ROW_MID[0], w:COL[i+1]-COL[i], h:ROW_MID[1]-ROW_MID[0], floor:OFF_COLORS[i+5][0], accent:OFF_COLORS[i+5][1], type:'office' });
-ROOMS.push({ id:'whiteboard', name:'🎨 Whiteboard', x:COL[4], y:ROW_MID[0], w:COL[5]-COL[4], h:ROW_MID[1]-ROW_MID[0], floor:'#F0F4FF', accent:'#6366f1', type:'whiteboard' });
-ROOMS.push({ id:'lunch', name:'🍕 Lunch Room', x:54,  y:ROW_BOT[0], w:490, h:ROW_BOT[1]-ROW_BOT[0], floor:'#FFFDE7', accent:'#F9A825', type:'lunch' });
-ROOMS.push({ id:'games', name:'🎮 Games Room', x:544, y:ROW_BOT[0], w:600, h:ROW_BOT[1]-ROW_BOT[0], floor:'#E8F5E9', accent:'#43A047', type:'games' });
 
+// Building bounds
+const BX1 = 80, BY1 = 80, BX2 = 1120, BY2 = 760;
+
+// Zone y-boundaries
+const TEAM_Y2  = 280;  // team HQ bottom / hallway 1 top
+const HALL1_Y1 = 280, HALL1_Y2 = 340;  // hallway 1
+const MID_Y1   = 340, MID_Y2   = 580;  // middle section
+const HALL2_Y1 = 580, HALL2_Y2 = 640;  // hallway 2
+const BOT_Y1   = 640;                  // bottom section
+
+// Zone x-boundaries (middle + bottom)
+const PRIV_X2  = 540;  // right edge of private offices
+const LUNCH_X2 = 440;  // right edge of lunch
+const GAMES_X2 = 790;  // right edge of games
+
+const ROOMS = [];
+
+// Open team HQ (top, full width)
+ROOMS.push({ id:'team', name:'Campaigns You Love HQ',
+  x:BX1, y:BY1, w:BX2-BX1, h:TEAM_Y2-BY1,
+  floor:'#EDF5FF', accent:'#4f46e5', type:'team' });
+
+// Private offices — single row of 4, 115px wide each
+const OFF_W = 115, OFF_H = MID_Y2 - MID_Y1;
+const OFF_COLORS4 = [
+  ['#EFF6FF','#3b82f6'], ['#F0FDF4','#22c55e'],
+  ['#FFF7ED','#f97316'], ['#FDF4FF','#a855f7'],
+];
+for (let i = 0; i < 4; i++) {
+  ROOMS.push({ id:`office${i+1}`, name:`Office ${i+1}`,
+    x: BX1 + i * OFF_W, y: MID_Y1, w: OFF_W, h: OFF_H,
+    floor: OFF_COLORS4[i][0], accent: OFF_COLORS4[i][1], type:'office' });
+}
+
+// Meeting room (right side of middle section)
+ROOMS.push({ id:'meeting', name:'📅 Meeting Room',
+  x:PRIV_X2, y:MID_Y1, w:BX2-PRIV_X2, h:MID_Y2-MID_Y1,
+  floor:'#F0F4FF', accent:'#6366f1', type:'meeting' });
+
+// Bottom row
+ROOMS.push({ id:'lunch', name:'🍕 Lunch Room',
+  x:BX1, y:BOT_Y1, w:LUNCH_X2-BX1, h:BY2-BOT_Y1,
+  floor:'#FFFDE7', accent:'#F9A825', type:'lunch' });
+ROOMS.push({ id:'games', name:'🎮 Games Room',
+  x:LUNCH_X2, y:BOT_Y1, w:GAMES_X2-LUNCH_X2, h:BY2-BOT_Y1,
+  floor:'#E8F5E9', accent:'#43A047', type:'games' });
+ROOMS.push({ id:'whiteboard', name:'🎨 Whiteboard',
+  x:GAMES_X2, y:BOT_Y1, w:BX2-GAMES_X2, h:BY2-BOT_Y1,
+  floor:'#F0F4FF', accent:'#6366f1', type:'whiteboard' });
+
+// ── WALLS ──────────────────────────────────────────────────────────────────
 const WALLS = [];
 function hSeg(x1,x2,y) { if(x2>x1) WALLS.push({x:x1,y:y-WT/2,w:x2-x1,h:WT}); }
 function vSeg(y1,y2,x) { if(y2>y1) WALLS.push({x:x-WT/2,y:y1,w:WT,h:y2-y1}); }
 function hWall(x1,x2,y,gaps=[]) { let pos=x1; const gps=gaps.map(cx=>({s:cx-DOOR_HALF,e:cx+DOOR_HALF})).sort((a,b)=>a.s-b.s); for(const g of gps){hSeg(pos,g.s,y);pos=g.e;} hSeg(pos,x2,y); }
 function vWall(y1,y2,x,gaps=[]) { let pos=y1; const gps=gaps.map(cy=>({s:cy-DOOR_HALF,e:cy+DOOR_HALF})).sort((a,b)=>a.s-b.s); for(const g of gps){vSeg(pos,g.s,x);pos=g.e;} vSeg(pos,y2,x); }
 
-const OFF_CX = COL.slice(0,5).map((x,i) => x + (COL[i+1]-COL[i])/2);
-hSeg(54,1144,54); hSeg(54,1144,800); vSeg(54,800,54); vSeg(54,800,1144);
-hWall(54,1144,252,OFF_CX); hWall(54,1144,340,OFF_CX); hWall(54,1144,538,OFF_CX);
-hWall(54,1144,626,[54+245,544+300]);
-for (let i=1;i<5;i++) vWall(54,252,COL[i]);
-for (let i=1;i<5;i++) vWall(340,538,COL[i]);
-vWall(626,800,544);
+// Outer perimeter
+hSeg(BX1, BX2, BY1); hSeg(BX1, BX2, BY2);
+vSeg(BY1, BY2, BX1); vSeg(BY1, BY2, BX2);
+
+// y=280: team HQ / hallway 1 (3 doors evenly spaced)
+hWall(BX1, BX2, HALL1_Y1, [270, 600, 930]);
+
+// y=340: hallway 1 / middle row
+// Private offices: door in each office's top wall
+const OFF_DOORS = [0,1,2,3].map(i => BX1 + i*OFF_W + OFF_W/2);
+hWall(BX1, PRIV_X2, HALL1_Y2, OFF_DOORS);
+// Meeting room: one door from hallway 1
+hWall(PRIV_X2, BX2, HALL1_Y2, [PRIV_X2 + (BX2-PRIV_X2)/2]);
+
+// y=580: middle row / hallway 2
+hSeg(BX1, PRIV_X2, MID_Y2);          // private offices: solid south wall (no exit)
+hWall(PRIV_X2, BX2, MID_Y2, [PRIV_X2 + (BX2-PRIV_X2)/2]); // meeting room south door
+
+// y=640: hallway 2 / bottom row
+hWall(BX1, BX2, HALL2_Y2, [260, 615, 955]);
+
+// Vertical dividers between private offices
+vSeg(MID_Y1, MID_Y2, BX1+OFF_W);
+vSeg(MID_Y1, MID_Y2, BX1+OFF_W*2);
+vSeg(MID_Y1, MID_Y2, BX1+OFF_W*3);
+// Private offices / meeting room divider
+vSeg(MID_Y1, MID_Y2, PRIV_X2);
+// Bottom row dividers
+vSeg(BOT_Y1, BY2, LUNCH_X2);
+vSeg(BOT_Y1, BY2, GAMES_X2);
 
 function circleRect(cx,cy,r,rx,ry,rw,rh) { const nx=Math.max(rx,Math.min(cx,rx+rw)),ny=Math.max(ry,Math.min(cy,ry+rh)); const dx=cx-nx,dy=cy-ny; return dx*dx+dy*dy<r*r; }
-function blocked(x,y) { if(x-PR<58||x+PR>1140||y-PR<58||y+PR>796)return true; for(const w of WALLS)if(circleRect(x,y,PR,w.x,w.y,w.w,w.h))return true; return false; }
+function blocked(x,y) { if(x-PR<82||x+PR>1118||y-PR<82||y+PR>758)return true; for(const w of WALLS)if(circleRect(x,y,PR,w.x,w.y,w.w,w.h))return true; return false; }
 function roomAt(x,y) { for(const r of ROOMS)if(x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h)return r.name; return 'Hallway'; }
+
+// ── OUTDOOR AREA (grass + go kart track + trees) ───────────────────────────
+function drawOutdoorArea(ctx) {
+  ctx.imageSmoothingEnabled = false;
+  // Grass base
+  drawTileFloor(ctx, 0, 0, WW, WH, '#3a6b20', '#336018', 18);
+
+  // Go kart track — grey ring from canvas edge to building edge
+  const TO = 8, TI = 80; // outer/inner inset
+  const strips = [
+    [TO, TO,     WW-TO*2, TI-TO],     // top
+    [TO, WH-TI,  WW-TO*2, TI-TO],     // bottom
+    [TO, TI,     TI-TO,   WH-TI*2],   // left
+    [WW-TI, TI,  TI-TO,   WH-TI*2],   // right
+  ];
+  strips.forEach(([sx,sy,sw,sh]) => {
+    ctx.fillStyle = '#3a3a3a'; ctx.fillRect(sx, sy, sw, sh);
+    ctx.fillStyle = '#484848'; ctx.fillRect(sx+2, sy+2, sw-4, sh-4);
+  });
+  // White track edge lines
+  ctx.fillStyle = '#ccc';
+  ctx.fillRect(TO, TO, WW-TO*2, 2); ctx.fillRect(TO, WH-TO-2, WW-TO*2, 2);
+  ctx.fillRect(TO, TO, 2, WH-TO*2); ctx.fillRect(WW-TO-2, TO, 2, WH-TO*2);
+  ctx.fillRect(TI-2, TI, 2, WH-TI*2); ctx.fillRect(WW-TI, TI, 2, WH-TI*2);
+  ctx.fillRect(TI, TI-2, WW-TI*2, 2); ctx.fillRect(TI, WH-TI, WW-TI*2, 2);
+  // Yellow dashed centre line
+  ctx.fillStyle = '#FFD700';
+  const CM = TO + Math.floor((TI-TO)/2);
+  for (let x = TO+6; x < WW-TI; x += 22)  ctx.fillRect(x, CM-1, 12, 2); // top
+  for (let x = TI;   x < WW-TO; x += 22)  ctx.fillRect(x, CM-1, 12, 2); // top right
+  for (let x = TO+6; x < WW-TI; x += 22)  ctx.fillRect(x, WH-CM-1, 12, 2); // bottom
+  for (let x = TI;   x < WW-TO; x += 22)  ctx.fillRect(x, WH-CM-1, 12, 2);
+  for (let y = TI+6; y < WH-TI; y += 22)  ctx.fillRect(CM-1, y, 2, 12); // left/right
+  for (let y = TI+6; y < WH-TI; y += 22)  ctx.fillRect(WW-CM-1, y, 2, 12);
+  // Coloured corner curbs (alternating red/white)
+  const curb = TI-TO;
+  [[TO,TO],[WW-TI,TO],[TO,WH-TI],[WW-TI,WH-TI]].forEach(([cx,cy], idx) => {
+    const cols = ['#e74c3c','#fff','#e74c3c','#fff','#e74c3c','#fff'];
+    const seg = Math.floor(curb/6);
+    cols.forEach((c,i) => {
+      ctx.fillStyle = c;
+      ctx.fillRect(cx+i*seg, cy, seg, 4);
+      ctx.fillRect(cx, cy+i*seg, 4, seg);
+    });
+  });
+
+  // Pixel art trees
+  function drawTree(tx, ty) {
+    ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(tx-8, ty+12, 16, 4);
+    ctx.fillStyle = '#4a2e0a'; ctx.fillRect(tx-3, ty+6, 6, 16);
+    ctx.fillStyle = '#1a5e28'; ctx.fillRect(tx-14, ty-2, 28, 14);
+    ctx.fillRect(tx-10, ty-10, 20, 10);
+    ctx.fillRect(tx-6,  ty-16, 12, 8);
+    ctx.fillStyle = '#27ae60';
+    ctx.fillRect(tx-12, ty,    24, 10);
+    ctx.fillRect(tx-8,  ty-8,  16, 8);
+    ctx.fillRect(tx-4,  ty-14, 8,  6);
+    ctx.fillStyle = '#52d68a';
+    ctx.fillRect(tx-8, ty+1, 4, 3);
+  }
+  [
+    [38,38],[WW-38,38],[38,WH-38],[WW-38,WH-38],
+    [200,35],[500,35],[700,35],[1000,35],
+    [200,WH-35],[500,WH-35],[700,WH-35],[1000,WH-35],
+    [35,200],[35,450],[35,650],
+    [WW-35,200],[WW-35,450],[WW-35,650],
+  ].forEach(([tx,ty]) => drawTree(tx, ty));
+}
+
+// ── OPEN TEAM AREA: 6 pixel art desks in 2 rows of 3 ─────────────────────
+function drawTeamArea(ctx, r) {
+  ctx.imageSmoothingEnabled = false;
+  const cx = r.x + r.w/2;
+
+  // BIG SIGN above desk rows
+  ctx.fillStyle = 'rgba(30,30,70,0.55)';
+  ctx.fillRect(cx - 190, r.y + WT + 4, 380, 18);
+  ctx.fillStyle = '#c7d2fe';
+  ctx.font = 'bold 11px "Courier New", monospace'; ctx.textAlign = 'center';
+  ctx.fillText('★  CAMPAIGNS YOU LOVE HQ  ★', cx, r.y + WT + 16);
+
+  // Desk grid: 3 columns, 2 rows
+  const cols = [cx - 320, cx, cx + 320];
+  const rows = [r.y + 50, r.y + 140];
+  const deskTints = ['#8B6535','#7a5a2e','#9a7040','#8B6535','#7a5a2e','#9a7040'];
+  const plantColors = ['#27ae60','#2ecc71','#1e7a38','#27ae60','#2ecc71','#1e7a38'];
+
+  let di = 0;
+  rows.forEach(dy => cols.forEach(dx => {
+    const dk = deskTints[di % deskTints.length];
+    // Desk surface
+    ctx.fillStyle = dk; ctx.fillRect(dx - 36, dy, 72, 38);
+    ctx.fillStyle = 'rgba(0,0,0,0.1)'; // grain
+    for (let g=0;g<72;g+=9) ctx.fillRect(dx-36+g,dy,1,38);
+    ctx.fillStyle = darkenHex(dk,0.15); ctx.fillRect(dx-36,dy+34,72,4);
+    // Monitor
+    ctx.fillStyle = '#111'; ctx.fillRect(dx-14, dy+4, 28, 18);
+    ctx.fillStyle = '#1a3a6e'; ctx.fillRect(dx-12, dy+6, 24, 14);
+    ctx.fillStyle = 'rgba(100,180,255,0.5)'; ctx.fillRect(dx-12,dy+6,24,14);
+    ctx.fillStyle = '#333'; ctx.fillRect(dx-2, dy+22, 4, 4);
+    ctx.fillStyle = '#555'; ctx.fillRect(dx-5, dy+26, 10, 2);
+    // Keyboard
+    ctx.fillStyle = '#bbb'; ctx.fillRect(dx-12, dy+28, 22, 6);
+    ctx.fillStyle = '#999';
+    for (let k=0;k<4;k++) ctx.fillRect(dx-11+k*5, dy+30, 4, 2);
+    // Chair behind desk
+    ctx.fillStyle = '#37474f'; ctx.fillRect(dx-11,dy+38,22,12);
+    ctx.fillStyle = '#546e7a'; ctx.fillRect(dx-10,dy+39,20,4);
+    ctx.fillStyle = '#37474f'; ctx.fillRect(dx-9,dy+26,18,12);
+    // Small personal item (alternating)
+    if (di % 3 === 0) {
+      // plant
+      ctx.fillStyle = '#6b4020'; ctx.fillRect(dx+18,dy+24,8,8);
+      ctx.fillStyle = plantColors[di%plantColors.length]; ctx.fillRect(dx+16,dy+14,12,12);
+      ctx.fillStyle = '#52d68a'; ctx.fillRect(dx+18,dy+16,4,3);
+    } else if (di % 3 === 1) {
+      // coffee cup
+      ctx.fillStyle = '#fff'; ctx.fillRect(dx+18,dy+26,8,8);
+      ctx.fillStyle = '#6d4c41'; ctx.fillRect(dx+19,dy+27,6,6);
+      ctx.fillStyle = '#9e9e9e'; ctx.fillRect(dx+16,dy+34,12,2);
+    } else {
+      // small photo frame
+      ctx.fillStyle = '#8B6535'; ctx.fillRect(dx+18,dy+22,10,12);
+      ctx.fillStyle = '#7ab3d4'; ctx.fillRect(dx+20,dy+24,6,8);
+    }
+    di++;
+  }));
+}
+
+// ── MEETING ROOM ────────────────────────────────────────────────────────────
+function drawMeetingRoom(ctx, r) {
+  ctx.imageSmoothingEnabled = false;
+  const cx = r.x + r.w/2, cy = r.y + r.h/2;
+  const tw = 300, th = 72; // table dims
+
+  // Oval table (pixel art: rectangle + darker ends)
+  ctx.fillStyle = '#7a5028'; ctx.fillRect(cx-tw/2, cy-th/2, tw, th);
+  ctx.fillStyle = '#5a3a18';
+  ctx.fillRect(cx-tw/2, cy-th/2, 24, th); // left end
+  ctx.fillRect(cx+tw/2-24, cy-th/2, 24, th); // right end
+  // table grain
+  ctx.fillStyle = 'rgba(255,255,255,0.07)';
+  for (let g=0;g<tw;g+=18) ctx.fillRect(cx-tw/2+g, cy-th/2, 1, th);
+  // table edge
+  ctx.fillStyle = '#3d2408'; ctx.fillRect(cx-tw/2, cy+th/2-4, tw, 4);
+  // table top highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(cx-tw/2+4, cy-th/2+3, tw-8, 6);
+  // Cable tray pixel
+  ctx.fillStyle = '#888'; ctx.fillRect(cx-20, cy-th/2-2, 40, 4);
+
+  // 6 chairs: 2 short ends + 2 each long side
+  const chairColor = '#263238', chairHL = '#37474f';
+  [
+    // top side (2 chairs)
+    [cx-100, cy-th/2-16], [cx+100, cy-th/2-16],
+    // bottom side (2 chairs)
+    [cx-100, cy+th/2+4],  [cx+100, cy+th/2+4],
+    // left end
+    [cx-tw/2-18, cy-8],
+    // right end
+    [cx+tw/2+6, cy-8],
+  ].forEach(([chx, chy]) => {
+    ctx.fillStyle = chairColor; ctx.fillRect(chx-11, chy, 22, 12);
+    ctx.fillStyle = chairHL; ctx.fillRect(chx-10, chy+1, 20, 4);
+    ctx.fillStyle = chairColor; ctx.fillRect(chx-9, chy-10, 18, 10);
+    ctx.fillStyle = chairHL; ctx.fillRect(chx-8, chy-9, 16, 4);
+  });
+
+  // Side credenza (pixel art)
+  ctx.fillStyle = '#4a3018'; ctx.fillRect(r.x+WT+4, r.y+WT+4, 24, r.h-WT*2-8);
+  ctx.fillStyle = '#6a4a28'; ctx.fillRect(r.x+WT+4, r.y+WT+4, 24, 4);
+
+  // Projector screen on far right wall
+  const sx = r.x+r.w-WT-40, sy = r.y+WT+10, sw=34, sh=r.h-WT*2-20;
+  ctx.fillStyle = '#aaa'; ctx.fillRect(sx-2, sy-2, sw+4, sh+4);
+  ctx.fillStyle = '#f0f0f0'; ctx.fillRect(sx, sy, sw, sh);
+  ctx.fillStyle = 'rgba(60,80,160,0.35)'; ctx.fillRect(sx, sy, sw, sh);
+  ctx.fillStyle = '#6366f1';
+  ctx.font = '7px "Courier New",monospace'; ctx.textAlign='center';
+  ctx.fillText('SCREEN', sx+sw/2, sy+sh/2+3);
+}
 
 function drawOfficeFurniture(ctx, r, deskColor='#8B6535') {
   ctx.imageSmoothingEnabled = false;
@@ -2129,10 +2369,11 @@ function drawOfficeFurniture(ctx, r, deskColor='#8B6535') {
 function drawLunchFurniture(ctx, r) {
   ctx.imageSmoothingEnabled = false;
 
-  // ── ROUND TABLES WITH CHAIRS ─────────────────────────────────────────
+  // ── ROUND TABLES WITH CHAIRS (scaled to smaller 360×120 room) ────────
   const tables = [
-    {x:r.x+80, y:r.y+60},{x:r.x+210,y:r.y+60},{x:r.x+340,y:r.y+60},
-    {x:r.x+140,y:r.y+120},{x:r.x+270,y:r.y+120},
+    {x:r.x+68,  y:r.y+50},
+    {x:r.x+170, y:r.y+50},
+    {x:r.x+272, y:r.y+50},
   ];
   tables.forEach(t => {
     // table (square pixel art, dark wood)
@@ -2151,171 +2392,111 @@ function drawLunchFurniture(ctx, r) {
     });
   });
 
-  // ── FRIDGE (pixel art) ───────────────────────────────────────────────
-  const fx = r.x + r.w - 52, fy = r.y + 10;
-  ctx.fillStyle = '#b0bec5'; ctx.fillRect(fx, fy, 36, 130);
-  ctx.fillStyle = '#90a4ae'; ctx.fillRect(fx, fy, 36, 60);        // freezer top
-  ctx.fillStyle = '#607d8b'; ctx.fillRect(fx, fy + 59, 36, 3);    // divider
-  // door highlights
-  ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(fx+2, fy+2, 6, 56);
-  ctx.fillStyle = 'rgba(255,255,255,0.10)'; ctx.fillRect(fx+2, fy+64, 6, 62);
-  // handles
+  // ── APPLIANCES (compact, stacked on right wall for 120px tall room) ──
+  const apx = r.x + r.w - 46, apy = r.y + WT + 4;
+  // Fridge (50px tall)
+  ctx.fillStyle = '#b0bec5'; ctx.fillRect(apx, apy, 34, 50);
+  ctx.fillStyle = '#90a4ae'; ctx.fillRect(apx, apy, 34, 24);
+  ctx.fillStyle = '#607d8b'; ctx.fillRect(apx, apy+23, 34, 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(apx+2, apy+2, 5, 20);
+  ctx.fillStyle = 'rgba(255,255,255,0.10)'; ctx.fillRect(apx+2, apy+26, 5, 20);
   ctx.fillStyle = '#cfd8dc';
-  ctx.fillRect(fx + 28, fy + 20, 4, 16);
-  ctx.fillRect(fx + 28, fy + 80, 4, 20);
-  // pixel shine dots
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
-  ctx.fillRect(fx + 4, fy + 4, 2, 2);
+  ctx.fillRect(apx+26, apy+6, 3, 10);
+  ctx.fillRect(apx+26, apy+28, 3, 12);
+  ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillRect(apx+3, apy+3, 2, 2);
 
-  // ── MICROWAVE (pixel art) ────────────────────────────────────────────
-  const mfx = r.x + r.w - 52, mfy = r.y + 148;
-  ctx.fillStyle = '#37474f'; ctx.fillRect(mfx, mfy, 36, 24);
-  ctx.fillStyle = '#1a1a1a'; ctx.fillRect(mfx + 2, mfy + 2, 22, 20);
-  ctx.fillStyle = '#002244'; ctx.fillRect(mfx + 3, mfy + 3, 20, 18);
-  ctx.fillStyle = 'rgba(50,180,80,0.7)'; ctx.fillRect(mfx + 4, mfy + 4, 18, 16); // door glass
-  // display panel
-  ctx.fillStyle = '#222'; ctx.fillRect(mfx + 26, mfy + 3, 8, 18);
-  ctx.fillStyle = '#00ff88'; ctx.fillRect(mfx + 27, mfy + 6, 6, 4); // green LED
-  // buttons
+  // Microwave (22px tall)
+  const mfy = apy + 54;
+  ctx.fillStyle = '#37474f'; ctx.fillRect(apx, mfy, 34, 20);
+  ctx.fillStyle = '#002244'; ctx.fillRect(apx+2, mfy+2, 20, 16);
+  ctx.fillStyle = 'rgba(50,180,80,0.6)'; ctx.fillRect(apx+2, mfy+2, 20, 16);
+  ctx.fillStyle = '#222'; ctx.fillRect(apx+24, mfy+2, 8, 16);
+  ctx.fillStyle = '#00ff88'; ctx.fillRect(apx+25, mfy+4, 5, 3);
   ctx.fillStyle = '#546e7a';
-  ctx.fillRect(mfx + 27, mfy + 12, 3, 3);
-  ctx.fillRect(mfx + 31, mfy + 12, 3, 3);
-  ctx.fillRect(mfx + 27, mfy + 16, 3, 3);
-  ctx.fillRect(mfx + 31, mfy + 16, 3, 3);
+  ctx.fillRect(apx+25, mfy+9, 3, 3); ctx.fillRect(apx+29, mfy+9, 3, 3);
+  ctx.fillRect(apx+25, mfy+13, 3, 3); ctx.fillRect(apx+29, mfy+13, 3, 3);
 
-  // ── COFFEE MACHINE (pixel art) ───────────────────────────────────────
-  const cfx = r.x + r.w - 52, cfy = r.y + 178;
-  ctx.fillStyle = '#1a1a2e'; ctx.fillRect(cfx, cfy, 28, 36);
-  ctx.fillStyle = '#263238'; ctx.fillRect(cfx + 2, cfy + 2, 24, 20);
-  // water tank (blue)
-  ctx.fillStyle = '#1565c0'; ctx.fillRect(cfx + 20, cfy, 8, 24);
-  ctx.fillStyle = 'rgba(100,180,255,0.4)'; ctx.fillRect(cfx + 21, cfy + 1, 4, 18);
-  // coffee drip spout
-  ctx.fillStyle = '#555'; ctx.fillRect(cfx + 10, cfy + 22, 8, 4);
-  ctx.fillRect(cfx + 13, cfy + 24, 2, 6);
-  // cup on plate
-  ctx.fillStyle = '#fff'; ctx.fillRect(cfx + 8, cfy + 30, 12, 8);
-  ctx.fillStyle = '#6d4c41'; ctx.fillRect(cfx + 9, cfy + 31, 10, 6); // coffee
-  ctx.fillStyle = '#9e9e9e'; ctx.fillRect(cfx + 5, cfy + 38, 18, 2); // plate
-  // steam pixels
+  // Coffee machine (28px tall)
+  const cfy = mfy + 24;
+  ctx.fillStyle = '#1a1a2e'; ctx.fillRect(apx, cfy, 26, 28);
+  ctx.fillStyle = '#263238'; ctx.fillRect(apx+2, cfy+2, 22, 16);
+  ctx.fillStyle = '#1565c0'; ctx.fillRect(apx+20, cfy, 6, 18);
+  ctx.fillStyle = 'rgba(100,180,255,0.4)'; ctx.fillRect(apx+21, cfy+1, 3, 14);
+  ctx.fillStyle = '#555'; ctx.fillRect(apx+8, cfy+18, 8, 3); ctx.fillRect(apx+11, cfy+20, 2, 4);
+  ctx.fillStyle = '#fff'; ctx.fillRect(apx+6, cfy+22, 10, 6);
+  ctx.fillStyle = '#6d4c41'; ctx.fillRect(apx+7, cfy+23, 8, 4);
+  ctx.fillStyle = '#9e9e9e'; ctx.fillRect(apx+3, cfy+28, 16, 2);
+  const st = (frame >> 3) % 6;
   ctx.fillStyle = 'rgba(220,220,240,0.7)';
-  const st = (frame >> 3) % 6; // animate steam
-  if (st < 3) { ctx.fillRect(cfx + 11, cfy + 27 - st, 2, 2); }
-  if (st > 1) { ctx.fillRect(cfx + 15, cfy + 25 - (st-2), 2, 2); }
-  // power button
-  ctx.fillStyle = '#e74c3c'; ctx.fillRect(cfx + 4, cfy + 4, 5, 5);
+  if (st < 3) ctx.fillRect(apx+10, cfy+19-st, 2, 2);
+  ctx.fillStyle = '#e74c3c'; ctx.fillRect(apx+3, cfy+4, 4, 4);
 }
 function drawGamesFurniture(ctx, r) {
   ctx.imageSmoothingEnabled = false;
 
-  // ── PING PONG TABLE (pixel art) ──────────────────────────────────────
-  const tx = r.x + 44, ty = r.y + 30;
-  // table surface
-  ctx.fillStyle = '#1b5e20'; ctx.fillRect(tx, ty, 180, 96);
-  ctx.fillStyle = '#2e7d32'; ctx.fillRect(tx + 2, ty + 2, 176, 92); // lighter surface
-  // table legs
-  ctx.fillStyle = '#555'; ctx.fillRect(tx, ty + 96, 6, 12);
-  ctx.fillStyle = '#555'; ctx.fillRect(tx + 174, ty + 96, 6, 12);
-  ctx.fillStyle = '#555'; ctx.fillRect(tx, ty + 92, 180, 6);
-  // white center line
-  ctx.fillStyle = '#fff'; ctx.fillRect(tx + 88, ty, 4, 96);
-  // white border lines
+  // ── PING PONG TABLE (scaled for 350×120 room) ────────────────────────
+  const tx = r.x + 18, ty = r.y + 18;
+  ctx.fillStyle = '#1b5e20'; ctx.fillRect(tx, ty, 120, 52);
+  ctx.fillStyle = '#2e7d32'; ctx.fillRect(tx + 2, ty + 2, 116, 48);
+  ctx.fillStyle = '#555';    ctx.fillRect(tx, ty + 52, 120, 4); // bottom frame
   ctx.fillStyle = '#fff';
-  ctx.fillRect(tx, ty, 180, 3);        // top edge
-  ctx.fillRect(tx, ty + 93, 180, 3);   // bottom edge
-  ctx.fillRect(tx, ty, 3, 96);         // left edge
-  ctx.fillRect(tx + 177, ty, 3, 96);   // right edge
-  // net (pixel art zigzag)
+  ctx.fillRect(tx, ty, 120, 2); ctx.fillRect(tx, ty + 50, 120, 2); // top/bottom lines
+  ctx.fillRect(tx, ty, 2, 52); ctx.fillRect(tx + 118, ty, 2, 52); // side lines
+  ctx.fillRect(tx + 59, ty, 2, 52); // center line
   ctx.fillStyle = '#ddd';
-  ctx.fillRect(tx + 87, ty + 3, 6, 2);  // net post top
-  for (let ni = 0; ni < 90; ni += 4) {
-    ctx.fillRect(tx + 88, ty + 3 + ni, 4, 2);
-  }
-  ctx.fillRect(tx + 87, ty + 91, 6, 2); // net post bottom
-  // ball (pixel art 4x4)
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(tx + 50, ty + 42, 6, 6);
-  ctx.fillStyle = 'rgba(255,255,255,0.5)';
-  ctx.fillRect(tx + 51, ty + 43, 2, 2); // shine
-  // paddles
-  ctx.fillStyle = '#c0392b'; ctx.fillRect(tx + 20, ty + 36, 16, 10);
-  ctx.fillStyle = '#7f1d1d'; ctx.fillRect(tx + 20, ty + 36, 4, 10); // handle
-  ctx.fillStyle = '#2980b9'; ctx.fillRect(tx + 144, ty + 46, 16, 10);
-  ctx.fillStyle = '#1e3a5f'; ctx.fillRect(tx + 156, ty + 46, 4, 10); // handle
+  for (let ni = 0; ni < 50; ni += 4) ctx.fillRect(tx + 59, ty + ni, 2, 2); // net
+  ctx.fillStyle = '#fff'; ctx.fillRect(tx + 30, ty + 22, 4, 4); // ball
+  ctx.fillStyle = '#c0392b'; ctx.fillRect(tx + 12, ty + 18, 10, 6); // paddle L
+  ctx.fillStyle = '#7f1d1d'; ctx.fillRect(tx + 12, ty + 18, 3, 6);
+  ctx.fillStyle = '#2980b9'; ctx.fillRect(tx + 98, ty + 26, 10, 6); // paddle R
+  ctx.fillStyle = '#1e3a5f'; ctx.fillRect(tx + 105, ty + 26, 3, 6);
+  ctx.fillStyle = '#555';
+  ctx.fillRect(tx + 4, ty + 56, 4, 8); ctx.fillRect(tx + 112, ty + 56, 4, 8); // legs
 
-  // ── ARCADE MACHINE (pixel art) ───────────────────────────────────────
-  const ax = r.x + 290, ay = r.y + 20;
-  ctx.fillStyle = '#1a1a2e'; ctx.fillRect(ax, ay, 54, 108);
-  ctx.fillStyle = '#111122'; ctx.fillRect(ax + 2, ay + 2, 50, 104);
-  // screen
-  ctx.fillStyle = '#000'; ctx.fillRect(ax + 6, ay + 8, 42, 32);
-  ctx.fillStyle = '#002244'; ctx.fillRect(ax + 7, ay + 9, 40, 30);
-  // pixel art screen glow (animated scanlines)
+  // ── TV + CONSOLE (compact, mid area) ─────────────────────────────────
+  const tvx = r.x + 156, tvy = r.y + 8;
+  ctx.fillStyle = '#111'; ctx.fillRect(tvx, tvy, 80, 50);
+  ctx.fillStyle = '#061428'; ctx.fillRect(tvx + 3, tvy + 3, 74, 44);
+  ctx.fillStyle = 'rgba(60,120,220,0.35)'; ctx.fillRect(tvx + 3, tvy + 3, 74, 44);
+  ctx.fillStyle = '#7eb8ff';
+  ctx.font = 'bold 8px "Courier New", monospace'; ctx.textAlign = 'center';
+  ctx.fillText('GAMES', tvx + 40, tvy + 22); ctx.fillText('ROOM', tvx + 40, tvy + 32);
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  for (let sl = 0; sl < 44; sl += 3) ctx.fillRect(tvx + 3, tvy + 3 + sl, 74, 1);
+  ctx.fillStyle = '#333'; ctx.fillRect(tvx + 32, tvy + 50, 16, 5); // stand
+  ctx.fillStyle = '#222'; ctx.fillRect(tvx + 22, tvy + 54, 36, 3);
+  ctx.fillStyle = '#1a1a1a'; ctx.fillRect(tvx + 6, tvy + 60, 68, 10); // console
+  ctx.fillStyle = '#00ff44'; ctx.fillRect(tvx + 64, tvy + 64, 3, 3); // LED
+
+  // ── BEANBAGS (in front of TV) ─────────────────────────────────────────
+  [[r.x + 170, r.y + 84, '#e74c3c'], [r.x + 212, r.y + 92, '#3498db']].forEach(([bx, by, bc]) => {
+    ctx.fillStyle = bc;
+    ctx.fillRect(bx - 14, by - 8, 28, 16); ctx.fillRect(bx - 10, by - 12, 20, 6);
+    ctx.fillRect(bx - 10, by + 8, 20, 6);
+    ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.fillRect(bx - 8, by - 10, 8, 3);
+  });
+
+  // ── ARCADE MACHINE (right side, compact) ─────────────────────────────
+  const ax = r.x + 294, ay = r.y + 8;
+  ctx.fillStyle = '#1a1a2e'; ctx.fillRect(ax, ay, 38, 74);
+  ctx.fillStyle = '#111122'; ctx.fillRect(ax + 2, ay + 2, 34, 70);
+  ctx.fillStyle = '#000';    ctx.fillRect(ax + 4, ay + 6, 30, 22); // screen bezel
+  ctx.fillStyle = '#002244'; ctx.fillRect(ax + 5, ay + 7, 28, 20);
   const scanOff = (frame >> 2) % 4;
   ctx.fillStyle = 'rgba(80,200,255,0.25)';
-  for (let sl = 0; sl < 30; sl += 4) ctx.fillRect(ax+7, ay+9+((sl+scanOff)%30), 40, 2);
-  // screen content (pixel art face)
+  for (let sl = 0; sl < 20; sl += 4) ctx.fillRect(ax + 5, ay + 7 + ((sl + scanOff) % 20), 28, 2);
   ctx.fillStyle = '#00ffcc';
-  ctx.fillRect(ax + 16, ay + 16, 6, 6);
-  ctx.fillRect(ax + 26, ay + 16, 6, 6);
-  ctx.fillRect(ax + 12, ay + 28, 4, 2);
-  ctx.fillRect(ax + 28, ay + 28, 4, 2);
-  ctx.fillRect(ax + 16, ay + 28, 12, 2);
-  // control panel
-  ctx.fillStyle = '#2a2a40'; ctx.fillRect(ax + 4, ay + 44, 46, 26);
-  // joystick
-  ctx.fillStyle = '#888'; ctx.fillRect(ax + 10, ay + 50, 4, 4);
-  ctx.fillStyle = '#333'; ctx.fillRect(ax + 9,  ay + 54, 6, 4);
-  // buttons
-  [[ax+28,ay+48,'#e74c3c'],[ax+36,ay+50,'#f39c12'],[ax+32,ay+56,'#27ae60']].forEach(([bx,by,bc]) => {
-    ctx.fillStyle = bc; ctx.fillRect(bx, by, 5, 5);
+  ctx.fillRect(ax + 9, ay + 11, 4, 4); ctx.fillRect(ax + 17, ay + 11, 4, 4); // eyes
+  ctx.fillRect(ax + 7, ay + 19, 22, 2); // smile
+  ctx.fillStyle = '#2a2a40'; ctx.fillRect(ax + 3, ay + 30, 32, 18); // control panel
+  ctx.fillStyle = '#888'; ctx.fillRect(ax + 7, ay + 35, 3, 3); // joystick
+  ctx.fillStyle = '#333'; ctx.fillRect(ax + 6, ay + 38, 5, 3);
+  [[ax+18,ay+33,'#e74c3c'],[ax+24,ay+35,'#f39c12'],[ax+21,ay+40,'#27ae60']].forEach(([bx,by,bc]) => {
+    ctx.fillStyle = bc; ctx.fillRect(bx, by, 4, 4);
     ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fillRect(bx, by, 2, 2);
   });
-  // coin slot
-  ctx.fillStyle = '#555'; ctx.fillRect(ax + 20, ay + 68, 14, 3);
-  // base
-  ctx.fillStyle = '#222'; ctx.fillRect(ax - 4, ay + 108, 62, 8);
-
-  // ── TV + CONSOLE SETUP (pixel art) ───────────────────────────────────
-  const tvx = r.x + r.w - 148, tvy = r.y + 18;
-  // TV bezel
-  ctx.fillStyle = '#111'; ctx.fillRect(tvx, tvy, 128, 82);
-  ctx.fillStyle = '#0a0a1e'; ctx.fillRect(tvx + 4, tvy + 4, 120, 70);
-  // screen glow (blue)
-  ctx.fillStyle = '#061428'; ctx.fillRect(tvx + 4, tvy + 4, 120, 70);
-  ctx.fillStyle = 'rgba(60,120,220,0.35)'; ctx.fillRect(tvx + 4, tvy + 4, 120, 70);
-  // GAMES ROOM text on screen
-  ctx.fillStyle = '#7eb8ff';
-  ctx.font = 'bold 10px "Courier New", monospace'; ctx.textAlign = 'center';
-  ctx.fillText('GAMES ROOM', tvx + 64, tvy + 44);
-  // pixel scanlines
-  ctx.fillStyle = 'rgba(0,0,0,0.2)';
-  for (let sl = 0; sl < 70; sl += 3) ctx.fillRect(tvx + 4, tvy + 4 + sl, 120, 1);
-  // TV stand
-  ctx.fillStyle = '#333'; ctx.fillRect(tvx + 56, tvy + 82, 16, 8);
-  ctx.fillStyle = '#222'; ctx.fillRect(tvx + 44, tvy + 88, 40, 4);
-  // console (pixel art box under TV)
-  ctx.fillStyle = '#1a1a1a'; ctx.fillRect(tvx + 20, tvy + 96, 88, 16);
-  ctx.fillStyle = '#2d2d2d'; ctx.fillRect(tvx + 22, tvy + 98, 60, 12);
-  // power LED
-  ctx.fillStyle = '#00ff44'; ctx.fillRect(tvx + 86, tvy + 103, 4, 4);
-  // disc slot
-  ctx.fillStyle = '#111'; ctx.fillRect(tvx + 36, tvy + 103, 28, 3);
-  // controllers (pixel art small)
-  ctx.fillStyle = '#222'; ctx.fillRect(tvx + 24, tvy + 116, 18, 10);
-  ctx.fillStyle = '#333'; ctx.fillRect(tvx + 26, tvy + 118, 14, 6);
-  ctx.fillStyle = '#e74c3c'; ctx.fillRect(tvx + 34, tvy + 119, 3, 3);
-  ctx.fillStyle = '#222'; ctx.fillRect(tvx + 88, tvy + 116, 18, 10);
-
-  // ── BEANBAGS (pixel art) ─────────────────────────────────────────────
-  [[r.x+250,r.y+90,'#e74c3c'],[r.x+310,r.y+108,'#3498db']].forEach(([bx,by,bc]) => {
-    ctx.fillStyle = bc;
-    ctx.fillRect(bx - 18, by - 10, 36, 20);
-    ctx.fillRect(bx - 14, by - 14, 28, 8);
-    ctx.fillRect(bx - 14, by + 10, 28, 8);
-    ctx.fillStyle = 'rgba(255,255,255,0.2)';
-    ctx.fillRect(bx - 10, by - 12, 10, 4); // highlight
-  });
+  ctx.fillStyle = '#555'; ctx.fillRect(ax + 13, ay + 50, 12, 2); // coin slot
+  ctx.fillStyle = '#222'; ctx.fillRect(ax - 2, ay + 74, 42, 5); // base
 }
 
 function drawWhiteboardRoom(ctx, r) {
@@ -2504,10 +2685,10 @@ function drawRoomDetails(ctx) {
     ctx.fillRect(lx - 4, ly + 3, 4, 3);  // shine
 
     // ── WINDOWS (on outer walls only) ────────────────────────────────
-    const onTopEdge    = r.y <= ROW_TOP[0] + 2;
-    const onBottomEdge = r.y + r.h >= ROW_BOT[1] - 2;
-    const onLeftEdge   = r.x <= COL[0] + 2;
-    const onRightEdge  = r.x + r.w >= COL[5] - 2;
+    const onTopEdge    = r.y <= BY1 + 2;
+    const onBottomEdge = r.y + r.h >= BY2 - 2;
+    const onLeftEdge   = r.x <= BX1 + 2;
+    const onRightEdge  = r.x + r.w >= BX2 - 2;
 
     function drawWindow(wx, wy) {
       // sill (warm wood)
@@ -2566,18 +2747,15 @@ function drawRoomDetails(ctx) {
     }
   }
 
-  const OFF_CX2 = COL.slice(0,5).map((x,i) => x + (COL[i+1]-COL[i])/2);
-  OFF_CX2.forEach(cx2 => {
-    drawDoorFrame(cx2, ROW_TOP[1], true);
-    drawDoorFrame(cx2, ROW_MID[0], true);
-    drawDoorFrame(cx2, ROW_MID[1], true);
-  });
-  drawDoorFrame(54 + 245, ROW_BOT[0], true);
-  drawDoorFrame(544 + 300, ROW_BOT[0], true);
-  for (let i = 1; i < 5; i++) {
-    drawDoorFrame(COL[i], (ROW_TOP[0] + ROW_TOP[1]) / 2, false);
-    drawDoorFrame(COL[i], (ROW_MID[0] + ROW_MID[1]) / 2, false);
-  }
+  // Hallway 1 top wall doors (y=280): team HQ → hallway 1
+  [270, 600, 930].forEach(dx => drawDoorFrame(dx, HALL1_Y1, true));
+  // Hallway 1 bottom wall doors (y=340): offices + meeting room
+  [BX1+OFF_W/2, BX1+OFF_W+OFF_W/2, BX1+OFF_W*2+OFF_W/2, BX1+OFF_W*3+OFF_W/2].forEach(dx => drawDoorFrame(dx, HALL1_Y2, true));
+  drawDoorFrame(PRIV_X2 + (BX2 - PRIV_X2) / 2, HALL1_Y2, true); // meeting room top
+  // Meeting room south wall door (y=580)
+  drawDoorFrame(PRIV_X2 + (BX2 - PRIV_X2) / 2, MID_Y2, true);
+  // Hallway 2 bottom wall doors (y=640): bottom rooms
+  [260, 615, 955].forEach(dx => drawDoorFrame(dx, HALL2_Y2, true));
 
   // ── HALLWAY PLANTS ────────────────────────────────────────────────────
   function drawHallPlant(hx, hy) {
@@ -2588,10 +2766,9 @@ function drawRoomDetails(ctx) {
     ctx.fillStyle = '#27ae60'; ctx.fillRect(hx - 2, hy - 8,  6,  6);
   }
   // scatter a few plants along the hallways
-  [[120, (HALL1[0]+HALL1[1])/2], [500, (HALL1[0]+HALL1[1])/2],
-   [850, (HALL1[0]+HALL1[1])/2], [1060,(HALL1[0]+HALL1[1])/2],
-   [120, (HALL2[0]+HALL2[1])/2], [500, (HALL2[0]+HALL2[1])/2],
-   [850, (HALL2[0]+HALL2[1])/2], [1060,(HALL2[0]+HALL2[1])/2],
+  const hall1cy = (HALL1_Y1 + HALL1_Y2) / 2, hall2cy = (HALL2_Y1 + HALL2_Y2) / 2;
+  [[120,hall1cy],[500,hall1cy],[850,hall1cy],[1060,hall1cy],
+   [120,hall2cy],[500,hall2cy],[850,hall2cy],[1060,hall2cy],
   ].forEach(([hx, hy]) => drawHallPlant(hx, hy));
 }
 
@@ -2617,8 +2794,8 @@ function drawDoorLabels(ctx) {
     const oData = officeData[r.id];
     if (!oData) return;
     const doorX = r.x + r.w / 2;
-    // top-row offices have y < 300, door at ROW_TOP[1]=252; mid-row door at ROW_MID[1]=538
-    const doorY = r.y < 300 ? ROW_TOP[1] : ROW_MID[1];
+    // all 4 offices open onto Hallway 1 at y=340
+    const doorY = HALL1_Y2;
     const labelY = doorY + 16;
     const name = oData.owner_name;
     const tw = ctx.measureText(name).width;
@@ -2844,9 +3021,12 @@ function drawWorld(ctx) {
     }
   }
 
+  // ── OUTDOOR AREA ──────────────────────────────────────────────────────────
+  drawOutdoorArea(ctx);
+
   // ── HALLWAY FLOORS (grey tile) ────────────────────────────────────────────
-  drawTileFloor(ctx, 58, HALL1[0]+WT/2, WW-116, HALL1[1]-HALL1[0]-WT, '#c8c2b4', '#bdb8aa', 20);
-  drawTileFloor(ctx, 58, HALL2[0]+WT/2, WW-116, HALL2[1]-HALL2[0]-WT, '#c8c2b4', '#bdb8aa', 20);
+  drawTileFloor(ctx, BX1+WT/2, HALL1_Y1+WT/2, BX2-BX1-WT, HALL1_Y2-HALL1_Y1-WT, '#c8c2b4', '#bdb8aa', 20);
+  drawTileFloor(ctx, BX1+WT/2, HALL2_Y1+WT/2, BX2-BX1-WT, HALL2_Y2-HALL2_Y1-WT, '#c8c2b4', '#bdb8aa', 20);
 
   // ── ROOMS ────────────────────────────────────────────────────────────────
   ROOMS.forEach(r => {
@@ -2868,6 +3048,8 @@ function drawWorld(ctx) {
     ctx.textAlign = 'center';
     ctx.fillText(r.name, r.x + r.w/2, r.y + WT/2 + 16);
 
+    if (r.type === 'team')       drawTeamArea(ctx, r);
+    if (r.type === 'meeting')    drawMeetingRoom(ctx, r);
     if (r.type === 'office')     drawOfficeFurniture(ctx, r, oData?.desk_color);
     if (r.type === 'lunch')      drawLunchFurniture(ctx, r);
     if (r.type === 'games')      drawGamesFurniture(ctx, r);
@@ -2938,8 +3120,7 @@ canvas.addEventListener('click', e => {
     openAnnouncePanel();
   }
 });
-const OFF_CX_START = COL.slice(0,5).map((x,i) => x + (COL[i+1]-COL[i])/2);
-let player    = { x: OFF_CX_START[0], y: ROW_TOP[0] + 100 };
+let player    = { x: 600, y: 170 };
 let playerCfg = { name: 'Player', skin: '#FDBCB4', outfit: '#4f46e5' };
 let keys = {}, currentRoom = '', frame = 0, isMoving = false, gameRunning = false;
 
