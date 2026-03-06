@@ -2248,8 +2248,9 @@ vSeg(BY1, HALL1_Y1, MEET_X1);
 const OFF_DOORS_A = [0,1,2,3,4].map(i => BX1 + i*OFF_W + OFF_W/2);
 hWall(BX1, BX2, HALL1_Y2, OFF_DOORS_A);
 
-// y=490: solid divider between office row A and row B (no door, full width)
-hSeg(BX1, BX2, OFF_ROW_B);
+// y=490: divider between office row A and row B — doors at centre of each column so players can traverse
+const OFF_DOORS_AB = [0,1,2,3,4].map(i => BX1 + i*OFF_W + OFF_W/2);
+hWall(BX1, BX2, OFF_ROW_B, OFF_DOORS_AB);
 
 // y=620: offices bottom / hallway 2 — 5 row B office doors (south wall of each office)
 const OFF_DOORS_B = [0,1,2,3,4].map(i => BX1 + i*OFF_W + OFF_W/2);
