@@ -898,8 +898,11 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
 </div>
 
 <div id="room-tag" style="display:none">Hallway<span id="vibe-badge" style="display:none"></span></div>
-<div id="hint" style="display:none">⬆ ⬇ ⬅ ➡ Move &nbsp;·&nbsp; W = Wave 👋 &nbsp;·&nbsp; R = React 💬 &nbsp;·&nbsp; E = Interact / Sit 💺 &nbsp;·&nbsp; Space = Sticky note</div>
-<div id="version-tag">v4.7 — 6 Mar 2026</div>
+<div id="hint" style="display:none">⬆ ⬇ ⬅ ➡ / WASD = Move &nbsp;·&nbsp; F = Wave 👋 &nbsp;·&nbsp; R = React 💬 &nbsp;·&nbsp; E = Interact / Sit / Stand 💺 &nbsp;·&nbsp; Space = Sticky note</div>
+<div id="sitting-hud" style="display:none;position:fixed;bottom:50px;left:50%;transform:translateX(-50%);background:rgba(15,15,30,0.92);border:1px solid rgba(99,102,241,0.5);border-radius:10px;padding:8px 20px;color:#e2d9f3;font-size:13px;font-weight:600;text-align:center;z-index:150">
+  💺 Sitting &nbsp;·&nbsp; <span id="sitting-timer">⏱ 0:00</span> &nbsp;·&nbsp; <span style="color:#a5b4fc">Press E to stand up</span>
+</div>
+<div id="version-tag">v4.8 — 6 Mar 2026</div>
 <div id="nearby-badge"></div>
 <button id="discord-btn" onclick="openDiscord()">🎙️ Join Voice Chat</button>
 <button id="claim-btn" onclick="claimCurrentOffice()">🏠 Claim This Office</button>
@@ -3392,13 +3395,22 @@ function sendReaction(emoji) {
 // ══════════════════════════════════════════════
 // SITTING MECHANIC 💺
 // ══════════════════════════════════════════════
+let sittingStartTime = null;
+
 function sitDown(deskId) {
   isSitting = true; sittingAt = deskId;
+  sittingStartTime = Date.now();
   updateSittingAt(deskId);
 }
 
 function standUp() {
-  isSitting = false; sittingAt = null;
+  // Award 1 pt per 5 minutes of focused desk time
+  if (sittingStartTime) {
+    const mins = (Date.now() - sittingStartTime) / 60000;
+    const pts = Math.floor(mins / 5);
+    if (pts > 0) awardPoints(pts, 'desk_focus_time');
+  }
+  isSitting = false; sittingAt = null; sittingStartTime = null;
   updateSittingAt(null);
 }
 
@@ -4458,6 +4470,22 @@ function drawRoomDetails(ctx) {
     }
   }
 
+  // Top outer wall — go-kart exit door at x=900
+  drawDoorFrame(900, BY1, true);
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,215,0,0.9)';
+  ctx.font = 'bold 9px Segoe UI'; ctx.textAlign = 'center';
+  const exitLbl = '🚪 Exit to Track';
+  const elw = ctx.measureText(exitLbl).width + 10;
+  rrect(ctx, 900 - elw/2, BY1 + WT + 4, elw, 13, 4); ctx.fill();
+  ctx.fillStyle = '#1a1a1a'; ctx.fillText(exitLbl, 900, BY1 + WT + 14);
+  // Track label above the building exterior
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  rrect(ctx, 840, BY1 - 22, 120, 14, 4); ctx.fill();
+  ctx.fillStyle = '#FFD700'; ctx.font = 'bold 8px Segoe UI';
+  ctx.fillText('🏎️ Go Kart Track', 900, BY1 - 11);
+  ctx.restore();
+
   // Hallway 1 top (y=300): team HQ doors + meeting room door
   [280, 700, 1120].forEach(dx => drawDoorFrame(dx, HALL1_Y1, true));
   drawDoorFrame(MEET_X1 + (BX2-MEET_X1)/2, HALL1_Y1, true);
@@ -4549,6 +4577,71 @@ function drawDoorLabels(ctx) {
 
 function drawChar(ctx, x, y, skin, outfit, name, status, isPlayer=false, isMoving=false, mood=null, hair='#2d1505') {
   ctx.imageSmoothingEnabled = false;
+
+  // === SITTING POSE (compact, tucked legs) ===
+  const sitting = isPlayer && isSitting;
+  if (sitting) {
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(x - 12, y + 18, 24, 4);
+    // Legs tucked forward (horizontal)
+    ctx.fillStyle = '#1e3a8a';
+    ctx.fillRect(x - 10, y + 10, 10, 6);  // left leg
+    ctx.fillRect(x,      y + 10, 10, 6);  // right leg
+    // Shoes
+    ctx.fillStyle = '#111';
+    ctx.fillRect(x - 10, y + 14, 8, 4);
+    ctx.fillRect(x + 2,  y + 14, 8, 4);
+    // Body (slightly lower)
+    ctx.fillStyle = outfit; ctx.fillRect(x - 8, y - 2, 16, 13);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(x - 2, y - 2, 4, 4);
+    ctx.fillStyle = 'rgba(0,0,0,0.10)'; ctx.fillRect(x + 4, y - 2, 4, 13);
+    // Arms resting
+    ctx.fillStyle = outfit;
+    ctx.fillRect(x - 12, y, 4, 8); ctx.fillRect(x + 8, y, 4, 8);
+    ctx.fillStyle = skin;
+    ctx.fillRect(x - 12, y + 7, 4, 4); ctx.fillRect(x + 8, y + 7, 4, 4);
+    // Neck + head (same as standing)
+    ctx.fillStyle = skin; ctx.fillRect(x - 2, y - 6, 4, 5);
+    ctx.fillStyle = skin; ctx.fillRect(x - 7, y - 20, 14, 14);
+    ctx.fillRect(x - 9, y - 16, 2, 4); ctx.fillRect(x + 7, y - 16, 2, 4);
+    ctx.fillStyle = hair || '#2d1505';
+    ctx.fillRect(x - 7, y - 22, 14, 5);
+    ctx.fillRect(x - 9, y - 20, 3, 6); ctx.fillRect(x + 6, y - 20, 3, 6);
+    ctx.fillStyle = '#fff'; ctx.fillRect(x - 5, y - 16, 4, 3); ctx.fillRect(x + 1, y - 16, 4, 3);
+    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(x - 4, y - 16, 2, 3); ctx.fillRect(x + 2, y - 16, 2, 3);
+    ctx.fillStyle = '#fff'; ctx.fillRect(x - 4, y - 16, 1, 1); ctx.fillRect(x + 2, y - 16, 1, 1);
+    ctx.fillStyle = 'rgba(0,0,0,0.13)'; ctx.fillRect(x - 1, y - 12, 2, 2);
+    ctx.fillStyle = '#a05858'; ctx.fillRect(x - 3, y - 9, 6, 2);
+    // Name tag (with sitting timer below)
+    ctx.font = `bold ${isPlayer ? 12 : 11}px "Courier New",monospace`; ctx.textAlign = 'center';
+    const tw2 = ctx.measureText(name).width;
+    const tgW = tw2 + 22, tgH = 16;
+    const tgX = x - tgW/2, tgY = y - 40;
+    ctx.fillStyle = 'rgba(79,70,229,0.92)';
+    ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=6; ctx.shadowOffsetX=1; ctx.shadowOffsetY=2;
+    rrect(ctx, tgX, tgY, tgW, tgH, 5); ctx.fill();
+    ctx.shadowBlur=0; ctx.shadowOffsetX=0; ctx.shadowOffsetY=0;
+    ctx.fillStyle='#fff'; ctx.fillText(name, x, tgY+11);
+    // Status dot
+    ctx.fillStyle = STATUS[status]?.color || '#22c55e';
+    ctx.fillRect(tgX+tgW-10, tgY+tgH/2-3, 6, 6);
+    // Sitting duration below name tag
+    if (sittingStartTime) {
+      const el = Math.floor((Date.now()-sittingStartTime)/1000);
+      const sm = Math.floor(el/60), ss = el%60;
+      ctx.font = '9px "Courier New",monospace'; ctx.textAlign='center';
+      ctx.fillStyle='rgba(165,180,252,0.9)';
+      ctx.fillText(`⏱ ${sm}:${ss.toString().padStart(2,'0')}`, x, tgY+tgH+10);
+    }
+    if (mood && MOOD_EMOJI[mood]) {
+      ctx.fillStyle='rgba(255,255,255,0.85)';
+      ctx.beginPath(); ctx.arc(x, tgY-8, 9, 0, Math.PI*2); ctx.fill();
+      ctx.font='13px serif'; ctx.textAlign='center';
+      ctx.fillText(MOOD_EMOJI[mood], x, tgY-4);
+    }
+    return;
+  }
+
   const walkPhase = isMoving ? Math.floor(frame / 5) % 4 : 0;
   const wf = [0, 3, 0, -3][walkPhase]; // 4-frame cycle: neutral, left forward, neutral, right forward
   const armSwing = [0, -2, 0, 2][walkPhase];
@@ -5126,8 +5219,8 @@ window.addEventListener('keydown', e => {
       sitDown('team:desk'); return;
     }
   }
-  // W = wave at nearest player
-  if ((e.key === 'w' || e.key === 'W') && tag !== 'INPUT' && tag !== 'TEXTAREA' && gameRunning && !inKart) {
+  // F = wave at nearest player (was W — changed to avoid WASD conflict)
+  if ((e.key === 'f' || e.key === 'F') && tag !== 'INPUT' && tag !== 'TEXTAREA' && gameRunning && !inKart && !isMoving) {
     sendWave();
   }
   // R = toggle emoji reaction picker
@@ -5213,8 +5306,7 @@ function loop() {
   if (!gameOverlayOpen) {
     if (keys['ArrowLeft']  || keys['a']) nx -= curSpeed;
     if (keys['ArrowRight'] || keys['d']) nx += curSpeed;
-    // W key moves up only when NOT in kart (kart uses arrow keys; W = wave)
-    if (keys['ArrowUp']    || (!inKart && keys['w'])) ny -= curSpeed;
+    if (keys['ArrowUp']    || keys['w'] || keys['W']) ny -= curSpeed;
     if (keys['ArrowDown']  || keys['s']) ny += curSpeed;
   }
 
@@ -5257,6 +5349,17 @@ function loop() {
   }
 
   if (frame % 30 === 0) updateHUD();
+
+  // Sitting HUD — show timer while seated
+  const sHud = document.getElementById('sitting-hud');
+  if (sHud) {
+    sHud.style.display = isSitting ? 'block' : 'none';
+    if (isSitting && sittingStartTime) {
+      const elapsed = Math.floor((Date.now() - sittingStartTime) / 1000);
+      const m = Math.floor(elapsed / 60), s = elapsed % 60;
+      document.getElementById('sitting-timer').textContent = `⏱ ${m}:${s.toString().padStart(2,'0')}`;
+    }
+  }
 
   updatePets();
 
