@@ -883,7 +883,7 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
 
 <div id="room-tag" style="display:none">Hallway<span id="vibe-badge" style="display:none"></span></div>
 <div id="hint" style="display:none">⬆ ⬇ ⬅ ➡ Move &nbsp;·&nbsp; W = Wave 👋 &nbsp;·&nbsp; R = React 💬 &nbsp;·&nbsp; E = Interact / Sit 💺 &nbsp;·&nbsp; Space = Sticky note</div>
-<div id="version-tag">v4.2 — 6 Mar 2026</div>
+<div id="version-tag">v4.3 — 6 Mar 2026</div>
 <div id="nearby-badge"></div>
 <button id="discord-btn" onclick="openDiscord()">🎙️ Join Voice Chat</button>
 <button id="claim-btn" onclick="claimCurrentOffice()">🏠 Claim This Office</button>
@@ -934,6 +934,26 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
 </div>
 <!-- KART MODE HINT -->
 <div id="kart-hint">🏎️ GO KART MODE — Arrow keys to drive · E to dismount</div>
+
+<!-- MUSIC ROOM PANEL -->
+<div id="music-panel" style="display:none;position:fixed;inset:0;background:rgba(5,2,15,0.88);z-index:300;align-items:center;justify-content:center;flex-direction:column">
+  <div id="music-panel-inner" style="background:#110820;border:2px solid #7c3aed;border-radius:14px;padding:24px 28px;width:540px;max-width:95vw;display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h2 style="color:#a78bfa;margin:0;font-size:17px">🎵 Music Room — Now Playing</h2>
+      <button onclick="closeMusicPanel()" style="background:none;border:none;color:#a78bfa;font-size:20px;cursor:pointer;line-height:1">✕</button>
+    </div>
+    <div id="music-yt-player" style="display:none;border-radius:8px;overflow:hidden;background:#000;width:100%;aspect-ratio:16/9"></div>
+    <p id="music-no-video" style="color:#6b5a8a;text-align:center;margin:0;font-size:13px">No video set — paste a YouTube URL below.</p>
+    <div style="display:flex;gap:8px">
+      <input id="music-url-input" type="text" placeholder="Paste YouTube URL or playlist link…"
+        style="flex:1;background:#1e0b38;border:1px solid #7c3aed;color:#e2d9f3;border-radius:6px;padding:8px 10px;font-size:13px;outline:none"
+        onkeydown="if(event.key==='Enter') submitMusicUrl()">
+      <button onclick="submitMusicUrl()" style="background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-weight:600">▶ Play</button>
+      <button onclick="clearMusicUrl()" style="background:#3a1a5e;color:#a78bfa;border:1px solid #7c3aed;border-radius:6px;padding:8px 12px;cursor:pointer">Clear</button>
+    </div>
+    <p style="color:#5a4a7a;font-size:11px;margin:0">Supports youtube.com/watch?v=…, youtu.be/…, and playlist links. Anyone can change the track.</p>
+  </div>
+</div>
 
 <!-- WHITEBOARD OPEN BUTTON -->
 <button id="wb-open-btn" onclick="openWhiteboard()">✏️ Open Whiteboard</button>
@@ -2167,6 +2187,7 @@ async function enterGame() {
   updateClaimUI();
   refreshMoodUI();
   syncInterval = setInterval(resync, 30000);
+  setInterval(loadNowPlaying, 30000);   // reload music URL every 30s so new tracks appear
   if (!gameRunning) { gameRunning = true; loop(); }
 }
 
@@ -2836,21 +2857,27 @@ function drawMusicRoom(ctx, r) {
   ctx.fillStyle = '#ddd'; ctx.fillRect(vx + 52, vy + 24, 2, 4);
 
   // ── NOW PLAYING DISPLAY ───────────────────────────────────────────────
-  const song = nowPlaying;
+  const hasVideo = !!musicYoutubeUrl;
   ctx.fillStyle = 'rgba(10,4,24,0.9)';
   ctx.fillRect(r.x + WT + 4, r.y + r.h - 28, r.w - WT*2 - 8, 20);
-  ctx.fillStyle = song ? '#a78bfa' : '#4a3a6a';
+  ctx.fillStyle = hasVideo ? '#a78bfa' : '#4a3a6a';
   ctx.font = 'bold 9px "Courier New", monospace'; ctx.textAlign = 'center';
-  ctx.fillText(song ? `♪ ${song} ♪` : '[ E ] Set Now Playing', cx, r.y + r.h - 13);
+  ctx.fillText(hasVideo ? '♪ YouTube Playing ♪' : '[ E ] Open Music Player', cx, r.y + r.h - 13);
 
-  // "E to set now playing" prompt when inside room
-  if (player && player.x >= r.x && player.x <= r.x+r.w && player.y >= r.y && player.y <= r.y+r.h) {
+  // "E to open" prompt + floating notes when player is inside
+  const inRoom = player && player.x >= r.x && player.x <= r.x+r.w && player.y >= r.y && player.y <= r.y+r.h;
+  if (inRoom) {
     ctx.fillStyle = 'rgba(124,58,237,0.8)';
     ctx.fillRect(cx - 70, r.y + WT + 68, 140, 16);
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 9px "Courier New", monospace'; ctx.textAlign = 'center';
-    ctx.fillText('[ E ] Change Now Playing', cx, r.y + WT + 80);
+    ctx.fillText('[ E ] Music Player', cx, r.y + WT + 80);
+    // Spawn music notes periodically when a video is loaded
+    if (hasVideo && frame % 18 === 0) spawnMusicNote(r);
   }
+
+  // Draw floating music notes
+  drawMusicNotes(ctx);
 }
 
 // ══════════════════════════════════════════════
@@ -3107,20 +3134,145 @@ async function updateSittingAt(val) {
 }
 
 // ══════════════════════════════════════════════
-// MUSIC ROOM — NOW PLAYING 🎵
+// MUSIC ROOM — YOUTUBE PANEL 🎵
 // ══════════════════════════════════════════════
-async function setNowPlaying(song) {
-  nowPlaying = song;
-  // Find music office row — save to offices table using 'music' as room_id
+let musicYoutubeUrl = '';          // current saved URL
+let musicReloadTimer = null;       // 30-second reload interval
+let musicNotes = [];               // floating note particles
+
+function extractYtId(url) {
+  if (!url) return null;
+  // Standard watch URL
+  let m = url.match(/[?&]v=([A-Za-z0-9_-]{11})/);
+  if (m) return m[1];
+  // Short URL youtu.be/ID
+  m = url.match(/youtu\.be\/([A-Za-z0-9_-]{11})/);
+  if (m) return m[1];
+  // Embed URL
+  m = url.match(/embed\/([A-Za-z0-9_-]{11})/);
+  if (m) return m[1];
+  return null;
+}
+
+function extractYtListId(url) {
+  if (!url) return null;
+  const m = url.match(/[?&]list=([A-Za-z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+
+function buildYtEmbedSrc(url) {
+  const vid  = extractYtId(url);
+  const list = extractYtListId(url);
+  let src = 'https://www.youtube.com/embed/';
+  if (vid)  src += vid;
+  else if (list) src += 'videoseries';
+  else return null;
+  const params = ['autoplay=1', 'rel=0'];
+  if (list) params.push('list=' + list);
+  return src + '?' + params.join('&');
+}
+
+function renderMusicPlayer(url) {
+  const playerDiv = document.getElementById('music-yt-player');
+  const noVideo   = document.getElementById('music-no-video');
+  if (!url) {
+    playerDiv.style.display = 'none';
+    playerDiv.innerHTML = '';
+    noVideo.style.display = 'block';
+    return;
+  }
+  const src = buildYtEmbedSrc(url);
+  if (!src) {
+    playerDiv.style.display = 'none';
+    playerDiv.innerHTML = '';
+    noVideo.style.display = 'block';
+    return;
+  }
+  noVideo.style.display = 'none';
+  playerDiv.style.display = 'block';
+  playerDiv.innerHTML = `<iframe src="${src}" width="100%" height="100%" style="border:none;display:block" allow="autoplay;encrypted-media;fullscreen" allowfullscreen></iframe>`;
+}
+
+function openMusicPanel() {
+  document.getElementById('music-url-input').value = musicYoutubeUrl || '';
+  renderMusicPlayer(musicYoutubeUrl);
+  document.getElementById('music-panel').style.display = 'flex';
+}
+
+function closeMusicPanel() {
+  document.getElementById('music-panel').style.display = 'none';
+}
+
+async function submitMusicUrl() {
+  const raw = document.getElementById('music-url-input').value.trim();
+  musicYoutubeUrl = raw;
+  renderMusicPlayer(raw);
   await sb.from('offices').upsert(
-    { room_id: 'music', now_playing: song },
+    { room_id: 'music', now_playing: raw, youtube_url: raw },
+    { onConflict: 'room_id' }
+  ).catch(() => {});
+  // Also keep nowPlaying for legacy canvas display
+  nowPlaying = raw ? '▶ YouTube' : '';
+}
+
+async function clearMusicUrl() {
+  musicYoutubeUrl = '';
+  nowPlaying = '';
+  renderMusicPlayer('');
+  document.getElementById('music-url-input').value = '';
+  await sb.from('offices').upsert(
+    { room_id: 'music', now_playing: '', youtube_url: '' },
     { onConflict: 'room_id' }
   ).catch(() => {});
 }
 
 async function loadNowPlaying() {
-  const { data } = await sb.from('offices').select('now_playing').eq('room_id', 'music').single();
-  nowPlaying = data?.now_playing || '';
+  const { data } = await sb.from('offices').select('now_playing,youtube_url').eq('room_id', 'music').single();
+  musicYoutubeUrl = data?.youtube_url || data?.now_playing || '';
+  nowPlaying = musicYoutubeUrl ? '▶ YouTube' : '';
+}
+
+// Legacy alias kept for any old call sites
+async function setNowPlaying(song) {
+  nowPlaying = song;
+  await sb.from('offices').upsert({ room_id: 'music', now_playing: song }, { onConflict: 'room_id' }).catch(() => {});
+}
+
+// Spawn a floating music note from the vinyl player
+function spawnMusicNote(r) {
+  const vx = r.x + r.w - 90;  // roughly centre of vinyl player
+  const vy = r.y + 24;
+  musicNotes.push({
+    x: vx + Math.random() * 20 - 10,
+    y: vy,
+    char: Math.random() < 0.5 ? '♪' : '♫',
+    alpha: 1,
+    vy: -(0.4 + Math.random() * 0.4),
+    vx: (Math.random() - 0.5) * 0.5,
+    life: 120 + Math.floor(Math.random() * 60),
+  });
+}
+
+function updateMusicNotes() {
+  for (const n of musicNotes) {
+    n.x += n.vx; n.y += n.vy;
+    n.life--;
+    n.alpha = n.life / 150;
+  }
+  musicNotes = musicNotes.filter(n => n.life > 0);
+}
+
+function drawMusicNotes(ctx) {
+  ctx.save();
+  ctx.font = 'bold 11px serif';
+  ctx.textAlign = 'center';
+  for (const n of musicNotes) {
+    ctx.globalAlpha = Math.max(0, n.alpha);
+    ctx.fillStyle = '#a78bfa';
+    ctx.fillText(n.char, n.x, n.y);
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
 }
 
 // ══════════════════════════════════════════════
@@ -3649,6 +3801,21 @@ function drawOfficeNameplate(ctx, r, ownerName) {
 
 function drawDoorLabels(ctx) {
   ctx.font = 'bold 10px Segoe UI'; ctx.textAlign = 'center';
+
+  // 🎵 Live indicator above Music Room door
+  if (musicYoutubeUrl) {
+    const pulse = Math.sin(frame * 0.12) * 0.3 + 0.7;
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = '#7c3aed';
+    const liveX = MUSIC_DOOR, liveY = HALL2_Y2 - 18;
+    ctx.fillRect(liveX - 24, liveY - 8, 48, 14);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 8px Segoe UI';
+    ctx.fillText('🎵 LIVE', liveX, liveY + 4);
+    ctx.font = 'bold 10px Segoe UI';
+  }
+
   ROOMS.forEach(r => {
     if (r.type !== 'office') return;
     const oData = officeData[r.id];
@@ -4108,12 +4275,11 @@ window.addEventListener('keydown', e => {
       const dx = player.x - dog.x, dy = player.y - dog.y;
       if (dx*dx + dy*dy < 72*72) { showDogMessage(); return; }
     }
-    // Music room — set now playing
+    // Music room — open YouTube music panel
     const musicRoom = ROOMS.find(r => r.type === 'music');
     if (musicRoom && player.x >= musicRoom.x && player.x <= musicRoom.x + musicRoom.w &&
         player.y >= musicRoom.y && player.y <= musicRoom.y + musicRoom.h) {
-      const song = prompt('Now Playing 🎵 (leave blank to clear):', nowPlaying || '');
-      if (song !== null) { setNowPlaying(song.trim()); }
+      openMusicPanel();
       return;
     }
     // Office claiming (if unclaimed) or sitting at desk
@@ -4218,6 +4384,7 @@ function loop() {
   if (!inKart && isOutdoor(player.x, player.y)) mountKart();
 
   updateFloatingEmojis();
+  updateMusicNotes();
 
   if (!blocked(nx, player.y)) player.x = nx;
   if (!blocked(player.x, ny)) player.y = ny;
