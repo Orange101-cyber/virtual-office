@@ -883,7 +883,7 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
 
 <div id="room-tag" style="display:none">Hallway<span id="vibe-badge" style="display:none"></span></div>
 <div id="hint" style="display:none">⬆ ⬇ ⬅ ➡ Move &nbsp;·&nbsp; W = Wave 👋 &nbsp;·&nbsp; R = React 💬 &nbsp;·&nbsp; E = Interact / Sit 💺 &nbsp;·&nbsp; Space = Sticky note</div>
-<div id="version-tag">v4.0 — 6 Mar 2026</div>
+<div id="version-tag">v4.1 — 6 Mar 2026</div>
 <div id="nearby-badge"></div>
 <button id="discord-btn" onclick="openDiscord()">🎙️ Join Voice Chat</button>
 <button id="claim-btn" onclick="claimCurrentOffice()">🏠 Claim This Office</button>
@@ -2165,7 +2165,7 @@ sb.auth.getSession().then(({ data: { session } }) => {
 // GAME ENGINE
 // ══════════════════════════════════════════════
 // ══════════════════════════════════════════════
-// NEW FLOOR PLAN — v4.0 LAYOUT (widescreen 1800×900)
+// NEW FLOOR PLAN — v4.1 LAYOUT (widescreen 1800×900)
 // ══════════════════════════════════════════════
 const WW = 1800, WH = 900, WT = 8, PR = 14, SPEED = 3;
 const DOOR_HALF = 24;
@@ -2176,30 +2176,23 @@ const BX1 = 50, BY1 = 50, BX2 = 1750, BY2 = 850;
 // Zone y-boundaries
 const TEAM_Y2  = 300;               // team HQ bottom / hallway 1 top
 const HALL1_Y1 = 300, HALL1_Y2 = 360;  // hallway 1
-const MID_Y1   = 360;              // offices / lunch top
+const MID_Y1   = 360;              // offices top
 const OFF_ROW_B = 490;             // office row A/B divide
-const MID_Y2   = 620;              // offices / lunch bottom
+const MID_Y2   = 620;              // offices bottom
 const HALL2_Y1 = 620, HALL2_Y2 = 680;  // hallway 2
 const BOT_Y1   = 680;              // bottom section
 
 // Zone x-boundaries
 const MEET_X1  = 1410;             // meeting room left edge (top-right corner)
-const OFF_END  = 850;              // right edge of 5 offices (5×160 + 50)
-const OFF_W    = (OFF_END - BX1) / 5;  // = 160px each
-const GAMES_X2 = 600;              // right edge of games room
-const MUSIC_X2 = 1200;             // right edge of music room
+const OFF_W    = 340;              // 5 offices × 340 = 1700, spanning BX1(50) to BX2(1750)
+const OFF_END  = BX2;              // offices now span full width
+// Bottom 4 rooms equal width
+const BOT_W    = (BX2 - BX1) / 4; // = 425
+const GAMES_X2 = BX1 + BOT_W;     // = 475
+const MUSIC_X2 = BX1 + BOT_W * 2; // = 900
+const LUNCH_X2 = BX1 + BOT_W * 3; // = 1325
 
-const ROOMS = [];
-
-// Top section: Team HQ (wide left) + Meeting Room (top-right corner)
-ROOMS.push({ id:'team', name:'Campaigns You Love HQ',
-  x:BX1, y:BY1, w:MEET_X1-BX1, h:TEAM_Y2-BY1,
-  floor:'#EDF5FF', accent:'#4f46e5', type:'team' });
-ROOMS.push({ id:'meeting', name:'📅 Meeting Room',
-  x:MEET_X1, y:BY1, w:BX2-MEET_X1, h:TEAM_Y2-BY1,
-  floor:'#F0F4FF', accent:'#6366f1', type:'meeting' });
-
-// 10 private offices — 2 rows of 5, each 160×130px
+// 10 private office floor/accent colours
 const OFF_COLORS10 = [
   ['#EFF6FF','#3b82f6'], ['#F0FDF4','#22c55e'],
   ['#FFF7ED','#f97316'], ['#FDF4FF','#a855f7'],
@@ -2208,34 +2201,29 @@ const OFF_COLORS10 = [
   ['#F8F4F0','#92400e'], ['#F0FDF4','#15803d'],
   ['#EEF2FF','#4f46e5'],
 ];
-// Row A: top of middle section, accessed from hallway 1 (south wall doors)
-for (let i = 0; i < 5; i++) {
-  ROOMS.push({ id:`office${i+1}`, name:`Office ${i+1}`,
-    x: BX1 + i * OFF_W, y: MID_Y1, w: OFF_W, h: OFF_ROW_B - MID_Y1,
-    floor: OFF_COLORS10[i][0], accent: OFF_COLORS10[i][1], type:'office' });
-}
-// Row B: bottom of middle section, accessed from hallway 2 (north wall doors)
-for (let i = 0; i < 5; i++) {
-  ROOMS.push({ id:`office${i+6}`, name:`Office ${i+6}`,
-    x: BX1 + i * OFF_W, y: OFF_ROW_B, w: OFF_W, h: MID_Y2 - OFF_ROW_B,
-    floor: OFF_COLORS10[i+5][0], accent: OFF_COLORS10[i+5][1], type:'office' });
-}
 
-// Lunch room (right of offices, full middle height)
-ROOMS.push({ id:'lunch', name:'🍕 Lunch Room',
-  x:OFF_END, y:MID_Y1, w:BX2-OFF_END, h:MID_Y2-MID_Y1,
-  floor:'#FFFDE7', accent:'#F9A825', type:'lunch' });
-
-// Bottom row: Games | Music | Whiteboard
-ROOMS.push({ id:'games', name:'🎮 Games Room',
-  x:BX1, y:BOT_Y1, w:GAMES_X2-BX1, h:BY2-BOT_Y1,
-  floor:'#E8F5E9', accent:'#43A047', type:'games' });
-ROOMS.push({ id:'music', name:'🎵 Music Room',
-  x:GAMES_X2, y:BOT_Y1, w:MUSIC_X2-GAMES_X2, h:BY2-BOT_Y1,
-  floor:'#1a0a2e', accent:'#7c3aed', type:'music' });
-ROOMS.push({ id:'whiteboard', name:'🎨 Whiteboard',
-  x:MUSIC_X2, y:BOT_Y1, w:BX2-MUSIC_X2, h:BY2-BOT_Y1,
-  floor:'#F0F4FF', accent:'#6366f1', type:'whiteboard' });
+const ROOMS = [
+  // Top section
+  { id:'team',      name:'Campaigns You Love HQ', x:BX1,             y:BY1,     w:1360,  h:250, floor:'#EDF5FF', accent:'#4f46e5', type:'team'    },
+  { id:'meeting',   name:'📅 Meeting Room',        x:MEET_X1,         y:BY1,     w:340,   h:250, floor:'#F0F4FF', accent:'#6366f1', type:'meeting' },
+  // Row A offices (y=360..490)
+  { id:'office1',   name:'Office 1',  x:BX1+0*OFF_W, y:MID_Y1,    w:OFF_W, h:130, floor:OFF_COLORS10[0][0], accent:OFF_COLORS10[0][1], type:'office' },
+  { id:'office2',   name:'Office 2',  x:BX1+1*OFF_W, y:MID_Y1,    w:OFF_W, h:130, floor:OFF_COLORS10[1][0], accent:OFF_COLORS10[1][1], type:'office' },
+  { id:'office3',   name:'Office 3',  x:BX1+2*OFF_W, y:MID_Y1,    w:OFF_W, h:130, floor:OFF_COLORS10[2][0], accent:OFF_COLORS10[2][1], type:'office' },
+  { id:'office4',   name:'Office 4',  x:BX1+3*OFF_W, y:MID_Y1,    w:OFF_W, h:130, floor:OFF_COLORS10[3][0], accent:OFF_COLORS10[3][1], type:'office' },
+  { id:'office5',   name:'Office 5',  x:BX1+4*OFF_W, y:MID_Y1,    w:OFF_W, h:130, floor:OFF_COLORS10[4][0], accent:OFF_COLORS10[4][1], type:'office' },
+  // Row B offices (y=490..620)
+  { id:'office6',   name:'Office 6',  x:BX1+0*OFF_W, y:OFF_ROW_B, w:OFF_W, h:130, floor:OFF_COLORS10[5][0], accent:OFF_COLORS10[5][1], type:'office' },
+  { id:'office7',   name:'Office 7',  x:BX1+1*OFF_W, y:OFF_ROW_B, w:OFF_W, h:130, floor:OFF_COLORS10[6][0], accent:OFF_COLORS10[6][1], type:'office' },
+  { id:'office8',   name:'Office 8',  x:BX1+2*OFF_W, y:OFF_ROW_B, w:OFF_W, h:130, floor:OFF_COLORS10[7][0], accent:OFF_COLORS10[7][1], type:'office' },
+  { id:'office9',   name:'Office 9',  x:BX1+3*OFF_W, y:OFF_ROW_B, w:OFF_W, h:130, floor:OFF_COLORS10[8][0], accent:OFF_COLORS10[8][1], type:'office' },
+  { id:'office10',  name:'Office 10', x:BX1+4*OFF_W, y:OFF_ROW_B, w:OFF_W, h:130, floor:OFF_COLORS10[9][0], accent:OFF_COLORS10[9][1], type:'office' },
+  // Bottom 4 rooms
+  { id:'games',     name:'🎮 Games Room', x:BX1,      y:BOT_Y1, w:BOT_W, h:170, floor:'#E8F5E9', accent:'#43A047', type:'games'      },
+  { id:'music',     name:'🎵 Music Room', x:GAMES_X2,  y:BOT_Y1, w:BOT_W, h:170, floor:'#1a0a2e', accent:'#7c3aed', type:'music'      },
+  { id:'lunch',     name:'🍕 Lunch Room', x:MUSIC_X2,  y:BOT_Y1, w:BOT_W, h:170, floor:'#FFFDE7', accent:'#F9A825', type:'lunch'      },
+  { id:'whiteboard',name:'🎨 Whiteboard', x:LUNCH_X2,  y:BOT_Y1, w:BOT_W, h:170, floor:'#F0F4FF', accent:'#6366f1', type:'whiteboard' },
+];
 
 // ── WALLS ──────────────────────────────────────────────────────────────────
 const WALLS = [];
@@ -2256,38 +2244,32 @@ hWall(MEET_X1, BX2, HALL1_Y1, [MEET_X1 + (BX2-MEET_X1)/2]);  // meeting door
 // Vertical divider: team HQ / meeting room
 vSeg(BY1, HALL1_Y1, MEET_X1);
 
-// y=360: hallway 1 / offices + lunch
-// 5 row A office doors (centred in each office top wall)
+// y=360: hallway 1 / offices (full width — 5 row A office doors centred in each office)
 const OFF_DOORS_A = [0,1,2,3,4].map(i => BX1 + i*OFF_W + OFF_W/2);
-hWall(BX1, OFF_END, HALL1_Y2, OFF_DOORS_A);
-// Lunch room door from hallway 1
-hWall(OFF_END, BX2, HALL1_Y2, [OFF_END + (BX2-OFF_END)/2]);
+hWall(BX1, BX2, HALL1_Y2, OFF_DOORS_A);
 
-// y=490: solid divider between office row A and row B (no door)
-hSeg(BX1, OFF_END, OFF_ROW_B);
+// y=490: solid divider between office row A and row B (no door, full width)
+hSeg(BX1, BX2, OFF_ROW_B);
 
-// y=620: offices bottom / hallway 2
-// 5 row B office doors (south wall of each office)
+// y=620: offices bottom / hallway 2 — 5 row B office doors (south wall of each office)
 const OFF_DOORS_B = [0,1,2,3,4].map(i => BX1 + i*OFF_W + OFF_W/2);
-hWall(BX1, OFF_END, MID_Y2, OFF_DOORS_B);
-// Lunch room: solid south wall
-hSeg(OFF_END, BX2, MID_Y2);
+hWall(BX1, BX2, MID_Y2, OFF_DOORS_B);
 
-// y=680: hallway 2 / bottom row (3 doors)
-const GAMES_DOOR = Math.round(BX1 + (GAMES_X2-BX1)/2);       // 325
-const MUSIC_DOOR = Math.round(GAMES_X2 + (MUSIC_X2-GAMES_X2)/2); // 900
-const WB_DOOR    = Math.round(MUSIC_X2 + (BX2-MUSIC_X2)/2);   // 1475
-hWall(BX1, BX2, HALL2_Y2, [GAMES_DOOR, MUSIC_DOOR, WB_DOOR]);
+// y=680: hallway 2 / bottom row — 4 doors (games, music, lunch, whiteboard)
+const GAMES_DOOR = Math.round(BX1 + BOT_W/2);          // 262 (center of games)
+const MUSIC_DOOR = Math.round(BX1 + BOT_W*1.5);         // 687 (center of music)
+const LUNCH_DOOR = Math.round(BX1 + BOT_W*2.5);         // 1112 (center of lunch)
+const WB_DOOR    = Math.round(BX1 + BOT_W*3.5);         // 1537 (center of whiteboard)
+hWall(BX1, BX2, HALL2_Y2, [GAMES_DOOR, MUSIC_DOOR, LUNCH_DOOR, WB_DOOR]);
 
-// Vertical dividers between row A offices
+// Vertical dividers between row A offices (full height of row A)
 [1,2,3,4].forEach(i => vSeg(MID_Y1, OFF_ROW_B, BX1 + i*OFF_W));
-// Vertical dividers between row B offices
+// Vertical dividers between row B offices (full height of row B)
 [1,2,3,4].forEach(i => vSeg(OFF_ROW_B, MID_Y2, BX1 + i*OFF_W));
-// Offices / lunch room divider
-vSeg(MID_Y1, MID_Y2, OFF_END);
-// Bottom row dividers
+// Bottom row dividers (4 rooms, 3 internal dividers)
 vSeg(BOT_Y1, BY2, GAMES_X2);
 vSeg(BOT_Y1, BY2, MUSIC_X2);
+vSeg(BOT_Y1, BY2, LUNCH_X2);
 
 function circleRect(cx,cy,r,rx,ry,rw,rh) { const nx=Math.max(rx,Math.min(cx,rx+rw)),ny=Math.max(ry,Math.min(cy,ry+rh)); const dx=cx-nx,dy=cy-ny; return dx*dx+dy*dy<r*r; }
 function blocked(x,y) {
@@ -3609,15 +3591,14 @@ function drawRoomDetails(ctx) {
   [280, 700, 1120].forEach(dx => drawDoorFrame(dx, HALL1_Y1, true));
   drawDoorFrame(MEET_X1 + (BX2-MEET_X1)/2, HALL1_Y1, true);
 
-  // Hallway 1 bottom (y=360): 5 row A office doors + lunch door
+  // Hallway 1 bottom (y=360): 5 row A office doors (full width, no separate lunch door)
   OFF_DOORS_A.forEach(dx => drawDoorFrame(dx, HALL1_Y2, true));
-  drawDoorFrame(OFF_END + (BX2-OFF_END)/2, HALL1_Y2, true);
 
   // Hallway 2 top (y=620): 5 row B office doors (south walls of offices)
   OFF_DOORS_B.forEach(dx => drawDoorFrame(dx, MID_Y2, true));
 
-  // Hallway 2 bottom (y=680): games, music, whiteboard doors
-  [GAMES_DOOR, MUSIC_DOOR, WB_DOOR].forEach(dx => drawDoorFrame(dx, HALL2_Y2, true));
+  // Hallway 2 bottom (y=680): games, music, lunch, whiteboard doors (4 rooms)
+  [GAMES_DOOR, MUSIC_DOOR, LUNCH_DOOR, WB_DOOR].forEach(dx => drawDoorFrame(dx, HALL2_Y2, true));
 
   // ── HALLWAY PLANTS ────────────────────────────────────────────────────
   function drawHallPlant(hx, hy) {
@@ -4018,7 +3999,7 @@ canvas.addEventListener('dblclick', e => {
   const wy = (e.clientY - rect.top  - offY) / scale;
   handleEditDblClick(wx, wy);
 });
-let player    = { x: 700, y: 200 };
+let player    = { x: 900, y: 330 };
 let playerCfg = { name: 'Player', skin: '#FDBCB4', outfit: '#4f46e5' };
 let keys = {}, currentRoom = '', frame = 0, isMoving = false, gameRunning = false;
 
