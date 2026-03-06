@@ -883,7 +883,7 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
 
 <div id="room-tag" style="display:none">Hallway<span id="vibe-badge" style="display:none"></span></div>
 <div id="hint" style="display:none">⬆ ⬇ ⬅ ➡ Move &nbsp;·&nbsp; W = Wave 👋 &nbsp;·&nbsp; R = React 💬 &nbsp;·&nbsp; E = Interact / Sit 💺 &nbsp;·&nbsp; Space = Sticky note</div>
-<div id="version-tag">v4.1 — 6 Mar 2026</div>
+<div id="version-tag">v4.2 — 6 Mar 2026</div>
 <div id="nearby-badge"></div>
 <button id="discord-btn" onclick="openDiscord()">🎙️ Join Voice Chat</button>
 <button id="claim-btn" onclick="claimCurrentOffice()">🏠 Claim This Office</button>
@@ -948,7 +948,9 @@ body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; overflo
     <input type="range" id="wb-size" min="2" max="40" value="6">
     <span class="wb-label" style="margin-left:8px">Colour</span>
     <div id="wb-colors" style="display:flex;gap:6px;flex-wrap:wrap"></div>
-    <button id="wb-clear-btn" style="margin-left:8px" onclick="wbClear()">🗑️ Clear</button>
+    <button id="wb-save-btn"  style="margin-left:8px" onclick="wbSaveNow()">💾 Save Now</button>
+    <button id="wb-clear-btn" style="margin-left:4px"  onclick="wbClear()">🗑️ Clear Board</button>
+    <span id="wb-saved-indicator" style="margin-left:10px;color:#4ade80;font-size:12px;opacity:0;transition:opacity 0.4s">💾 Saved</span>
     <button id="wb-close-btn" onclick="closeWhiteboard()">✕ Close</button>
   </div>
   <canvas id="wb-canvas"></canvas>
@@ -1545,12 +1547,13 @@ const WB_COLORS = [
   '#22c55e','#3b82f6','#8b5cf6','#ec4899','#6b7280',
   '#92400e','#164e63',
 ];
-let wbTool     = 'pen';
-let wbColor    = '#000000';
-let wbSize     = 6;
-let wbDrawing  = false;
-let wbSaveTimer = null;
-let wbLastX    = 0, wbLastY = 0;
+let wbTool      = 'pen';
+let wbColor     = '#000000';
+let wbSize      = 6;
+let wbDrawing   = false;
+let wbSaveTimer = null;   // debounce (unused but kept for compat)
+let wbAutoInterval = null; // 10-second autosave interval
+let wbLastX     = 0, wbLastY = 0;
 
 function initWhiteboardUI() {
   // Build colour swatches
@@ -1591,12 +1594,16 @@ async function openWhiteboard() {
   // Attach events first (clones canvas), then load draws onto the live element
   attachWbEvents();
   await loadWhiteboardData();
+  // Start 10-second autosave interval
+  clearInterval(wbAutoInterval);
+  wbAutoInterval = setInterval(() => saveWhiteboardData(true), 10000);
 }
 
 function closeWhiteboard() {
   document.getElementById('wb-overlay').style.display = 'none';
-  clearTimeout(wbSaveTimer);
-  saveWhiteboardData(); // final save on close
+  clearInterval(wbAutoInterval);
+  wbAutoInterval = null;
+  saveWhiteboardData(false); // final save on close (no indicator — overlay hidden)
 }
 
 async function loadWhiteboardData() {
@@ -1605,30 +1612,40 @@ async function loadWhiteboardData() {
     const img = new Image();
     img.onload = () => {
       const wbc = document.getElementById('wb-canvas');
-      const ctx2 = wbc.getContext('2d');
-      ctx2.drawImage(img, 0, 0);
+      if (wbc) wbc.getContext('2d').drawImage(img, 0, 0);
     };
     img.src = data.canvas_data;
   }
 }
 
-async function saveWhiteboardData() {
+async function saveWhiteboardData(showIndicator = false) {
   const wbc = document.getElementById('wb-canvas');
   if (!wbc) return;
   const dataUrl = wbc.toDataURL('image/png');
   await sb.from('whiteboard').update({ canvas_data: dataUrl, updated_at: new Date().toISOString() }).eq('id', 1);
+  if (showIndicator) showWbSaved();
 }
 
-function scheduleSave() {
-  clearTimeout(wbSaveTimer);
-  wbSaveTimer = setTimeout(saveWhiteboardData, 10000);
+function showWbSaved() {
+  const el = document.getElementById('wb-saved-indicator');
+  if (!el) return;
+  el.style.opacity = '1';
+  clearTimeout(el._hideTimer);
+  el._hideTimer = setTimeout(() => { el.style.opacity = '0'; }, 2000);
 }
 
-function wbClear() {
-  if (!confirm('Clear the whiteboard for everyone?')) return;
+async function wbSaveNow() {
+  await saveWhiteboardData(true);
+}
+
+// scheduleSave kept for backward compat (no longer used for autosave)
+function scheduleSave() {}
+
+async function wbClear() {
+  if (!confirm('Are you sure you want to clear the whiteboard for everyone?')) return;
   const wbc = document.getElementById('wb-canvas');
   wbc.getContext('2d').clearRect(0, 0, wbc.width, wbc.height);
-  saveWhiteboardData();
+  await saveWhiteboardData(true);
 }
 
 function attachWbEvents() {
