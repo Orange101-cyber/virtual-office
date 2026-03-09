@@ -1,31 +1,97 @@
+/* ── Google Fonts: Syne (headings) + DM Sans (body) ── */
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
+
 @import "tailwindcss";
 
 @theme {
-  /* Dark navy background palette */
+  /* ── Dark navy background palette ── */
   --color-navy-950: #0a0e1a;
   --color-navy-900: #0f1629;
   --color-navy-800: #151d38;
   --color-navy-700: #1e2a4a;
   --color-navy-600: #2a3a5c;
 
-  /* Accent colours */
+  /* ── Accent colours ── */
   --color-accent-blue: #3b82f6;
   --color-accent-green: #22c55e;
   --color-accent-amber: #f59e0b;
   --color-accent-red: #ef4444;
   --color-accent-purple: #a855f7;
+  --color-accent-cyan: #06b6d4;
 
-  /* Card surface */
+  /* ── Card surface ── */
   --color-card: #ffffff;
   --color-card-muted: #f8fafc;
+
+  /* ── Text on cards (dark text on white) ── */
+  --color-card-heading: #0f172a;
+  --color-card-body: #334155;
+  --color-card-subtle: #94a3b8;
+
+  /* ── Text on dark backgrounds ── */
+  --color-text-primary: #f1f5f9;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
+
+  /* ── Sidebar ── */
+  --color-sidebar: #0f1629;
+  --color-sidebar-active: #1e2a4a;
+  --color-sidebar-hover: #151d38;
+
+  /* ── Chart palette (ordered for donut / bar slices) ── */
+  --color-chart-1: #3b82f6;
+  --color-chart-2: #8b5cf6;
+  --color-chart-3: #06b6d4;
+  --color-chart-4: #f59e0b;
+  --color-chart-5: #22c55e;
+  --color-chart-6: #64748b;
+
+  /* ── Font families ── */
+  --font-heading: 'Syne', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
 }
 
+/* ── Base styles ── */
 body {
   margin: 0;
   min-height: 100vh;
   background-color: var(--color-navy-950);
-  color: #e2e8f0;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+}
+
+/* ── Reusable card utility ── */
+.card {
+  background-color: var(--color-card);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  color: var(--color-card-body);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.08),
+    0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+.card-heading {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  color: var(--color-card-heading);
+}
+
+/* ── Scrollbar styling for dark UI ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-navy-600);
+  border-radius: 3px;
 }
