@@ -33,7 +33,7 @@ function Root() {
   }
 
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/virtual-office">
       <Routes>
         <Route
           path="/login"
