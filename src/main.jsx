@@ -3,7 +3,9 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
-import App from './pages/App';
+import AppShell from './components/AppShell';
+import Dashboard from './pages/Dashboard';
+import SEOChecker from './pages/SEOChecker';
 import Login from './pages/Login';
 import './index.css';
 
@@ -22,7 +24,6 @@ function Root() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Loading state
   if (session === undefined) {
     return (
       <div className="min-h-screen bg-[#1a1a1a] flex items-center justify-center">
@@ -40,7 +41,27 @@ function Root() {
         />
         <Route
           path="/"
-          element={session ? <App /> : <Navigate to="/login" replace />}
+          element={
+            session ? (
+              <AppShell>
+                <Dashboard />
+              </AppShell>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+        <Route
+          path="/seo-checker"
+          element={
+            session ? (
+              <AppShell>
+                <SEOChecker />
+              </AppShell>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
         />
       </Routes>
     </BrowserRouter>

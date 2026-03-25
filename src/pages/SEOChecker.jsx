@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import TopBar from '../components/TopBar/TopBar';
 import Sidebar from '../components/Sidebar/Sidebar';
 import ReportArea from '../components/ReportArea/ReportArea';
 import EmptyState from '../components/EmptyState';
@@ -9,9 +8,8 @@ import { useClients } from '../hooks/useClients';
 import { useReport } from '../hooks/useReport';
 import { useAnalysis } from '../hooks/useAnalysis';
 import { MONTHS } from '../data/checklist';
-import { supabase } from '../lib/supabase';
 
-export default function App() {
+export default function SEOChecker() {
   const { clients, addClient, deleteClient } = useClients();
   const {
     report,
@@ -92,7 +90,6 @@ export default function App() {
         meta: fields.meta_description,
       });
 
-      // Apply auto checks
       if (result.checks) {
         const boolChecks = {};
         Object.entries(result.checks).forEach(([id, val]) => {
@@ -101,7 +98,6 @@ export default function App() {
         setAutoChecks(boolChecks);
       }
 
-      // Store findings
       setAiFindings({
         h1_found: result.h1_found,
         word_count: result.word_count,
@@ -115,10 +111,6 @@ export default function App() {
     }
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-  };
-
   // Build breadcrumb
   const client = clients.find((c) => c.id === report?.client_id);
   const breadcrumb = report
@@ -128,46 +120,66 @@ export default function App() {
       : '';
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-[#f8f8f6] text-[#1a1a1a] text-[13px] leading-relaxed">
-      <TopBar
-        clientName={client?.name || (hasReport ? 'Unsaved report' : null)}
-        monthLabel={report ? MONTHS[report.month_index] : null}
-        onSave={() => setShowSaveModal(true)}
-        canSave={hasReport}
-        onLogout={handleLogout}
-      />
-
-      <div className="flex flex-1 overflow-hidden">
-        <Sidebar
-          clients={clients}
-          currentReportId={report?.id}
-          onOpenReport={handleOpenReport}
-          onDeleteReport={handleDeleteReport}
-          onAddClient={() => setShowAddClient(true)}
-          onDeleteClient={handleDeleteClient}
-          onNewReport={handleNewReport}
-        />
-
-        {hasReport ? (
-          <ReportArea
-            fields={fields}
-            onFieldChange={updateField}
-            checklistState={checklistState}
-            onToggle={toggleCheck}
-            aiFindings={aiFindings}
-            gscData={gscData}
-            onGscChange={updateGsc}
-            onAnalyze={handleAnalyze}
-            analyzing={analyzing}
-            statusText={statusText}
-            breadcrumb={breadcrumb}
-            saved={!!report && !dirty}
-          />
-        ) : (
-          <div className="flex-1 overflow-y-auto">
-            <EmptyState onAddClient={() => setShowAddClient(true)} />
+    <div className="flex h-full overflow-hidden">
+      {/* SEO Checker tool bar */}
+      <div className="flex flex-col h-full w-full">
+        <div className="bg-[#1a1a1a] text-white px-4 h-9 flex items-center gap-3 shrink-0 border-t border-[#333]">
+          <div className="text-xs font-semibold text-white/70">SEO Blog Checker</div>
+          <div className="ml-auto flex items-center gap-2.5">
+            <div className="text-[11px] text-white/50">
+              {client ? (
+                <span>
+                  <span className="text-[#F5C518] font-semibold">{client.name}</span>
+                  {report && ` — ${MONTHS[report.month_index]}`}
+                </span>
+              ) : hasReport ? (
+                <span>Unsaved report</span>
+              ) : (
+                <span>No report open</span>
+              )}
+            </div>
+            <button
+              onClick={() => setShowSaveModal(true)}
+              disabled={!hasReport}
+              className="bg-[#F5C518] text-[#1a1a1a] border-none rounded-[5px] px-3.5 py-1 text-[11px] font-bold cursor-pointer hover:bg-[#e6b800] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Save Report
+            </button>
           </div>
-        )}
+        </div>
+
+        <div className="flex flex-1 overflow-hidden">
+          <Sidebar
+            clients={clients}
+            currentReportId={report?.id}
+            onOpenReport={handleOpenReport}
+            onDeleteReport={handleDeleteReport}
+            onAddClient={() => setShowAddClient(true)}
+            onDeleteClient={handleDeleteClient}
+            onNewReport={handleNewReport}
+          />
+
+          {hasReport ? (
+            <ReportArea
+              fields={fields}
+              onFieldChange={updateField}
+              checklistState={checklistState}
+              onToggle={toggleCheck}
+              aiFindings={aiFindings}
+              gscData={gscData}
+              onGscChange={updateGsc}
+              onAnalyze={handleAnalyze}
+              analyzing={analyzing}
+              statusText={statusText}
+              breadcrumb={breadcrumb}
+              saved={!!report && !dirty}
+            />
+          ) : (
+            <div className="flex-1 overflow-y-auto">
+              <EmptyState onAddClient={() => setShowAddClient(true)} />
+            </div>
+          )}
+        </div>
       </div>
 
       <AddClientModal
