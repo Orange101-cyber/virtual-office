@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { useClients } from '../hooks/useClients';
 
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// Clients with dashboards — add more here as you onboard them
+const DASHBOARD_CLIENTS = [
+  { slug: 'invida', name: 'Invida', table: 'monthly_reports' },
+];
 
 function formatMonth(monthStr) {
   if (!monthStr) return '';
@@ -10,12 +14,12 @@ function formatMonth(monthStr) {
   return `${MONTHS_SHORT[parseInt(m, 10) - 1]} ${y}`;
 }
 
-function StatCard({ label, value, prefix = '', suffix = '', trend }) {
+function StatCard({ label, value, prefix = '', trend }) {
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4">
       <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">{label}</div>
       <div className="text-2xl font-bold text-[#1a1a1a]">
-        {prefix}{typeof value === 'number' ? value.toLocaleString() : value}{suffix}
+        {prefix}{typeof value === 'number' ? value.toLocaleString() : value}
       </div>
       {trend !== undefined && trend !== null && (
         <div className={`text-xs mt-1 font-semibold ${trend >= 0 ? 'text-green-600' : 'text-red-500'}`}>
@@ -38,28 +42,56 @@ function LeadSourceBar({ label, pct, color }) {
   );
 }
 
-export default function ClientDashboard() {
-  const { clients } = useClients();
-  const [selectedClient, setSelectedClient] = useState(null);
+// ── Client List View ──
+function ClientList({ onSelect }) {
+  return (
+    <div className="h-full overflow-y-auto">
+      <div className="max-w-4xl mx-auto px-6 py-10">
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-[#1a1a1a] mb-1">Client Dashboard</h1>
+          <p className="text-sm text-gray-400">Select a client to view their performance data.</p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {DASHBOARD_CLIENTS.map((client) => (
+            <button
+              key={client.slug}
+              onClick={() => onSelect(client)}
+              className="bg-white border border-gray-200 rounded-lg p-5 text-left transition-all hover:border-[#F5C518] hover:shadow-md cursor-pointer"
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div className="text-2xl">📊</div>
+                <span className="text-[9px] font-bold uppercase bg-green-50 text-green-600 px-2 py-0.5 rounded-full">
+                  Active
+                </span>
+              </div>
+              <h3 className="text-sm font-semibold text-[#1a1a1a] mb-1">{client.name}</h3>
+              <p className="text-xs text-gray-400">View monthly performance reports</p>
+            </button>
+          ))}
+
+          {/* Placeholder for adding more clients */}
+          <div className="border-2 border-dashed border-gray-200 rounded-lg p-5 flex flex-col items-center justify-center text-center opacity-50">
+            <div className="text-2xl mb-2">+</div>
+            <p className="text-xs text-gray-400">More clients coming soon</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Client Detail View ──
+function ClientDetail({ client, onBack }) {
   const [reports, setReports] = useState([]);
   const [selectedReport, setSelectedReport] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // Auto-select first client
   useEffect(() => {
-    if (clients.length > 0 && !selectedClient) {
-      setSelectedClient(clients[0]);
-    }
-  }, [clients, selectedClient]);
-
-  // Fetch monthly reports when client changes
-  useEffect(() => {
-    if (!selectedClient) return;
-
     const fetchReports = async () => {
       setLoading(true);
       const { data, error } = await supabase
-        .from('monthly_reports')
+        .from(client.table)
         .select('*')
         .order('month', { ascending: false });
 
@@ -71,15 +103,13 @@ export default function ClientDashboard() {
     };
 
     fetchReports();
-  }, [selectedClient]);
+  }, [client]);
 
   const r = selectedReport;
-
-  // Calculate previous month for trends
   const currentIdx = reports.findIndex((rep) => rep.id === r?.id);
   const prev = currentIdx >= 0 && currentIdx < reports.length - 1 ? reports[currentIdx + 1] : null;
 
-  const trend = (current, previous) => {
+  const calcTrend = (current, previous) => {
     if (!previous || previous === 0) return null;
     return Math.round(((current - previous) / previous) * 100);
   };
@@ -91,78 +121,55 @@ export default function ClientDashboard() {
       <div className="max-w-6xl mx-auto px-6 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-xl font-bold text-[#1a1a1a] mb-0.5">Client Dashboard</h1>
-            <p className="text-xs text-gray-400">Performance reporting and analytics</p>
-          </div>
           <div className="flex items-center gap-3">
-            {/* Client selector */}
+            <button
+              onClick={onBack}
+              className="text-gray-400 hover:text-[#1a1a1a] text-sm cursor-pointer bg-transparent border-none"
+            >
+              ← Clients
+            </button>
+            <div>
+              <h1 className="text-xl font-bold text-[#1a1a1a] mb-0.5">{client.name}</h1>
+              <p className="text-xs text-gray-400">Performance reporting and analytics</p>
+            </div>
+          </div>
+
+          {/* Month selector */}
+          {reports.length > 0 && (
             <select
-              value={selectedClient?.id || ''}
+              value={r?.id || ''}
               onChange={(e) => {
-                const c = clients.find((cl) => cl.id === e.target.value);
-                setSelectedClient(c);
+                const rep = reports.find((rp) => rp.id === e.target.value);
+                setSelectedReport(rep);
               }}
               className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#F5C518]"
             >
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+              {reports.map((rep) => (
+                <option key={rep.id} value={rep.id}>{formatMonth(rep.month)}</option>
               ))}
             </select>
-
-            {/* Month selector */}
-            {reports.length > 0 && (
-              <select
-                value={r?.id || ''}
-                onChange={(e) => {
-                  const rep = reports.find((rp) => rp.id === e.target.value);
-                  setSelectedReport(rep);
-                }}
-                className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#F5C518]"
-              >
-                {reports.map((rep) => (
-                  <option key={rep.id} value={rep.id}>{formatMonth(rep.month)}</option>
-                ))}
-              </select>
-            )}
-          </div>
+          )}
         </div>
 
         {loading ? (
           <div className="text-sm text-gray-400 py-20 text-center">Loading...</div>
         ) : !r ? (
           <div className="text-sm text-gray-400 py-20 text-center">
-            No reports found for this client. Add monthly data in Supabase to get started.
+            No reports found. Add monthly data to the <code>{client.table}</code> table in Supabase.
           </div>
         ) : (
           <>
             {/* KPI Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
-              <StatCard
-                label="Web Sessions"
-                value={r.web_sessions}
-                trend={trend(r.web_sessions, prev?.web_sessions)}
-              />
-              <StatCard
-                label="Leads"
-                value={r.leads}
-                trend={trend(r.leads, prev?.leads)}
-              />
-              <StatCard
-                label="Strategy Calls"
-                value={r.strategy_calls}
-                trend={trend(r.strategy_calls, prev?.strategy_calls)}
-              />
-              <StatCard
-                label="Sales"
-                value={r.sales}
-                trend={trend(r.sales, prev?.sales)}
-              />
+              <StatCard label="Web Sessions" value={r.web_sessions} trend={calcTrend(r.web_sessions, prev?.web_sessions)} />
+              <StatCard label="Leads" value={r.leads} trend={calcTrend(r.leads, prev?.leads)} />
+              <StatCard label="Strategy Calls" value={r.strategy_calls} trend={calcTrend(r.strategy_calls, prev?.strategy_calls)} />
+              <StatCard label="Sales" value={r.sales} trend={calcTrend(r.sales, prev?.sales)} />
               <StatCard
                 label="Cost per Lead"
                 value={Number(r.cost_per_lead || 0).toFixed(2)}
                 prefix="$"
-                trend={prev ? -trend(Number(r.cost_per_lead), Number(prev.cost_per_lead)) : null}
+                trend={prev ? -calcTrend(Number(r.cost_per_lead), Number(prev.cost_per_lead)) : null}
               />
             </div>
 
@@ -230,4 +237,15 @@ export default function ClientDashboard() {
       </div>
     </div>
   );
+}
+
+// ── Main Component ──
+export default function ClientDashboard() {
+  const [activeClient, setActiveClient] = useState(null);
+
+  if (activeClient) {
+    return <ClientDetail client={activeClient} onBack={() => setActiveClient(null)} />;
+  }
+
+  return <ClientList onSelect={setActiveClient} />;
 }
