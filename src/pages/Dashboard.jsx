@@ -2,11 +2,20 @@ import { Link } from 'react-router-dom';
 
 const TOOLS = [
   {
+    name: 'Virtual Office',
+    description: 'The CYL pixel-art virtual office. Hang out, collaborate, and vibe with the team.',
+    path: '/office/',
+    icon: '🏢',
+    status: 'live',
+    external: true,
+  },
+  {
     name: 'SEO Blog Checker',
     description: 'Run AI-powered SEO audits on blog posts. 55-item checklist across 10 categories with automated analysis.',
     path: '/seo-checker',
     icon: '🔍',
     status: 'live',
+    external: false,
   },
   {
     name: 'Client Dashboard',
@@ -14,6 +23,7 @@ const TOOLS = [
     path: null,
     icon: '📊',
     status: 'coming',
+    external: false,
   },
   {
     name: 'Content Calendar',
@@ -21,8 +31,11 @@ const TOOLS = [
     path: null,
     icon: '📅',
     status: 'coming',
+    external: false,
   },
 ];
+
+const BASE = '/virtual-office';
 
 export default function Dashboard() {
   return (
@@ -61,12 +74,23 @@ export default function Dashboard() {
               </div>
             );
 
-            return tool.path ? (
+            if (!tool.path) {
+              return <div key={tool.name}>{Card}</div>;
+            }
+
+            // External links (static pages like the office) use <a>, React routes use <Link>
+            if (tool.external) {
+              return (
+                <a key={tool.name} href={`${BASE}${tool.path}`} className="no-underline">
+                  {Card}
+                </a>
+              );
+            }
+
+            return (
               <Link key={tool.name} to={tool.path} className="no-underline">
                 {Card}
               </Link>
-            ) : (
-              <div key={tool.name}>{Card}</div>
             );
           })}
         </div>

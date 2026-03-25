@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard' },
+  { path: '/office/', label: 'Virtual Office', external: true },
   { path: '/seo-checker', label: 'SEO Checker' },
 ];
 
@@ -32,16 +33,22 @@ export default function AppShell({ children }) {
                 ? location.pathname === '/'
                 : location.pathname.startsWith(item.path);
 
-            return (
-              <Link
+            const className = `px-2.5 py-1 rounded text-xs no-underline transition-colors ${
+              isActive
+                ? 'bg-white/10 text-[#F5C518] font-semibold'
+                : 'text-white/50 hover:text-white/80 hover:bg-white/5'
+            }`;
+
+            return item.external ? (
+              <a
                 key={item.path}
-                to={item.path}
-                className={`px-2.5 py-1 rounded text-xs no-underline transition-colors ${
-                  isActive
-                    ? 'bg-white/10 text-[#F5C518] font-semibold'
-                    : 'text-white/50 hover:text-white/80 hover:bg-white/5'
-                }`}
+                href={`/virtual-office${item.path}`}
+                className={className}
               >
+                {item.label}
+              </a>
+            ) : (
+              <Link key={item.path} to={item.path} className={className}>
                 {item.label}
               </Link>
             );
