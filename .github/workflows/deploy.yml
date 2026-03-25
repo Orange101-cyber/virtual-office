@@ -30,6 +30,9 @@ jobs:
       - run: npm ci
 
       - run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://rdrufdlhfrwczqvmvzgr.supabase.co
+          VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkcnVmZGxoZnJ3Y3pxdm12emdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2ODY5OTgsImV4cCI6MjA4ODI2Mjk5OH0.k8EiIOB2HiHxjuPITlIYf5xWGCNWV7EA5Tfe3br7yew
 
       - uses: actions/configure-pages@v4
 
