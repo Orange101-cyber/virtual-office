@@ -6,6 +6,7 @@ import { supabase } from './lib/supabase';
 import AppShell from './components/AppShell';
 import Dashboard from './pages/Dashboard';
 import SEOChecker from './pages/SEOChecker';
+import ClientDashboard from './pages/ClientDashboard';
 import Login from './pages/Login';
 import './index.css';
 
@@ -45,6 +46,18 @@ function Root() {
             session ? (
               <AppShell>
                 <Dashboard />
+              </AppShell>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+        <Route
+          path="/client-dashboard"
+          element={
+            session ? (
+              <AppShell>
+                <ClientDashboard />
               </AppShell>
             ) : (
               <Navigate to="/login" replace />

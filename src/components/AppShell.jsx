@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard' },
   { path: '/office/', label: 'Virtual Office', external: true },
+  { path: '/client-dashboard', label: 'Client Dashboard' },
   { path: '/seo-checker', label: 'SEO Checker' },
 ];
 

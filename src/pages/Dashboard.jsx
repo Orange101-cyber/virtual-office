@@ -20,9 +20,9 @@ const TOOLS = [
   {
     name: 'Client Dashboard',
     description: 'Performance reporting and analytics for CYL clients.',
-    path: null,
+    path: '/client-dashboard',
     icon: '📊',
-    status: 'coming',
+    status: 'live',
     external: false,
   },
   {
