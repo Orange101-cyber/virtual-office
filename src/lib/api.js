@@ -1,5 +1,8 @@
 export async function analyzeArticle({ content, focusKw, secKws, url, title, meta }) {
-  const res = await fetch('/.netlify/functions/analyze', {
+  // Use /api/analyze in dev (Vite plugin), /.netlify/functions/analyze in production (Netlify)
+  const endpoint = import.meta.env.DEV ? '/api/analyze' : '/.netlify/functions/analyze';
+
+  const res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ content, focusKw, secKws, url, title, meta }),
