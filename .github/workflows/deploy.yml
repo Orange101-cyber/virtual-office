@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [master]
+    branches: [master, claude/restore-dashboard-EpU9l]
 
 permissions:
   contents: read
@@ -33,6 +33,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: https://rdrufdlhfrwczqvmvzgr.supabase.co
           VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkcnVmZGxoZnJ3Y3pxdm12emdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2ODY5OTgsImV4cCI6MjA4ODI2Mjk5OH0.k8EiIOB2HiHxjuPITlIYf5xWGCNWV7EA5Tfe3br7yew
+          VITE_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - uses: actions/configure-pages@v4
 
