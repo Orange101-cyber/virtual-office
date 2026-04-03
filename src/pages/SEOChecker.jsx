@@ -173,6 +173,7 @@ export default function SEOChecker() {
               statusText={statusText}
               breadcrumb={breadcrumb}
               saved={!!report && !dirty}
+              reportId={report?.id}
             />
           ) : (
             <div className="flex-1 overflow-y-auto">

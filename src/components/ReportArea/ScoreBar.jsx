@@ -25,7 +25,7 @@ export default function ScoreBar({ checklistState }) {
   const textColorMap = { great: 'text-green-600', ok: 'text-orange-500', poor: 'text-red-500' };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-[7px] p-4 mb-4 flex items-center gap-5">
+    <div className="bg-white border border-gray-200 rounded-[7px] p-4 flex items-center gap-5">
       <div className={`text-[40px] font-bold leading-none min-w-[70px] ${textColorMap[cls]}`}>
         {pct}%
       </div>
