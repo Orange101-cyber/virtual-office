@@ -1,4 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useRef, useCallback } from 'react';
+import { fetchUrlContent } from '../../lib/urlFetcher';
+import { parseDocx } from '../../lib/docParser';
 
 export default function ArticleInputs({
   fields,
@@ -9,12 +11,75 @@ export default function ArticleInputs({
   breadcrumb,
   saved,
 }) {
+  const [fetching, setFetching] = useState(false);
+  const [fetchStatus, setFetchStatus] = useState('');
+  const [dragging, setDragging] = useState(false);
+  const dropRef = useRef(null);
+
   const metaLen = fields.meta_description?.length || 0;
   const metaHintClass = useMemo(() => {
     if (metaLen >= 140 && metaLen <= 160) return 'text-green-600';
     if (metaLen > 160) return 'text-red-500';
     return 'text-gray-400';
   }, [metaLen]);
+
+  const handleFetchUrl = async () => {
+    const url = fields.url?.trim();
+    if (!url) return alert('Enter a URL first.');
+    setFetching(true);
+    setFetchStatus('Fetching page...');
+    try {
+      const data = await fetchUrlContent(url);
+      if (data.article_title) onFieldChange('article_title', data.article_title);
+      if (data.meta_description) onFieldChange('meta_description', data.meta_description);
+      if (data.article_content) onFieldChange('article_content', data.article_content);
+      setFetchStatus('Done! Fields populated.');
+      setTimeout(() => setFetchStatus(''), 3000);
+    } catch (err) {
+      setFetchStatus('');
+      alert('Fetch error: ' + err.message);
+    } finally {
+      setFetching(false);
+    }
+  };
+
+  const handleDocFile = useCallback(async (file) => {
+    if (!file) return;
+    const isDocx = file.name.endsWith('.docx') || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    if (!isDocx) {
+      alert('Please drop a .docx file (Word document).');
+      return;
+    }
+    setFetching(true);
+    setFetchStatus('Parsing Word doc...');
+    try {
+      const parsed = await parseDocx(file);
+      Object.entries(parsed).forEach(([key, value]) => {
+        if (value) onFieldChange(key, value);
+      });
+      const count = Object.values(parsed).filter(Boolean).length;
+      setFetchStatus(`Done! ${count} fields populated from doc.`);
+      setTimeout(() => setFetchStatus(''), 4000);
+    } catch (err) {
+      setFetchStatus('');
+      alert('Error parsing doc: ' + err.message);
+    } finally {
+      setFetching(false);
+    }
+  }, [onFieldChange]);
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files[0];
+    handleDocFile(file);
+  }, [handleDocFile]);
+
+  const handleFileInput = (e) => {
+    const file = e.target.files[0];
+    handleDocFile(file);
+    e.target.value = '';
+  };
 
   return (
     <div className="bg-white border border-gray-200 rounded-[7px] p-4 mb-4">
@@ -30,9 +95,58 @@ export default function ArticleInputs({
         )}
       </div>
 
-      {/* Row 1: URL, Focus KW, Secondary KW */}
+      {/* Import section: drop zone + file picker */}
+      <div
+        ref={dropRef}
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={handleDrop}
+        className={`border-2 border-dashed rounded-lg p-3 mb-3 text-center transition-colors ${
+          dragging
+            ? 'border-[#F5C518] bg-[#F5C518]/5'
+            : 'border-gray-200 bg-[#f8f8f6]'
+        }`}
+      >
+        <div className="text-xs text-gray-500 mb-1">
+          Drag & drop a <strong>.docx</strong> SEO template here to auto-fill all fields
+        </div>
+        <label className="inline-block cursor-pointer">
+          <span className="text-[11px] text-[#F5C518] font-semibold hover:underline">
+            or click to browse
+          </span>
+          <input
+            type="file"
+            accept=".docx"
+            onChange={handleFileInput}
+            className="hidden"
+          />
+        </label>
+      </div>
+
+      {/* Row 1: URL with fetch button, Focus KW, Secondary KW */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 mb-2.5">
-        <Field label="Live URL" value={fields.url} onChange={(v) => onFieldChange('url', v)} placeholder="https://lukeokelly.com.au/..." />
+        <div>
+          <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">
+            Live URL
+          </label>
+          <div className="flex gap-1">
+            <input
+              type="text"
+              value={fields.url}
+              onChange={(e) => onFieldChange('url', e.target.value)}
+              placeholder="https://lukeokelly.com.au/..."
+              className="flex-1 border border-gray-200 rounded-[5px] px-2 py-1.5 text-xs bg-[#f8f8f6] focus:outline-none focus:border-[#F5C518] focus:bg-white"
+            />
+            <button
+              onClick={handleFetchUrl}
+              disabled={fetching || !fields.url?.trim()}
+              className="bg-[#1a1a1a] text-white border-none rounded-[5px] px-2 py-1.5 text-[10px] font-bold cursor-pointer hover:bg-[#333] disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+              title="Fetch page content from URL"
+            >
+              Fetch
+            </button>
+          </div>
+        </div>
         <Field label="Focus Keyphrase" value={fields.focus_keyphrase} onChange={(v) => onFieldChange('focus_keyphrase', v)} placeholder="e.g. real estate west end" />
         <Field label="Secondary Keywords (comma-separated)" value={fields.secondary_keywords} onChange={(v) => onFieldChange('secondary_keywords', v)} placeholder="west end real estate, ..." />
       </div>
@@ -57,9 +171,9 @@ export default function ArticleInputs({
       {/* Content paste */}
       <div className="mb-2.5">
         <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">
-          Paste Article Content{' '}
+          Article Content{' '}
           <span className="font-normal normal-case tracking-normal text-gray-400">
-            — Open article → Ctrl+A → Ctrl+C → paste here
+            — Auto-filled from URL fetch or doc import, or paste manually
           </span>
         </label>
         <textarea
@@ -71,7 +185,7 @@ export default function ArticleInputs({
         />
       </div>
 
-      {/* Analyze button */}
+      {/* Analyze button + status */}
       <div className="flex items-center gap-2.5">
         <button
           onClick={onAnalyze}
@@ -80,10 +194,12 @@ export default function ArticleInputs({
         >
           ▶ Analyze Article
         </button>
-        {analyzing && (
+        {(analyzing || fetchStatus) && (
           <div className="flex items-center gap-2 text-xs text-gray-500">
-            <div className="w-3.5 h-3.5 border-2 border-gray-200 border-t-gray-800 rounded-full animate-spin" />
-            <span>{statusText}</span>
+            {analyzing && (
+              <div className="w-3.5 h-3.5 border-2 border-gray-200 border-t-gray-800 rounded-full animate-spin" />
+            )}
+            <span>{analyzing ? statusText : fetchStatus}</span>
           </div>
         )}
       </div>
