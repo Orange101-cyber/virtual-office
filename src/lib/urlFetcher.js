@@ -1,16 +1,32 @@
 /**
  * Fetch a live URL and extract SEO-relevant fields.
- * Uses allorigins.win as a CORS proxy for browser-based fetching.
+ * Tries multiple CORS proxies as fallbacks.
  */
+
+const PROXIES = [
+  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+];
+
+async function fetchWithProxy(url) {
+  for (let i = 0; i < PROXIES.length; i++) {
+    const proxyUrl = PROXIES[i](url);
+    try {
+      const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) });
+      if (res.ok) {
+        const html = await res.text();
+        if (html && html.length > 100) return html;
+      }
+    } catch {
+      // Try next proxy
+    }
+  }
+  throw new Error('Could not fetch URL. All proxies failed. Try pasting the content manually.');
+}
+
 export async function fetchUrlContent(url) {
-  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-
-  const res = await fetch(proxyUrl);
-  if (!res.ok) throw new Error(`Failed to fetch URL (${res.status})`);
-
-  const data = await res.json();
-  const html = data.contents;
-  if (!html) throw new Error('Empty response from URL');
+  const html = await fetchWithProxy(url);
 
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
