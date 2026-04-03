@@ -174,6 +174,7 @@ export default function SEOChecker() {
               breadcrumb={breadcrumb}
               saved={!!report && !dirty}
               reportId={report?.id}
+              clientId={report?.client_id}
             />
           ) : (
             <div className="flex-1 overflow-y-auto">
