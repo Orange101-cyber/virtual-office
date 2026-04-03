@@ -6,14 +6,19 @@ export default function Cannibalization({
   secondaryKeywords,
   pastKeywords,
   onPastKeywordsChange,
-  clientId,
+  clientId: propClientId,
+  clients = [],
 }) {
+  const [selectedClientId, setSelectedClientId] = useState('');
   const [clientKeywords, setClientKeywords] = useState('');
   const [loadingKw, setLoadingKw] = useState(false);
   const [savingKw, setSavingKw] = useState(false);
   const [savedMsg, setSavedMsg] = useState('');
   const [reworking, setReworking] = useState(new Set());
   const [showClientBank, setShowClientBank] = useState(true);
+
+  // Use prop clientId if available, otherwise use dropdown selection
+  const clientId = propClientId || selectedClientId;
 
   // Load client keyword bank from Supabase
   useEffect(() => {
@@ -146,16 +151,35 @@ export default function Cannibalization({
           </div>
         )}
 
-        {/* Report-level override (if no client selected) */}
+        {/* Client selector when no client is linked to the report */}
+        {!propClientId && clients.length > 0 && (
+          <div className="mb-3">
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">
+              Select client to load keywords
+            </label>
+            <select
+              value={selectedClientId}
+              onChange={(e) => setSelectedClientId(e.target.value)}
+              className="w-full border border-gray-200 rounded-[5px] px-2 py-1.5 text-[11px] bg-[#f8f8f6] focus:outline-none focus:border-[#F5C518]"
+            >
+              <option value="">— Choose a client —</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Manual paste fallback (if no client selected at all) */}
         {!clientId && (
           <div className="mb-2">
             <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">
-              Past article keywords (one per line)
+              Or paste keywords manually (one per line)
             </label>
             <textarea
               value={pastKeywords}
               onChange={(e) => onPastKeywordsChange(e.target.value)}
-              rows={6}
+              rows={4}
               placeholder={'past keyword 1\npast keyword 2\n(paste from your spreadsheet)'}
               className="w-full border border-gray-200 rounded-[5px] px-2 py-1.5 text-[11px] bg-[#f8f8f6] resize-y focus:outline-none focus:border-[#F5C518]"
             />

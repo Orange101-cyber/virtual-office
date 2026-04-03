@@ -34,6 +34,7 @@ export default function ReportArea({
   saved,
   reportId,
   clientId,
+  clients,
 }) {
   const [activeTab, setActiveTab] = useState('checklist');
 
@@ -145,6 +146,7 @@ export default function ReportArea({
             pastKeywords={fields.past_keywords}
             onPastKeywordsChange={(v) => onFieldChange('past_keywords', v)}
             clientId={clientId}
+            clients={clients}
           />
           <GSCLog gscData={gscData} onGscChange={onGscChange} />
         </div>
