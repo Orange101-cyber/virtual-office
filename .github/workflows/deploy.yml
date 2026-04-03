@@ -35,6 +35,13 @@ jobs:
           VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkcnVmZGxoZnJ3Y3pxdm12emdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2ODY5OTgsImV4cCI6MjA4ODI2Mjk5OH0.k8EiIOB2HiHxjuPITlIYf5xWGCNWV7EA5Tfe3br7yew
           VITE_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
+      - name: Verify build
+        run: |
+          echo "Checking for direct API call in build..."
+          grep -c "api.anthropic.com" dist/assets/*.js || echo "WARNING: API endpoint not found in build"
+          echo "Checking VITE_ANTHROPIC_API_KEY was set..."
+          grep -c "VITE_ANTHROPIC_API_KEY not set" dist/assets/*.js && echo "WARNING: API key was NOT injected" || echo "OK: API key was injected"
+
       - uses: actions/configure-pages@v4
 
       - uses: actions/upload-pages-artifact@v3
