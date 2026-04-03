@@ -109,6 +109,7 @@ export default function ReportArea({
               content={fields.article_content}
               focusKeyphrase={fields.focus_keyphrase}
               secondaryKeywords={fields.secondary_keywords}
+              articleUrl={fields.url}
             />
           </div>
         </div>

@@ -7,23 +7,11 @@ function analyzeDensity(content, focusKw, secondaryKws) {
   const totalWords = words.length;
   if (totalWords === 0) return null;
 
-  const text = content.toLowerCase();
-
   // Focus keyphrase
   const fkLower = focusKw.toLowerCase().trim();
   const fkRegex = new RegExp(fkLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
   const fkMatches = (content.match(fkRegex) || []).length;
   const fkDensity = ((fkMatches * fkLower.split(/\s+/).length) / totalWords * 100).toFixed(1);
-
-  // Find positions for heatmap
-  const positions = [];
-  const sentences = content.split(/(?<=[.!?])\s+/);
-  sentences.forEach((sentence, idx) => {
-    const sLower = sentence.toLowerCase();
-    if (sLower.includes(fkLower)) {
-      positions.push({ idx, type: 'focus' });
-    }
-  });
 
   // Secondary keywords
   const secKws = (secondaryKws || '').split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
@@ -42,6 +30,9 @@ function analyzeDensity(content, focusKw, secondaryKws) {
   const lastPara = content.split(/\n\s*\n/).filter(p => p.trim()).pop() || '';
   const inLastPara = lastPara.toLowerCase().includes(fkLower);
 
+  // Split into paragraphs for the highlighted view
+  const paragraphs = content.split(/\n\s*\n/).filter(p => p.trim());
+
   return {
     focusKeyword: fkLower,
     count: fkMatches,
@@ -50,8 +41,7 @@ function analyzeDensity(content, focusKw, secondaryKws) {
     inFirst100,
     inLastPara,
     secondaryResults: secResults,
-    sentenceCount: sentences.length,
-    positions,
+    paragraphs,
   };
 }
 
@@ -78,12 +68,52 @@ function DensityBar({ label, density, count }) {
   );
 }
 
+/** Highlight all keyword occurrences in a text string */
+function HighlightedText({ text, keywords }) {
+  if (!keywords.length || !text) return <span>{text}</span>;
+
+  // Build a combined regex for all keywords
+  const pattern = keywords
+    .map(kw => kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|');
+  const regex = new RegExp(`(${pattern})`, 'gi');
+
+  const parts = text.split(regex);
+
+  return (
+    <>
+      {parts.map((part, i) => {
+        const isMatch = keywords.some(kw => part.toLowerCase() === kw.toLowerCase());
+        return isMatch ? (
+          <mark key={i} className="bg-[#F5C518]/40 text-[#1a1a1a] rounded-sm px-0.5">{part}</mark>
+        ) : (
+          <span key={i}>{part}</span>
+        );
+      })}
+    </>
+  );
+}
+
 export default function KeywordDensity({ content, focusKeyphrase, secondaryKeywords }) {
+  const [showArticle, setShowArticle] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(false);
+
   const stats = useMemo(
     () => analyzeDensity(content, focusKeyphrase, secondaryKeywords),
     [content, focusKeyphrase, secondaryKeywords]
   );
+
+  // All keywords for highlighting
+  const allKeywords = useMemo(() => {
+    const kws = [];
+    if (focusKeyphrase?.trim()) kws.push(focusKeyphrase.trim());
+    if (secondaryKeywords) {
+      secondaryKeywords.split(',').forEach(k => {
+        if (k.trim()) kws.push(k.trim());
+      });
+    }
+    return kws;
+  }, [focusKeyphrase, secondaryKeywords]);
 
   if (!stats) {
     return (
@@ -130,33 +160,85 @@ export default function KeywordDensity({ content, focusKeyphrase, secondaryKeywo
           </>
         )}
 
-        {/* Heatmap toggle */}
-        <button
-          onClick={() => setShowHeatmap(!showHeatmap)}
-          className="text-[10px] text-[#F5C518] font-semibold mt-2 bg-transparent border-none cursor-pointer hover:underline p-0"
-        >
-          {showHeatmap ? 'Hide' : 'Show'} keyword heatmap
-        </button>
+        {/* Action buttons */}
+        <div className="flex gap-3 mt-2">
+          <button
+            onClick={() => { setShowArticle(!showArticle); if (!showArticle) setShowHeatmap(false); }}
+            className="text-[10px] text-[#F5C518] font-semibold bg-transparent border-none cursor-pointer hover:underline p-0"
+          >
+            {showArticle ? 'Hide' : 'Show'} highlighted article
+          </button>
+          <button
+            onClick={() => { setShowHeatmap(!showHeatmap); if (!showHeatmap) setShowArticle(false); }}
+            className="text-[10px] text-gray-400 font-semibold bg-transparent border-none cursor-pointer hover:underline p-0"
+          >
+            {showHeatmap ? 'Hide' : 'Show'} heatmap
+          </button>
+        </div>
 
-        {showHeatmap && (
-          <div className="mt-2 flex flex-wrap gap-[2px]">
-            {content.split(/(?<=[.!?])\s+/).map((sentence, idx) => {
-              const hasKw = sentence.toLowerCase().includes(stats.focusKeyword);
-              return (
-                <span
-                  key={idx}
-                  className={`inline-block w-3 h-3 rounded-sm ${hasKw ? 'bg-[#F5C518]' : 'bg-gray-100'}`}
-                  title={`Sentence ${idx + 1}${hasKw ? ' — contains keyword' : ''}`}
-                />
-              );
-            })}
+        {/* Full article with highlighted keywords */}
+        {showArticle && (
+          <div className="mt-3 border border-gray-200 rounded-lg overflow-hidden">
+            <div className="bg-[#f8f8f6] px-3 py-1.5 border-b border-gray-200 flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                Article — Keywords Highlighted
+              </span>
+              <div className="flex gap-2 text-[9px]">
+                <span className="flex items-center gap-1">
+                  <mark className="bg-[#F5C518]/40 rounded-sm px-1">keyword</mark> = found
+                </span>
+              </div>
+            </div>
+            <div className="p-3 max-h-[500px] overflow-y-auto text-[12px] text-gray-700 leading-relaxed space-y-3">
+              {stats.paragraphs.map((para, i) => {
+                const paraLower = para.toLowerCase();
+                const hasKeyword = allKeywords.some(kw => paraLower.includes(kw.toLowerCase()));
+                return (
+                  <div
+                    key={i}
+                    className={`p-2 rounded ${hasKeyword ? 'bg-white border-l-2 border-[#F5C518]' : 'bg-gray-50 border-l-2 border-gray-200'}`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[9px] font-bold text-gray-300">P{i + 1}</span>
+                      {hasKeyword ? (
+                        <span className="text-[8px] bg-green-50 text-green-600 px-1 py-0 rounded font-semibold">HAS KEYWORD</span>
+                      ) : (
+                        <span className="text-[8px] bg-orange-50 text-orange-500 px-1 py-0 rounded font-semibold">NO KEYWORD</span>
+                      )}
+                    </div>
+                    <HighlightedText text={para} keywords={allKeywords} />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="bg-[#f8f8f6] px-3 py-2 border-t border-gray-200 text-[10px] text-gray-500">
+              {stats.paragraphs.filter(p => allKeywords.some(kw => p.toLowerCase().includes(kw.toLowerCase()))).length}/{stats.paragraphs.length} paragraphs contain keywords
+              {' — '}
+              aim for keywords in 60-80% of paragraphs
+            </div>
           </div>
         )}
+
+        {/* Sentence heatmap */}
         {showHeatmap && (
-          <div className="flex gap-3 mt-1 text-[9px] text-gray-400">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#F5C518] inline-block" /> Has keyword</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-gray-100 inline-block" /> No keyword</span>
-          </div>
+          <>
+            <div className="mt-2 flex flex-wrap gap-[2px]">
+              {content.split(/(?<=[.!?])\s+/).map((sentence, idx) => {
+                const hasKw = allKeywords.some(kw => sentence.toLowerCase().includes(kw.toLowerCase()));
+                return (
+                  <span
+                    key={idx}
+                    className={`inline-block w-3 h-3 rounded-sm ${hasKw ? 'bg-[#F5C518]' : 'bg-gray-100'}`}
+                    title={`Sentence ${idx + 1}${hasKw ? ' — contains keyword' : ''}`}
+                  />
+                );
+              })}
+            </div>
+            <div className="flex gap-3 mt-1 text-[9px] text-gray-400">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#F5C518] inline-block" /> Has keyword</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-gray-100 inline-block" /> No keyword</span>
+            </div>
+          </>
         )}
       </div>
     </div>
