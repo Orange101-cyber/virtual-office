@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { useClients } from '../hooks/useClients';
 
 const KW_PROMPT = ({ client, niche, seedTopic, contentGoal, preference }) => `You are an SEO keyword research assistant for an Australian digital marketing agency.
 Generate keyword ideas based on the inputs below. Return ONLY valid JSON.
@@ -95,6 +96,7 @@ function Label({ children }) {
 }
 
 export default function KeywordResearch() {
+  const { clients: dbClients } = useClients();
   const [clients, setClients] = useState([]);
   const [form, setForm] = useState({
     client: '', niche: '', seedTopic: '',
@@ -106,17 +108,17 @@ export default function KeywordResearch() {
   const [addKw, setAddKw] = useState(null);
 
   useEffect(() => {
+    const fromDb = dbClients.map(c => c.name);
     supabase.from('content_plans').select('client_name').then(({ data }) => {
-      if (data) {
-        const unique = [...new Set(data.map(d => d.client_name))].sort();
-        setClients(unique);
-        if (unique.length && !form.client) setForm(f => ({ ...f, client: unique[0] }));
-      }
+      const fromPlans = data ? data.map(d => d.client_name) : [];
+      const unique = [...new Set([...fromDb, ...fromPlans])].filter(Boolean).sort();
+      setClients(unique);
+      if (unique.length && !form.client) setForm(f => ({ ...f, client: unique[0] }));
     });
     supabase.from('keyword_research').select('id, client_name, seed_topic, created_at')
       .order('created_at', { ascending: false }).limit(10)
       .then(({ data }) => setHistory(data || []));
-  }, []);
+  }, [dbClients]);
 
   const handleGenerate = async () => {
     if (!form.niche || !form.seedTopic) return alert('Niche and Seed Topic are required.');

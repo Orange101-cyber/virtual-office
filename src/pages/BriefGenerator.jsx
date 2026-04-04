@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { useClients } from '../hooks/useClients';
 
 const BRIEF_PROMPT = ({ client, contentType, isRefresh, title, focusKeyword, existingUrl, wordCount, context }) => `You are an SEO content strategist working for a digital marketing agency in Australia.
 Your job is to write structured content briefs for blog posts and SEO pages.
@@ -54,6 +55,7 @@ function Section({ title, children }) {
 }
 
 export default function BriefGenerator() {
+  const { clients: dbClients } = useClients();
   const [clients, setClients] = useState([]);
   const [form, setForm] = useState({
     client: '', contentType: 'Blog Post', isRefresh: false,
@@ -66,17 +68,18 @@ export default function BriefGenerator() {
   const [history, setHistory] = useState([]);
 
   useEffect(() => {
+    // Merge clients from shared clients table + content_plans
+    const fromDb = dbClients.map(c => c.name);
     supabase.from('content_plans').select('client_name').then(({ data }) => {
-      if (data) {
-        const unique = [...new Set(data.map(d => d.client_name))].sort();
-        setClients(unique);
-        if (unique.length && !form.client) setForm(f => ({ ...f, client: unique[0] }));
-      }
+      const fromPlans = data ? data.map(d => d.client_name) : [];
+      const unique = [...new Set([...fromDb, ...fromPlans])].filter(Boolean).sort();
+      setClients(unique);
+      if (unique.length && !form.client) setForm(f => ({ ...f, client: unique[0] }));
     });
     supabase.from('content_briefs').select('id, client_name, title, focus_keyword, created_at')
       .order('created_at', { ascending: false }).limit(10)
       .then(({ data }) => setHistory(data || []));
-  }, []);
+  }, [dbClients]);
 
   const handleGenerate = async () => {
     if (!form.title || !form.focusKeyword) return alert('Title and Focus Keyword are required.');
