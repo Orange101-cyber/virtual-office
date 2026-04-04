@@ -423,11 +423,29 @@ RULES:
 
             {history.length > 0 && (
               <div className="bg-white border border-gray-200 rounded-xl p-4">
-                <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Recent Briefs</h3>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Recent Briefs</h3>
+                  <span className="text-[9px] text-gray-400">{history.length}</span>
+                </div>
                 {history.map(h => (
-                  <div key={h.id} onClick={() => handleLoadBrief(h.id)} className="py-1.5 border-b border-gray-100 last:border-0 cursor-pointer hover:text-[#F5C518] text-[11px]">
-                    <div className="font-medium text-gray-700 truncate">{h.title}</div>
-                    <div className="text-[9px] text-gray-400">{h.client_name} · {new Date(h.created_at).toLocaleDateString()}</div>
+                  <div key={h.id} className="flex items-center gap-1 py-1.5 border-b border-gray-100 last:border-0 group">
+                    <div onClick={() => handleLoadBrief(h.id)} className="flex-1 min-w-0 cursor-pointer hover:text-[#F5C518] text-[11px]">
+                      <div className="font-medium text-gray-700 truncate">{h.title}</div>
+                      <div className="text-[9px] text-gray-400">{h.client_name} · {new Date(h.created_at).toLocaleDateString()}</div>
+                    </div>
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (!confirm('Delete this brief?')) return;
+                        await supabase.from('content_briefs').delete().eq('id', h.id);
+                        setHistory(prev => prev.filter(item => item.id !== h.id));
+                        toast.success('Brief deleted');
+                      }}
+                      className="bg-transparent border-none text-gray-300 cursor-pointer text-[10px] p-0 opacity-0 group-hover:opacity-100 hover:text-red-500 shrink-0"
+                      title="Delete brief"
+                    >
+                      ✕
+                    </button>
                   </div>
                 ))}
               </div>
