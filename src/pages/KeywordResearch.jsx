@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useClients } from '../hooks/useClients';
+import toast from 'react-hot-toast';
 
 const KW_PROMPT = ({ client, niche, seedTopic, contentGoal, preference }) => `You are an SEO keyword research assistant for an Australian digital marketing agency.
 Generate keyword ideas based on the inputs below. Return ONLY valid JSON.
@@ -63,7 +64,7 @@ function AddToPlanModal({ open, onClose, keyword, clients }) {
       status: 'Planned',
     });
     onClose();
-    alert('Added to Content Plan!');
+    toast.success('Added to Content Plan!');
   };
 
   if (!open) return null;
@@ -121,12 +122,12 @@ export default function KeywordResearch() {
   }, [dbClients]);
 
   const handleGenerate = async () => {
-    if (!form.niche || !form.seedTopic) return alert('Niche and Seed Topic are required.');
+    if (!form.niche || !form.seedTopic) return toast.error('Niche and Seed Topic are required.');
     setGenerating(true);
     setResults(null);
 
     const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-    if (!apiKey) { alert('VITE_ANTHROPIC_API_KEY not set'); setGenerating(false); return; }
+    if (!apiKey) { toast.error('VITE_ANTHROPIC_API_KEY not set'); setGenerating(false); return; }
 
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -159,7 +160,7 @@ export default function KeywordResearch() {
         .order('created_at', { ascending: false }).limit(10)
         .then(({ data }) => setHistory(data || []));
     } catch (err) {
-      alert('Error: ' + err.message);
+      toast.error('Error: ' + err.message);
     }
     setGenerating(false);
   };

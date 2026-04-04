@@ -11,6 +11,7 @@ import ContentPlanner from './pages/ContentPlanner';
 import BriefGenerator from './pages/BriefGenerator';
 import KeywordResearch from './pages/KeywordResearch';
 import Login from './pages/Login';
+import { Toaster } from 'react-hot-toast';
 import './index.css';
 
 function AuthRoute({ session, children }) {
@@ -58,5 +59,6 @@ function Root() {
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <Root />
+    <Toaster position="bottom-right" toastOptions={{ duration: 3000, style: { fontSize: '13px' } }} />
   </StrictMode>
 );

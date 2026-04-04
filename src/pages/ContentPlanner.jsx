@@ -17,14 +17,16 @@ function getQuarters() {
   );
 }
 
-// ── Add/Edit Modal ──
-function PlanModal({ open, onClose, onSave, item, clients }) {
+// ── Add/Edit Modal with Cannibalization Check ──
+function PlanModal({ open, onClose, onSave, item, clients, dbClients }) {
   const [form, setForm] = useState({
     client_name: '', quarter: `Q${Math.ceil((new Date().getMonth() + 1) / 3)} ${CURRENT_YEAR}`,
     month: '', content_type: 'Blog', title: '', is_refresh: false,
     focus_keyword: '', search_volume: '', kd: '', existing_url: '',
     status: 'Planned', notes: '', assigned_to: '',
   });
+  const [clientKeywords, setClientKeywords] = useState('');
+  const [cannibHits, setCannibHits] = useState([]);
 
   useEffect(() => {
     if (open) {
@@ -37,6 +39,35 @@ function PlanModal({ open, onClose, onSave, item, clients }) {
     }
   }, [open, item, clients]);
 
+  // Load client keywords when client changes
+  useEffect(() => {
+    if (!form.client_name) { setClientKeywords(''); return; }
+    const dbClient = dbClients.find(c => c.name === form.client_name);
+    if (dbClient?.id) {
+      supabase.from('clients').select('past_keywords').eq('id', dbClient.id).single()
+        .then(({ data }) => setClientKeywords(data?.past_keywords || ''));
+    } else {
+      setClientKeywords('');
+    }
+  }, [form.client_name, dbClients]);
+
+  // Check cannibalization when keyword or client keywords change
+  useEffect(() => {
+    if (!form.focus_keyword?.trim() || !clientKeywords || form.is_refresh) {
+      setCannibHits([]);
+      return;
+    }
+    const fk = form.focus_keyword.trim().toLowerCase();
+    const past = clientKeywords.split('\n').map(k => k.trim().toLowerCase()).filter(Boolean);
+    const hits = [];
+    past.forEach(p => {
+      if (p && fk && (p.includes(fk) || fk.includes(p))) {
+        hits.push({ keyword: fk, matchedPast: p });
+      }
+    });
+    setCannibHits(hits);
+  }, [form.focus_keyword, clientKeywords, form.is_refresh]);
+
   const handleSave = () => {
     if (!form.title.trim() || !form.client_name) return;
     onSave({
@@ -48,11 +79,12 @@ function PlanModal({ open, onClose, onSave, item, clients }) {
   };
 
   const qMonths = MONTHS_MAP[form.quarter?.split(' ')[0]] || [];
+  const kwCount = clientKeywords ? clientKeywords.split('\n').filter(l => l.trim()).length : 0;
 
   if (!open) return null;
   return (
     <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center" onClick={onClose}>
-      <div className="bg-white rounded-xl p-6 w-[520px] max-w-[95vw] max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-xl p-6 w-[560px] max-w-[95vw] max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
         <h3 className="text-[15px] font-semibold mb-4">{item ? 'Edit Content' : 'Add Content'}</h3>
         <div className="grid grid-cols-2 gap-3 mb-3">
           <div>
@@ -97,7 +129,7 @@ function PlanModal({ open, onClose, onSave, item, clients }) {
         <div className="flex items-center gap-3 mb-3">
           <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
             <input type="checkbox" checked={form.is_refresh} onChange={e => setForm(f => ({ ...f, is_refresh: e.target.checked }))} className="accent-[#F5C518]" />
-            This is a REFRESH (not new)
+            This is a REFRESH / UPDATE of an existing article
           </label>
         </div>
         <div className="grid grid-cols-3 gap-3 mb-3">
@@ -105,6 +137,41 @@ function PlanModal({ open, onClose, onSave, item, clients }) {
           <div><Label>Search Volume</Label><input type="number" value={form.search_volume} onChange={e => setForm(f => ({ ...f, search_volume: e.target.value }))} className="input-field" /></div>
           <div><Label>KD (0-100)</Label><input type="number" value={form.kd} onChange={e => setForm(f => ({ ...f, kd: e.target.value }))} className="input-field" /></div>
         </div>
+
+        {/* Cannibalization check */}
+        {form.focus_keyword?.trim() && kwCount > 0 && !form.is_refresh && (
+          <div className="mb-3">
+            {cannibHits.length === 0 ? (
+              <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-[11px] text-green-700 flex items-center gap-2">
+                <span className="text-green-600">✓</span>
+                No cannibalization found — checked against {kwCount} past keywords for {form.client_name}
+              </div>
+            ) : (
+              <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <div className="text-[11px] font-semibold text-red-600 mb-1">Cannibalization Warning</div>
+                {cannibHits.map((h, i) => (
+                  <div key={i} className="text-[11px] text-red-600 mb-0.5">
+                    &ldquo;{h.keyword}&rdquo; overlaps with past keyword &ldquo;{h.matchedPast}&rdquo;
+                  </div>
+                ))}
+                <div className="text-[10px] text-red-400 mt-1">
+                  If this is an update of an existing article, tick &ldquo;REFRESH / UPDATE&rdquo; above to dismiss this warning.
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {form.is_refresh && cannibHits.length > 0 && (
+          <div className="mb-3 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-[11px] text-blue-600">
+            Marked as update — keyword overlap is expected.
+          </div>
+        )}
+        {kwCount === 0 && form.client_name && (
+          <div className="mb-3 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-[10px] text-gray-400">
+            No past keywords saved for {form.client_name}. Add them in SEO Checker → KW button to enable cannibalization checks.
+          </div>
+        )}
+
         {form.is_refresh && (
           <div className="mb-3"><Label>Existing URL</Label><input value={form.existing_url} onChange={e => setForm(f => ({ ...f, existing_url: e.target.value }))} placeholder="https://..." className="input-field" /></div>
         )}
@@ -114,7 +181,9 @@ function PlanModal({ open, onClose, onSave, item, clients }) {
         </div>
         <div className="flex gap-2 justify-end mt-4">
           <button onClick={onClose} className="btn-secondary">Cancel</button>
-          <button onClick={handleSave} disabled={!form.title.trim()} className="btn-primary">Save</button>
+          <button onClick={handleSave} disabled={!form.title.trim()} className="btn-primary">
+            {cannibHits.length > 0 && !form.is_refresh ? 'Save Anyway' : 'Save'}
+          </button>
         </div>
       </div>
     </div>
@@ -528,7 +597,7 @@ export default function ContentPlanner() {
         </div>
       )}
 
-      <PlanModal open={showAdd} onClose={() => { setShowAdd(false); setEditItem(null); }} onSave={handleSave} item={editItem} clients={allClients.length ? allClients : ['Client 1']} />
+      <PlanModal open={showAdd} onClose={() => { setShowAdd(false); setEditItem(null); }} onSave={handleSave} item={editItem} clients={allClients.length ? allClients : ['Client 1']} dbClients={dbClients} />
       <ImportModal open={showImport} onClose={() => setShowImport(false)} onImport={handleImport} clients={allClients.length ? allClients : ['Client 1']} />
 
       <style>{`

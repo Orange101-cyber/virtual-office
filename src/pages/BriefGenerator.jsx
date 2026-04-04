@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useClients } from '../hooks/useClients';
+import toast from 'react-hot-toast';
 
 const BRIEF_PROMPT = ({ client, contentType, isRefresh, title, focusKeyword, existingUrl, wordCount, context }) => `You are an SEO content strategist working for a digital marketing agency in Australia.
 Your job is to write structured content briefs for blog posts and SEO pages.
@@ -66,6 +67,8 @@ export default function BriefGenerator() {
   const [generating, setGenerating] = useState(false);
   const [saved, setSaved] = useState(false);
   const [history, setHistory] = useState([]);
+  const [clientPlans, setClientPlans] = useState([]);
+  const [selectedPlanId, setSelectedPlanId] = useState('');
 
   useEffect(() => {
     // Merge clients from shared clients table + content_plans
@@ -81,14 +84,22 @@ export default function BriefGenerator() {
       .then(({ data }) => setHistory(data || []));
   }, [dbClients]);
 
+  // Fetch content plans for selected client
+  useEffect(() => {
+    if (!form.client) { setClientPlans([]); return; }
+    supabase.from('content_plans').select('id, title, focus_keyword, status')
+      .eq('client_name', form.client).order('created_at', { ascending: false })
+      .then(({ data }) => setClientPlans(data || []));
+  }, [form.client]);
+
   const handleGenerate = async () => {
-    if (!form.title || !form.focusKeyword) return alert('Title and Focus Keyword are required.');
+    if (!form.title || !form.focusKeyword) return toast.error('Title and Focus Keyword are required.');
     setGenerating(true);
     setBrief(null);
     setSaved(false);
 
     const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-    if (!apiKey) { alert('VITE_ANTHROPIC_API_KEY not set'); setGenerating(false); return; }
+    if (!apiKey) { toast.error('VITE_ANTHROPIC_API_KEY not set'); setGenerating(false); return; }
 
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -112,22 +123,31 @@ export default function BriefGenerator() {
       const parsed = JSON.parse(msg.content[0].text);
       setBrief(parsed);
     } catch (err) {
-      alert('Error generating brief: ' + err.message);
+      toast.error('Error generating brief: ' + err.message);
     }
     setGenerating(false);
   };
 
   const handleSave = async () => {
     if (!brief) return;
-    const { error } = await supabase.from('content_briefs').insert({
+    const payload = {
       client_name: form.client, title: form.title,
       focus_keyword: form.focusKeyword, brief_json: brief,
-    });
+    };
+    if (selectedPlanId) payload.plan_id = selectedPlanId;
+    const { error } = await supabase.from('content_briefs').insert(payload);
     if (!error) {
       setSaved(true);
+      toast.success('Brief saved!');
+      // Update content plan status to Briefed if linked
+      if (selectedPlanId) {
+        await supabase.from('content_plans').update({ status: 'Briefed', updated_at: new Date().toISOString() }).eq('id', selectedPlanId);
+      }
       supabase.from('content_briefs').select('id, client_name, title, focus_keyword, created_at')
         .order('created_at', { ascending: false }).limit(10)
         .then(({ data }) => setHistory(data || []));
+    } else {
+      toast.error('Error saving brief');
     }
   };
 
@@ -151,7 +171,7 @@ export default function BriefGenerator() {
     text += `CTA\n${brief.cta_recommendation}\n\n`;
     text += `SEO CHECKLIST\n${brief.seo_checklist?.map(c => `[ ] ${c}`).join('\n')}\n`;
     navigator.clipboard.writeText(text);
-    alert('Brief copied to clipboard!');
+    toast.success('Brief copied to clipboard!');
   };
 
   return (
@@ -177,6 +197,23 @@ export default function BriefGenerator() {
                     <option value="">Other</option>
                   </select>
                 </div>
+                {clientPlans.length > 0 && (
+                  <div>
+                    <Label>Link to Content Plan (optional)</Label>
+                    <select value={selectedPlanId} onChange={e => {
+                      setSelectedPlanId(e.target.value);
+                      const plan = clientPlans.find(p => p.id === e.target.value);
+                      if (plan) {
+                        setForm(f => ({ ...f, title: plan.title || f.title, focusKeyword: plan.focus_keyword || f.focusKeyword }));
+                      }
+                    }} className="input-field">
+                      <option value="">— No link —</option>
+                      {clientPlans.map(p => (
+                        <option key={p.id} value={p.id}>[{p.status}] {p.title}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Content Type</Label>
