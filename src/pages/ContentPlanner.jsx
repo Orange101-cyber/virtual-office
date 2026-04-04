@@ -2,10 +2,9 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
-const STATUSES = ['Planned', 'Approved', 'Briefed', 'Written', 'Published', 'Audited', 'Complete'];
+const STATUSES = ['Planned', 'Researched', 'Briefed', 'Sent to Airtable'];
 const STATUS_COLORS = {
-  Planned: '#94a3b8', Approved: '#F5C518', Briefed: '#3b82f6',
-  Written: '#8b5cf6', Published: '#f59e0b', Audited: '#10b981', Complete: '#27ae60',
+  Planned: '#94a3b8', Researched: '#F5C518', Briefed: '#3b82f6', 'Sent to Airtable': '#27ae60',
 };
 const QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4'];
 const MONTHS_MAP = { Q1: ['January', 'February', 'March'], Q2: ['April', 'May', 'June'], Q3: ['July', 'August', 'September'], Q4: ['October', 'November', 'December'] };
@@ -335,10 +334,10 @@ export default function ContentPlanner() {
           </div>
           <div className="ml-auto flex items-center gap-4 text-[10px] text-gray-500">
             <span>Total: <b className="text-[#1a1a1a]">{stats.total}</b></span>
-            <span>Planned: <b>{stats.Planned}</b></span>
-            <span>In Progress: <b>{stats.Approved + stats.Briefed + stats.Written}</b></span>
-            <span>Published: <b className="text-orange-500">{stats.Published}</b></span>
-            <span>Complete: <b className="text-green-600">{stats.Complete}</b></span>
+            <span>Planned: <b>{stats.Planned || 0}</b></span>
+            <span>Researched: <b className="text-[#F5C518]">{stats.Researched || 0}</b></span>
+            <span>Briefed: <b className="text-blue-500">{stats.Briefed || 0}</b></span>
+            <span>Sent: <b className="text-green-600">{stats['Sent to Airtable'] || 0}</b></span>
           </div>
         </div>
       </div>
