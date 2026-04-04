@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import Sidebar from '../components/Sidebar/Sidebar';
 import ReportArea from '../components/ReportArea/ReportArea';
-import EmptyState from '../components/EmptyState';
+import SEODashboard from '../components/SEODashboard';
 import AddClientModal from '../components/Modals/AddClientModal';
 import SaveReportModal from '../components/Modals/SaveReportModal';
 import { useClients } from '../hooks/useClients';
@@ -178,9 +178,10 @@ export default function SEOChecker() {
               clients={clients}
             />
           ) : (
-            <div className="flex-1 overflow-y-auto">
-              <EmptyState onAddClient={() => setShowAddClient(true)} />
-            </div>
+            <SEODashboard
+              clients={clients}
+              onAddClient={() => setShowAddClient(true)}
+            />
           )}
         </div>
       </div>
