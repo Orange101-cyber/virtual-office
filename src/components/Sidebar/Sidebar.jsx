@@ -9,6 +9,7 @@ export default function Sidebar({
   onAddClient,
   onDeleteClient,
   onNewReport,
+  onManageKeywords,
 }) {
   const [expandedClients, setExpandedClients] = useState(new Set());
   const year = new Date().getFullYear();
@@ -50,6 +51,7 @@ export default function Sidebar({
               isExpanded={expandedClients.has(client.id)}
               onToggle={() => toggleClient(client.id)}
               onDelete={() => onDeleteClient(client.id)}
+              onManageKeywords={onManageKeywords}
               currentReportId={currentReportId}
               onOpenReport={onOpenReport}
               onDeleteReport={onDeleteReport}

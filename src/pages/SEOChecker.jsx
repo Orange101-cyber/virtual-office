@@ -4,6 +4,7 @@ import ReportArea from '../components/ReportArea/ReportArea';
 import SEODashboard from '../components/SEODashboard';
 import AddClientModal from '../components/Modals/AddClientModal';
 import SaveReportModal from '../components/Modals/SaveReportModal';
+import KeywordBankModal from '../components/Modals/KeywordBankModal';
 import { useClients } from '../hooks/useClients';
 import { useReport } from '../hooks/useReport';
 import { useAnalysis } from '../hooks/useAnalysis';
@@ -33,6 +34,7 @@ export default function SEOChecker() {
 
   const [showAddClient, setShowAddClient] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showKeywordBank, setShowKeywordBank] = useState(null);
   const [hasReport, setHasReport] = useState(false);
 
   const handleNewReport = () => {
@@ -157,6 +159,7 @@ export default function SEOChecker() {
             onAddClient={() => setShowAddClient(true)}
             onDeleteClient={handleDeleteClient}
             onNewReport={handleNewReport}
+            onManageKeywords={(id) => setShowKeywordBank(id)}
           />
 
           {hasReport ? (
@@ -176,6 +179,7 @@ export default function SEOChecker() {
               reportId={report?.id}
               clientId={report?.client_id}
               clients={clients}
+              onManageKeywords={(id) => setShowKeywordBank(id)}
             />
           ) : (
             <SEODashboard
@@ -200,6 +204,13 @@ export default function SEOChecker() {
         defaultClientId={report?.client_id}
         defaultMonthIndex={report?.month_index}
         defaultName={report?.name || fields.article_title}
+      />
+
+      <KeywordBankModal
+        open={!!showKeywordBank}
+        onClose={() => setShowKeywordBank(null)}
+        clientId={showKeywordBank}
+        clients={clients}
       />
     </div>
   );

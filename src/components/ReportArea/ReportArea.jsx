@@ -35,6 +35,7 @@ export default function ReportArea({
   reportId,
   clientId,
   clients,
+  onManageKeywords,
 }) {
   const [activeTab, setActiveTab] = useState('checklist');
 
@@ -144,10 +145,8 @@ export default function ReportArea({
           <Cannibalization
             focusKeyphrase={fields.focus_keyphrase}
             secondaryKeywords={fields.secondary_keywords}
-            pastKeywords={fields.past_keywords}
-            onPastKeywordsChange={(v) => onFieldChange('past_keywords', v)}
             clientId={clientId}
-            clients={clients}
+            onManageKeywords={onManageKeywords}
           />
           <GSCLog gscData={gscData} onGscChange={onGscChange} />
         </div>

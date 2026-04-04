@@ -11,6 +11,7 @@ export default function ClientBlock({
   currentReportId,
   onOpenReport,
   onDeleteReport,
+  onManageKeywords,
   year,
 }) {
   const [reports, setReports] = useState([]);
@@ -54,6 +55,13 @@ export default function ClientBlock({
         <span className="text-xs font-semibold text-[#ddd] flex-1 whitespace-nowrap overflow-hidden text-ellipsis">
           {client.name}
         </span>
+        <button
+          onClick={(e) => { e.stopPropagation(); onManageKeywords(client.id); }}
+          className="bg-transparent border-none text-[#555] cursor-pointer text-[10px] p-0 shrink-0 hover:text-[#F5C518] mr-1"
+          title="Manage keywords"
+        >
+          KW
+        </button>
         <button
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
           className="bg-transparent border-none text-[#444] cursor-pointer text-xs p-0 shrink-0 hover:text-red-500"
