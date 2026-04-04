@@ -109,7 +109,7 @@ export default function BriefGenerator() {
       setClients(unique);
       if (unique.length && !form.client) setForm(f => ({ ...f, client: unique[0] }));
     });
-    supabase.from('content_briefs').select('id, client_name, title, focus_keyword, created_at')
+    supabase.from('content_briefs').select('id, client_name, title, focus_keyword, plan_id, created_at')
       .order('created_at', { ascending: false }).limit(10)
       .then(({ data }) => setHistory(data || []));
   }, [dbClients]);
@@ -224,7 +224,7 @@ export default function BriefGenerator() {
     if (!error) {
       setSaved(true);
       toast.success('Brief saved!');
-      supabase.from('content_briefs').select('id, client_name, title, focus_keyword, created_at')
+      supabase.from('content_briefs').select('id, client_name, title, focus_keyword, plan_id, created_at')
         .order('created_at', { ascending: false }).limit(10)
         .then(({ data }) => setHistory(data || []));
     } else {
@@ -431,8 +431,37 @@ RULES:
                   <div key={h.id} className="flex items-center gap-1 py-1.5 border-b border-gray-100 last:border-0 group">
                     <div onClick={() => handleLoadBrief(h.id)} className="flex-1 min-w-0 cursor-pointer hover:text-[#F5C518] text-[11px]">
                       <div className="font-medium text-gray-700 truncate">{h.title}</div>
-                      <div className="text-[9px] text-gray-400">{h.client_name} · {new Date(h.created_at).toLocaleDateString()}</div>
+                      <div className="text-[9px] text-gray-400 flex items-center gap-1">
+                        {h.client_name} · {new Date(h.created_at).toLocaleDateString()}
+                        {h.plan_id
+                          ? <span className="text-green-600">· In Planner</span>
+                          : <span className="text-orange-500">· Not in Planner</span>
+                        }
+                      </div>
                     </div>
+                    {!h.plan_id && (
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const currentQ = `Q${Math.ceil((new Date().getMonth() + 1) / 3)} ${new Date().getFullYear()}`;
+                          const { data: newPlan } = await supabase.from('content_plans').insert({
+                            client_name: h.client_name, quarter: currentQ,
+                            content_type: 'Blog', title: h.title,
+                            focus_keyword: h.focus_keyword, status: 'Briefed',
+                            notes: 'Synced from Brief Generator',
+                          }).select().single();
+                          if (newPlan) {
+                            await supabase.from('content_briefs').update({ plan_id: newPlan.id }).eq('id', h.id);
+                            setHistory(prev => prev.map(item => item.id === h.id ? { ...item, plan_id: newPlan.id } : item));
+                            toast.success('Added to Content Planner');
+                          }
+                        }}
+                        className="bg-transparent border border-[#F5C518] text-[#F5C518] rounded px-1.5 py-0 text-[8px] font-bold cursor-pointer hover:bg-[#F5C518] hover:text-[#1a1a1a] shrink-0 opacity-0 group-hover:opacity-100"
+                        title="Add to Content Planner"
+                      >
+                        + Plan
+                      </button>
+                    )}
                     <button
                       onClick={async (e) => {
                         e.stopPropagation();
