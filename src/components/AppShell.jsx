@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { path: '/content-planner', label: 'Content Planner' },
   { path: '/brief-generator', label: 'Brief Generator' },
   { path: '/keyword-research', label: 'Keyword Research' },
+  { path: '/article-writer', label: 'Article Writer' },
 ];
 
 export default function AppShell({ children }) {
