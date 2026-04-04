@@ -49,6 +49,14 @@ const TOOLS = [
     status: 'live',
     external: false,
   },
+  {
+    name: 'Article Writer',
+    description: 'AI writes full articles from your briefs, matched to each client\'s writing style from past content.',
+    path: '/article-writer',
+    icon: '✍️',
+    status: 'live',
+    external: false,
+  },
 ];
 
 const BASE = '/virtual-office';

@@ -10,6 +10,7 @@ import ClientDashboard from './pages/ClientDashboard';
 import ContentPlanner from './pages/ContentPlanner';
 import BriefGenerator from './pages/BriefGenerator';
 import KeywordResearch from './pages/KeywordResearch';
+import ArticleWriter from './pages/ArticleWriter';
 import Login from './pages/Login';
 import { Toaster } from 'react-hot-toast';
 import './index.css';
@@ -51,6 +52,7 @@ function Root() {
         <Route path="/content-planner" element={<AuthRoute session={session}><ContentPlanner /></AuthRoute>} />
         <Route path="/brief-generator" element={<AuthRoute session={session}><BriefGenerator /></AuthRoute>} />
         <Route path="/keyword-research" element={<AuthRoute session={session}><KeywordResearch /></AuthRoute>} />
+        <Route path="/article-writer" element={<AuthRoute session={session}><ArticleWriter /></AuthRoute>} />
       </Routes>
     </BrowserRouter>
   );
