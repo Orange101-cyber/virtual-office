@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useClients } from '../hooks/useClients';
 import toast from 'react-hot-toast';
 
-const BRIEF_PROMPT = ({ client, contentType, isRefresh, title, focusKeyword, secondaryKeywords, existingUrl, wordCount, context, ctaUrl }) => `You are an SEO content strategist working for a digital marketing agency in Australia.
+const BRIEF_PROMPT = ({ client, contentType, isRefresh, title, focusKeyword, secondaryKeywords, existingUrl, wordCount, context, ctaUrl, styleSamples }) => `You are an SEO content strategist working for a digital marketing agency in Australia.
 Your job is to write structured content briefs for blog posts and SEO pages.
 Always write for Australian audiences. Use plain English at a Grade 6 reading level.
 Avoid jargon. Format your output as valid JSON. Never pad content. Be specific and practical.
@@ -19,7 +19,13 @@ ${existingUrl ? `Existing URL: ${existingUrl}` : ''}
 ${ctaUrl ? `CTA Link: ${ctaUrl}` : ''}
 Target Word Count: ${wordCount}
 ${context ? `Additional Context: ${context}` : ''}
+${styleSamples ? `
+WRITING STYLE REFERENCE — Below are excerpts from previous articles written for this client. Match this writing style, tone, sentence structure, and vocabulary level closely:
 
+${styleSamples}
+
+END OF STYLE REFERENCE — Use the above as a guide for tone, structure, and vocabulary when generating the brief and any content suggestions.
+` : ''}
 Return this exact JSON structure:
 {
   "seo_title": "SEO-optimised page title under 60 chars including the focus keyword | Client Name",
@@ -85,11 +91,15 @@ export default function BriefGenerator() {
     wordCount: 1100, context: '',
   });
   const [brief, setBrief] = useState(null);
+  const [draftArticle, setDraftArticle] = useState('');
   const [generating, setGenerating] = useState(false);
+  const [generatingDraft, setGeneratingDraft] = useState(false);
   const [saved, setSaved] = useState(false);
   const [history, setHistory] = useState([]);
   const [clientPlans, setClientPlans] = useState([]);
   const [selectedPlanId, setSelectedPlanId] = useState('');
+  const [clientArticles, setClientArticles] = useState([]);
+  const [styleLoaded, setStyleLoaded] = useState(false);
 
   useEffect(() => {
     const fromDb = dbClients.map(c => c.name);
@@ -103,6 +113,22 @@ export default function BriefGenerator() {
       .order('created_at', { ascending: false }).limit(10)
       .then(({ data }) => setHistory(data || []));
   }, [dbClients]);
+
+  // Load past articles for writing style reference
+  useEffect(() => {
+    if (!form.client) { setClientArticles([]); setStyleLoaded(false); return; }
+    const dbClient = dbClients.find(c => c.name === form.client);
+    if (!dbClient) { setClientArticles([]); setStyleLoaded(false); return; }
+    supabase.from('reports')
+      .select('id, name, article_title, article_content, focus_keyphrase')
+      .eq('client_id', dbClient.id)
+      .order('updated_at', { ascending: false })
+      .limit(10)
+      .then(({ data }) => {
+        setClientArticles(data || []);
+        setStyleLoaded(true);
+      });
+  }, [form.client, dbClients]);
 
   useEffect(() => {
     if (!form.client) { setClientPlans([]); return; }
@@ -120,6 +146,17 @@ export default function BriefGenerator() {
     const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
     if (!apiKey) { toast.error('VITE_ANTHROPIC_API_KEY not set'); setGenerating(false); return; }
 
+    // Build writing style samples from past articles (first 500 chars each, up to 3)
+    let styleSamples = '';
+    if (clientArticles.length > 0) {
+      const samples = clientArticles
+        .filter(a => a.article_content && a.article_content.length > 100)
+        .slice(0, 3)
+        .map((a, i) => `--- Article ${i + 1}: "${a.article_title || a.name}" ---\n${a.article_content.substring(0, 800)}`)
+        .join('\n\n');
+      if (samples) styleSamples = samples;
+    }
+
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -133,7 +170,7 @@ export default function BriefGenerator() {
           model: 'claude-sonnet-4-20250514',
           max_tokens: 2500,
           system: 'You are an SEO content strategist. Return ONLY valid JSON with no markdown fences.',
-          messages: [{ role: 'user', content: BRIEF_PROMPT(form) }],
+          messages: [{ role: 'user', content: BRIEF_PROMPT({ ...form, styleSamples }) }],
         }),
       });
 
@@ -176,6 +213,83 @@ export default function BriefGenerator() {
       setBrief(data.brief_json);
       setForm(f => ({ ...f, client: data.client_name || f.client, title: data.title || '', focusKeyword: data.focus_keyword || '' }));
     }
+  };
+
+  const handleGenerateDraft = async () => {
+    if (!brief) return toast.error('Generate a brief first.');
+    setGeneratingDraft(true);
+    setDraftArticle('');
+
+    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+    if (!apiKey) { toast.error('API key not set'); setGeneratingDraft(false); return; }
+
+    let styleSamples = '';
+    if (clientArticles.length > 0) {
+      const samples = clientArticles
+        .filter(a => a.article_content && a.article_content.length > 100)
+        .slice(0, 3)
+        .map((a, i) => `--- Article ${i + 1}: "${a.article_title || a.name}" ---\n${a.article_content.substring(0, 1200)}`)
+        .join('\n\n');
+      if (samples) styleSamples = samples;
+    }
+
+    const draftPrompt = `You are an SEO content writer for an Australian digital marketing agency.
+Write a full blog article based on the brief below. Match the writing style of the client's previous articles.
+
+BRIEF:
+Title: ${form.title}
+H1: ${brief.suggested_h1}
+Focus Keyword: ${form.focusKeyword}
+Secondary Keywords: ${brief.secondary_keywords?.join(', ')}
+Target Word Count: ${form.wordCount}
+H2 Structure:
+${brief.h2_structure?.map(h => `- ${h.h2}: ${h.description}`).join('\n')}
+FAQ Section:
+${brief.faq_section?.map(f => `Q: ${f.question}`).join('\n')}
+CTA: ${brief.cta_recommendation}
+CTA Link: ${form.ctaUrl || brief.cta_links?.[0] || ''}
+
+${styleSamples ? `WRITING STYLE REFERENCE (match this tone, sentence length, vocabulary level):
+${styleSamples}
+END OF STYLE REFERENCE` : ''}
+
+RULES:
+- Write for Australian audiences in plain English
+- Include the focus keyword naturally at 1-2% density
+- Include all secondary keywords naturally
+- Use the H2 structure provided
+- Include a Table of Contents at the top
+- Include the FAQ section with full answers
+- Include [CTA Button: Book an Appraisal | Link: ${form.ctaUrl || ''}] after the intro and at the end
+- Include at least 2 internal link placeholders marked as [Internal Link: description]
+- Include at least 1 external authority link
+- Write ${form.wordCount}+ words
+- DO NOT use markdown formatting — write in plain text with headings on their own lines`;
+
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 4096,
+          messages: [{ role: 'user', content: draftPrompt }],
+        }),
+      });
+
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+      const msg = await res.json();
+      setDraftArticle(msg.content[0].text);
+      toast.success('Draft article generated!');
+    } catch (err) {
+      toast.error('Error generating draft: ' + err.message);
+    }
+    setGeneratingDraft(false);
   };
 
   const handleCopy = () => {
@@ -263,6 +377,19 @@ export default function BriefGenerator() {
                 )}
                 <div><Label>CTA Link URL</Label><input value={form.ctaUrl} onChange={e => setForm(f => ({ ...f, ctaUrl: e.target.value }))} placeholder="e.g. https://lukeokelly.com.au/contact/" className="input-field" /></div>
                 <div><Label>Additional Context (optional)</Label><textarea value={form.context} onChange={e => setForm(f => ({ ...f, context: e.target.value }))} rows={2} placeholder="Tone, audience, special notes..." className="input-field resize-y" /></div>
+                {/* Style reference status */}
+                {styleLoaded && (
+                  <div className={`rounded-lg px-3 py-2 text-[10px] ${
+                    clientArticles.filter(a => a.article_content?.length > 100).length > 0
+                      ? 'bg-green-50 border border-green-200 text-green-700'
+                      : 'bg-gray-50 border border-gray-200 text-gray-500'
+                  }`}>
+                    {clientArticles.filter(a => a.article_content?.length > 100).length > 0
+                      ? `✓ ${clientArticles.filter(a => a.article_content?.length > 100).length} past articles loaded — AI will match ${form.client}'s writing style`
+                      : `No past articles found for ${form.client}. Upload articles in SEO Checker to enable style matching.`
+                    }
+                  </div>
+                )}
                 <button onClick={handleGenerate} disabled={generating} className="btn-primary w-full py-2.5">
                   {generating ? 'Generating brief...' : 'Generate Brief'}
                 </button>
@@ -306,6 +433,14 @@ export default function BriefGenerator() {
                     </button>
                   </div>
                 </div>
+
+                {/* Writing style indicator */}
+                {clientArticles.length > 0 && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4 text-[11px] text-green-700 flex items-center gap-2">
+                    <span className="text-green-600">✓</span>
+                    Writing style matched from {clientArticles.filter(a => a.article_content?.length > 100).length} past article{clientArticles.filter(a => a.article_content?.length > 100).length !== 1 ? 's' : ''} for {form.client}
+                  </div>
+                )}
 
                 {/* Header card */}
                 <div className="bg-[#1a1a1a] rounded-lg p-4 mb-5 text-white">
@@ -421,6 +556,66 @@ export default function BriefGenerator() {
                     ))}
                   </div>
                 </Section>
+
+                {/* Generate Draft Article */}
+                <div className="border-t border-gray-200 pt-5 mt-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-[#1a1a1a]">Draft Article</h3>
+                      <p className="text-[10px] text-gray-400">
+                        AI writes a full article based on this brief
+                        {clientArticles.length > 0 ? `, matched to ${form.client}'s writing style` : ''}
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleGenerateDraft}
+                      disabled={generatingDraft}
+                      className="btn-primary text-[11px] flex items-center gap-1.5"
+                    >
+                      {generatingDraft ? 'Writing...' : 'Generate Draft'}
+                    </button>
+                  </div>
+
+                  {generatingDraft && (
+                    <div className="flex items-center gap-2 text-gray-500 py-8 justify-center">
+                      <div className="w-5 h-5 border-2 border-gray-200 border-t-[#F5C518] rounded-full animate-spin" />
+                      <span className="text-[12px]">Writing article draft — this may take 30-60 seconds...</span>
+                    </div>
+                  )}
+
+                  {draftArticle && (
+                    <div>
+                      <div className="flex gap-2 mb-2">
+                        <button
+                          onClick={() => { navigator.clipboard.writeText(draftArticle); toast.success('Draft copied!'); }}
+                          className="btn-secondary text-[10px]"
+                        >
+                          Copy Draft
+                        </button>
+                        <button
+                          onClick={() => {
+                            const blob = new Blob([draftArticle], { type: 'text/plain' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `Draft-${(form.title || 'Article').replace(/[^a-zA-Z0-9]/g, '-').substring(0, 40)}.txt`;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                          }}
+                          className="btn-secondary text-[10px]"
+                        >
+                          Download .txt
+                        </button>
+                      </div>
+                      <div className="bg-[#f8f8f6] border border-gray-200 rounded-lg p-4 max-h-[600px] overflow-y-auto">
+                        <pre className="text-[12px] text-gray-700 leading-relaxed whitespace-pre-wrap font-sans">{draftArticle}</pre>
+                      </div>
+                      <div className="text-[10px] text-gray-400 mt-2">
+                        Word count: ~{draftArticle.split(/\s+/).length.toLocaleString()} words
+                      </div>
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </div>
