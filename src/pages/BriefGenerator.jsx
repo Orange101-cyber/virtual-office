@@ -33,7 +33,7 @@ Return this exact JSON structure:
   "overview": "2-3 sentence summary of article goal, target audience, and search intent",
   "suggested_h1": "One recommended H1 containing the focus keyword",
   "h2_structure": [
-    {"h2": "Heading text containing keyword variation", "description": "One-line description of what this section should cover"}
+    {"h2": "Heading text containing keyword variation", "description": "One-line description of what each section should cover"}
   ],
   "faq_section": [
     {"question": "Question targeting People Also Ask?", "guidance": "Brief note on how to answer for featured snippet"}
@@ -92,7 +92,6 @@ export default function BriefGenerator() {
   const [selectedPlanId, setSelectedPlanId] = useState('');
 
   useEffect(() => {
-    // Merge clients from shared clients table + content_plans
     const fromDb = dbClients.map(c => c.name);
     supabase.from('content_plans').select('client_name').then(({ data }) => {
       const fromPlans = data ? data.map(d => d.client_name) : [];
@@ -105,7 +104,6 @@ export default function BriefGenerator() {
       .then(({ data }) => setHistory(data || []));
   }, [dbClients]);
 
-  // Fetch content plans for selected client
   useEffect(() => {
     if (!form.client) { setClientPlans([]); return; }
     supabase.from('content_plans').select('id, title, focus_keyword, status')
@@ -133,8 +131,8 @@ export default function BriefGenerator() {
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 2000,
-          system: 'You are an SEO content strategist. Return ONLY valid JSON.',
+          max_tokens: 2500,
+          system: 'You are an SEO content strategist. Return ONLY valid JSON with no markdown fences.',
           messages: [{ role: 'user', content: BRIEF_PROMPT(form) }],
         }),
       });
@@ -143,6 +141,7 @@ export default function BriefGenerator() {
       const msg = await res.json();
       const parsed = JSON.parse(msg.content[0].text);
       setBrief(parsed);
+      toast.success('Brief generated!');
     } catch (err) {
       toast.error('Error generating brief: ' + err.message);
     }
@@ -160,7 +159,6 @@ export default function BriefGenerator() {
     if (!error) {
       setSaved(true);
       toast.success('Brief saved!');
-      // Update content plan status to Briefed if linked
       if (selectedPlanId) {
         await supabase.from('content_plans').update({ status: 'Briefed', updated_at: new Date().toISOString() }).eq('id', selectedPlanId);
       }
@@ -186,27 +184,21 @@ export default function BriefGenerator() {
     text += `${'='.repeat(50)}\n\n`;
     text += `Content Type: ${brief.content_type_label || (form.isRefresh ? 'BLOG - REFRESH' : 'BLOG - NEW')}\n\n`;
     text += `SEO Title\n${brief.seo_title}\n\n`;
-    text += `Keywords List\n`;
-    text += `${brief.secondary_keywords?.join('\n')}\n\n`;
+    text += `Keywords List\n${brief.secondary_keywords?.join('\n')}\n\n`;
     text += `Main Keywords / Focus Keyphrase\n${form.focusKeyword}\n`;
     if (brief.keyword_notes) text += `${brief.keyword_notes}\n`;
-    text += `\n`;
-    text += `Meta Description\n${brief.meta_description}\n\n`;
+    text += `\nMeta Description\n${brief.meta_description}\n\n`;
     text += `Slug URL\n${brief.suggested_slug}\n`;
     if (brief.needs_redirect) text += `Redirect needed: Yes\n`;
-    text += `\n`;
-    text += `CTA Links\n${brief.cta_links?.join('\n')}\n\n`;
-    text += `${'─'.repeat(40)}\n\n`;
-    text += `OVERVIEW\n${brief.overview}\n\n`;
+    text += `\nCTA Links\n${brief.cta_links?.join('\n')}\n\n`;
+    text += `${'─'.repeat(40)}\n\nOVERVIEW\n${brief.overview}\n\n`;
     text += `SUGGESTED H1\n${brief.suggested_h1}\n\n`;
     text += `H2 STRUCTURE\n${brief.h2_structure?.map(h => `${h.h2}\n  ${h.description}`).join('\n\n')}\n\n`;
     text += `FAQ SECTION\n${brief.faq_section?.map(f => `Q: ${f.question}\n  ${f.guidance}`).join('\n\n')}\n\n`;
     text += `INTERNAL LINKS\n${brief.internal_links?.map(l => `- ${l.page}${l.url ? ` (${l.url})` : ''}: ${l.reason}`).join('\n')}\n\n`;
     text += `CTA RECOMMENDATION\n${brief.cta_recommendation}\n\n`;
-    text += `${'─'.repeat(40)}\n\n`;
-    text += `SOCIAL POST TEXT\n\nFACEBOOK\n${brief.social_posts?.facebook || ''}\n\nINSTAGRAM\n${brief.social_posts?.instagram || ''}\n\n`;
-    text += `${'─'.repeat(40)}\n\n`;
-    text += `SEO CHECKLIST\n${brief.seo_checklist?.map(c => `[ ] ${c}`).join('\n')}\n`;
+    text += `${'─'.repeat(40)}\n\nSOCIAL POST TEXT\n\nFACEBOOK\n${brief.social_posts?.facebook || ''}\n\nINSTAGRAM\n${brief.social_posts?.instagram || ''}\n\n`;
+    text += `${'─'.repeat(40)}\n\nSEO CHECKLIST\n${brief.seo_checklist?.map(c => `[ ] ${c}`).join('\n')}\n`;
     navigator.clipboard.writeText(text);
     toast.success('Brief copied to clipboard!');
   };
@@ -217,7 +209,7 @@ export default function BriefGenerator() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-lg font-bold text-[#1a1a1a]">Content Brief Generator</h1>
-            <p className="text-[11px] text-gray-400">AI-powered structured briefs for blog posts and SEO pages</p>
+            <p className="text-[11px] text-gray-400">AI-powered structured briefs matching the CYL template</p>
           </div>
         </div>
 
@@ -240,14 +232,10 @@ export default function BriefGenerator() {
                     <select value={selectedPlanId} onChange={e => {
                       setSelectedPlanId(e.target.value);
                       const plan = clientPlans.find(p => p.id === e.target.value);
-                      if (plan) {
-                        setForm(f => ({ ...f, title: plan.title || f.title, focusKeyword: plan.focus_keyword || f.focusKeyword }));
-                      }
+                      if (plan) setForm(f => ({ ...f, title: plan.title || f.title, focusKeyword: plan.focus_keyword || f.focusKeyword }));
                     }} className="input-field">
                       <option value="">— No link —</option>
-                      {clientPlans.map(p => (
-                        <option key={p.id} value={p.id}>[{p.status}] {p.title}</option>
-                      ))}
+                      {clientPlans.map(p => <option key={p.id} value={p.id}>[{p.status}] {p.title}</option>)}
                     </select>
                   </div>
                 )}
@@ -265,9 +253,9 @@ export default function BriefGenerator() {
                 </div>
                 <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
                   <input type="checkbox" checked={form.isRefresh} onChange={e => setForm(f => ({ ...f, isRefresh: e.target.checked }))} className="accent-[#F5C518]" />
-                  This is a REFRESH (not new)
+                  This is a REFRESH / UPDATE (not new)
                 </label>
-                <div><Label>Article Title</Label><input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. QLD First Home Buyer: 7 Smart Steps..." className="input-field" /></div>
+                <div><Label>Article Title</Label><input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Real Estate West End: 6 Facts..." className="input-field" /></div>
                 <div><Label>Focus Keyword</Label><input value={form.focusKeyword} onChange={e => setForm(f => ({ ...f, focusKeyword: e.target.value }))} placeholder="e.g. real estate west end" className="input-field" /></div>
                 <div><Label>Secondary Keywords (comma-separated)</Label><input value={form.secondaryKeywords} onChange={e => setForm(f => ({ ...f, secondaryKeywords: e.target.value }))} placeholder="e.g. real estate west end qld, west end real estate" className="input-field" /></div>
                 {form.isRefresh && (
@@ -281,7 +269,6 @@ export default function BriefGenerator() {
               </div>
             </div>
 
-            {/* History */}
             {history.length > 0 && (
               <div className="bg-white border border-gray-200 rounded-xl p-4">
                 <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Recent Briefs</h3>
@@ -301,7 +288,7 @@ export default function BriefGenerator() {
               <div className="flex flex-col items-center justify-center h-64 text-center text-gray-400">
                 <div className="text-3xl mb-2 opacity-30">📝</div>
                 <p className="text-sm">Fill in the form and click Generate Brief</p>
-                <p className="text-[11px] mt-1">The AI will create a structured brief your team can work from immediately.</p>
+                <p className="text-[11px] mt-1">The AI will create a structured brief matching your CYL template.</p>
               </div>
             ) : generating ? (
               <div className="flex flex-col items-center justify-center h-64 text-gray-500">
@@ -320,7 +307,7 @@ export default function BriefGenerator() {
                   </div>
                 </div>
 
-                {/* Header info */}
+                {/* Header card */}
                 <div className="bg-[#1a1a1a] rounded-lg p-4 mb-5 text-white">
                   <div className="text-[10px] font-bold uppercase tracking-wider text-[#F5C518] mb-1">
                     {brief.content_type_label || (form.isRefresh ? 'BLOG - REFRESH' : 'BLOG - NEW')}
@@ -358,9 +345,7 @@ export default function BriefGenerator() {
 
                 <Section title="Slug URL">
                   <p className="text-[12px] text-blue-600 bg-[#f8f8f6] rounded-lg p-3 font-mono">{brief.suggested_slug}</p>
-                  {brief.needs_redirect && (
-                    <div className="text-[10px] text-orange-500 mt-1">Redirect from old URL may be needed</div>
-                  )}
+                  {brief.needs_redirect && <div className="text-[10px] text-orange-500 mt-1">Redirect from old URL may be needed</div>}
                 </Section>
 
                 <Section title="Overview">
