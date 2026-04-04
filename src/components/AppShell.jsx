@@ -6,6 +6,9 @@ const NAV_ITEMS = [
   { path: '/office/', label: 'Virtual Office', external: true },
   { path: '/client-dashboard', label: 'Client Dashboard' },
   { path: '/seo-checker', label: 'SEO Checker' },
+  { path: '/content-planner', label: 'Content Planner' },
+  { path: '/brief-generator', label: 'Brief Generator' },
+  { path: '/keyword-research', label: 'Keyword Research' },
 ];
 
 export default function AppShell({ children }) {
@@ -27,14 +30,14 @@ export default function AppShell({ children }) {
         </Link>
 
         {/* Nav links */}
-        <nav className="flex items-center gap-1 ml-4">
+        <nav className="flex items-center gap-1 ml-4 overflow-x-auto">
           {NAV_ITEMS.map((item) => {
             const isActive =
               item.path === '/'
                 ? location.pathname === '/'
                 : location.pathname.startsWith(item.path);
 
-            const className = `px-2.5 py-1 rounded text-xs no-underline transition-colors ${
+            const className = `px-2.5 py-1 rounded text-xs no-underline transition-colors whitespace-nowrap shrink-0 ${
               isActive
                 ? 'bg-white/10 text-[#F5C518] font-semibold'
                 : 'text-white/50 hover:text-white/80 hover:bg-white/5'
