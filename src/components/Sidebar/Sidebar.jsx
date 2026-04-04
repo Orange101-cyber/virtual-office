@@ -12,7 +12,8 @@ export default function Sidebar({
   onManageKeywords,
 }) {
   const [expandedClients, setExpandedClients] = useState(new Set());
-  const year = new Date().getFullYear();
+  const currentYear = new Date().getFullYear();
+  const [year, setYear] = useState(currentYear);
 
   const toggleClient = (id) => {
     setExpandedClients((prev) => {
@@ -34,6 +35,26 @@ export default function Sidebar({
           className="bg-transparent border border-[#444] text-[#aaa] rounded px-2 py-0.5 text-[11px] cursor-pointer flex items-center gap-1 hover:border-[#F5C518] hover:text-[#F5C518]"
         >
           + Add
+        </button>
+      </div>
+
+      {/* Year selector */}
+      <div className="px-3.5 pb-2 flex items-center gap-1">
+        <button
+          onClick={() => setYear(y => y - 1)}
+          className="bg-transparent border-none text-[#555] cursor-pointer text-xs hover:text-[#F5C518] p-0"
+        >
+          ◀
+        </button>
+        <div className="flex-1 text-center text-[11px] font-semibold text-[#888]">
+          {year}
+        </div>
+        <button
+          onClick={() => setYear(y => y + 1)}
+          disabled={year >= currentYear + 1}
+          className="bg-transparent border-none text-[#555] cursor-pointer text-xs hover:text-[#F5C518] p-0 disabled:opacity-20 disabled:cursor-not-allowed"
+        >
+          ▶
         </button>
       </div>
 

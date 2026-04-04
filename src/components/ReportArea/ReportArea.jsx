@@ -36,6 +36,7 @@ export default function ReportArea({
   clientId,
   clients,
   onManageKeywords,
+  onBackToDashboard,
 }) {
   const [activeTab, setActiveTab] = useState('checklist');
 
@@ -47,6 +48,16 @@ export default function ReportArea({
 
   return (
     <div className="flex-1 overflow-y-auto p-4 pb-10">
+      {/* Back to dashboard */}
+      {onBackToDashboard && (
+        <button
+          onClick={onBackToDashboard}
+          className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-[#F5C518] bg-transparent border-none cursor-pointer mb-2 p-0"
+        >
+          ← Back to Dashboard
+        </button>
+      )}
+
       <ArticleInputs
         fields={fields}
         onFieldChange={onFieldChange}

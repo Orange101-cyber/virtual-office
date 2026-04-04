@@ -25,9 +25,11 @@ export default function MonthBlock({
           ▶
         </span>
         <span className="text-[11px] text-[#aaa] flex-1">{monthName}</span>
-        <span className="text-[10px] text-[#555] shrink-0">
-          {reports.length || ''}
-        </span>
+        {reports.length > 0 && (
+          <span className="text-[9px] font-bold bg-[#F5C518]/20 text-[#F5C518] px-1.5 py-0 rounded-full shrink-0">
+            {reports.length}
+          </span>
+        )}
       </div>
       {open && (
         <div>

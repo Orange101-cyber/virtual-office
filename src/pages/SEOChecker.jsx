@@ -180,6 +180,7 @@ export default function SEOChecker() {
               clientId={report?.client_id}
               clients={clients}
               onManageKeywords={(id) => setShowKeywordBank(id)}
+              onBackToDashboard={() => { if (!dirty || confirm('You have unsaved changes. Go back anyway?')) { newReport(); setHasReport(false); } }}
             />
           ) : (
             <SEODashboard
