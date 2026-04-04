@@ -187,18 +187,43 @@ export default function BriefGenerator() {
 
   const handleSave = async () => {
     if (!brief) return;
+
+    let planId = selectedPlanId;
+
+    // If no plan linked, create one in content_plans automatically
+    if (!planId) {
+      const currentQ = `Q${Math.ceil((new Date().getMonth() + 1) / 3)} ${new Date().getFullYear()}`;
+      const { data: newPlan, error: planError } = await supabase.from('content_plans').insert({
+        client_name: form.client,
+        quarter: currentQ,
+        content_type: form.contentType === 'SEO Page' ? 'SEO Page' : 'Blog',
+        title: form.title,
+        is_refresh: form.isRefresh,
+        focus_keyword: form.focusKeyword,
+        status: 'Briefed',
+        notes: 'Auto-created from Brief Generator',
+      }).select().single();
+
+      if (!planError && newPlan) {
+        planId = newPlan.id;
+        toast.success('Added to Content Planner');
+      }
+    } else {
+      // Update existing plan status to Briefed
+      await supabase.from('content_plans').update({ status: 'Briefed', updated_at: new Date().toISOString() }).eq('id', planId);
+    }
+
+    // Save the brief
     const payload = {
       client_name: form.client, title: form.title,
       focus_keyword: form.focusKeyword, brief_json: brief,
     };
-    if (selectedPlanId) payload.plan_id = selectedPlanId;
+    if (planId) payload.plan_id = planId;
     const { error } = await supabase.from('content_briefs').insert(payload);
+
     if (!error) {
       setSaved(true);
       toast.success('Brief saved!');
-      if (selectedPlanId) {
-        await supabase.from('content_plans').update({ status: 'Briefed', updated_at: new Date().toISOString() }).eq('id', selectedPlanId);
-      }
       supabase.from('content_briefs').select('id, client_name, title, focus_keyword, created_at')
         .order('created_at', { ascending: false }).limit(10)
         .then(({ data }) => setHistory(data || []));
