@@ -3,45 +3,65 @@ import { supabase } from '../lib/supabase';
 import { useClients } from '../hooks/useClients';
 import toast from 'react-hot-toast';
 
-const BRIEF_PROMPT = ({ client, contentType, isRefresh, title, focusKeyword, existingUrl, wordCount, context }) => `You are an SEO content strategist working for a digital marketing agency in Australia.
+const BRIEF_PROMPT = ({ client, contentType, isRefresh, title, focusKeyword, secondaryKeywords, existingUrl, wordCount, context, ctaUrl }) => `You are an SEO content strategist working for a digital marketing agency in Australia.
 Your job is to write structured content briefs for blog posts and SEO pages.
 Always write for Australian audiences. Use plain English at a Grade 6 reading level.
 Avoid jargon. Format your output as valid JSON. Never pad content. Be specific and practical.
 
-Generate a content brief for:
+Generate a full content brief for:
 Client: ${client}
 Content Type: ${contentType}
 New or Refresh: ${isRefresh ? 'REFRESH' : 'NEW'}
 Article Title: ${title}
 Focus Keyword: ${focusKeyword}
+Secondary Keywords: ${secondaryKeywords || 'generate 3-4 related long-tail variations'}
 ${existingUrl ? `Existing URL: ${existingUrl}` : ''}
+${ctaUrl ? `CTA Link: ${ctaUrl}` : ''}
 Target Word Count: ${wordCount}
 ${context ? `Additional Context: ${context}` : ''}
 
 Return this exact JSON structure:
 {
+  "seo_title": "SEO-optimised page title under 60 chars including the focus keyword | Client Name",
+  "content_type_label": "${isRefresh ? 'BLOG - REFRESH' : 'BLOG - NEW'}",
+  "secondary_keywords": ["long tail keyword 1", "long tail keyword 2", "long tail keyword 3"],
+  "keyword_notes": "Brief note on keyword density target (1-2%) and usage guidance",
+  "meta_description": "Compelling meta description under 155 characters including the focus keyword",
+  "suggested_slug": "https://example.com/suggested-url-slug/",
+  "needs_redirect": ${isRefresh},
+  "cta_links": ["${ctaUrl || 'https://clientsite.com/contact/'}"],
   "overview": "2-3 sentence summary of article goal, target audience, and search intent",
-  "lsi_keywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5", "keyword6"],
-  "suggested_h1": "One recommended H1",
+  "suggested_h1": "One recommended H1 containing the focus keyword",
   "h2_structure": [
-    {"h2": "Heading text", "description": "One-line description of what this section should cover"}
+    {"h2": "Heading text containing keyword variation", "description": "One-line description of what each section should cover"}
   ],
   "faq_section": [
-    {"question": "Question text?", "guidance": "Brief note on how to answer"}
+    {"question": "Question targeting People Also Ask?", "guidance": "Brief note on how to answer for featured snippet"}
   ],
   "internal_links": [
-    {"page": "Page description", "reason": "Why to link here"}
+    {"page": "Page title or description", "url": "suggested URL path", "reason": "Why to link here"}
   ],
-  "cta_recommendation": "Suggested call-to-action text and placement",
+  "cta_recommendation": "Suggested CTA button text and placement (top and bottom of article)",
+  "social_posts": {
+    "facebook": "Full Facebook post copy with emoji, CTA link, and 5-7 hashtags",
+    "instagram": "Full Instagram post copy with CTA to link in bio and 5-7 hashtags"
+  },
   "seo_checklist": [
     "FK in H1",
     "FK in first 100 words",
     "FK in at least one H2",
-    "Meta description written (under 155 chars)",
+    "Keyword density 1-2%",
+    "All secondary keywords used in body",
+    "Meta description under 155 chars with FK",
+    "URL slug includes FK words",
+    "Table of Contents with jump links",
+    "FAQ section with 3+ questions",
     "At least 2 internal links",
-    "FAQ schema added",
+    "At least 1 external authority link",
+    "CTA button at top and bottom",
+    "FAQ schema markup added",
     "Author bio present",
-    "Images compressed and alt text added",
+    "Images compressed, WebP format, alt text with FK",
     "Word count meets target of ${wordCount}"
   ]
 }`;
@@ -60,7 +80,8 @@ export default function BriefGenerator() {
   const [clients, setClients] = useState([]);
   const [form, setForm] = useState({
     client: '', contentType: 'Blog Post', isRefresh: false,
-    title: '', focusKeyword: '', existingUrl: '',
+    title: '', focusKeyword: '', secondaryKeywords: '',
+    existingUrl: '', ctaUrl: '',
     wordCount: 1100, context: '',
   });
   const [brief, setBrief] = useState(null);
@@ -71,7 +92,6 @@ export default function BriefGenerator() {
   const [selectedPlanId, setSelectedPlanId] = useState('');
 
   useEffect(() => {
-    // Merge clients from shared clients table + content_plans
     const fromDb = dbClients.map(c => c.name);
     supabase.from('content_plans').select('client_name').then(({ data }) => {
       const fromPlans = data ? data.map(d => d.client_name) : [];
@@ -84,7 +104,6 @@ export default function BriefGenerator() {
       .then(({ data }) => setHistory(data || []));
   }, [dbClients]);
 
-  // Fetch content plans for selected client
   useEffect(() => {
     if (!form.client) { setClientPlans([]); return; }
     supabase.from('content_plans').select('id, title, focus_keyword, status')
@@ -112,8 +131,8 @@ export default function BriefGenerator() {
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 2000,
-          system: 'You are an SEO content strategist. Return ONLY valid JSON.',
+          max_tokens: 2500,
+          system: 'You are an SEO content strategist. Return ONLY valid JSON with no markdown fences.',
           messages: [{ role: 'user', content: BRIEF_PROMPT(form) }],
         }),
       });
@@ -122,6 +141,7 @@ export default function BriefGenerator() {
       const msg = await res.json();
       const parsed = JSON.parse(msg.content[0].text);
       setBrief(parsed);
+      toast.success('Brief generated!');
     } catch (err) {
       toast.error('Error generating brief: ' + err.message);
     }
@@ -139,7 +159,6 @@ export default function BriefGenerator() {
     if (!error) {
       setSaved(true);
       toast.success('Brief saved!');
-      // Update content plan status to Briefed if linked
       if (selectedPlanId) {
         await supabase.from('content_plans').update({ status: 'Briefed', updated_at: new Date().toISOString() }).eq('id', selectedPlanId);
       }
@@ -161,15 +180,25 @@ export default function BriefGenerator() {
 
   const handleCopy = () => {
     if (!brief) return;
-    let text = `CONTENT BRIEF\n${'='.repeat(40)}\nTitle: ${form.title}\nFK: ${form.focusKeyword}\nClient: ${form.client}\nType: ${form.contentType}\n\n`;
-    text += `OVERVIEW\n${brief.overview}\n\n`;
+    let text = `${form.client} - ${form.contentType} - ${form.isRefresh ? 'REFRESH' : 'NEW'}: ${form.title}\n`;
+    text += `${'='.repeat(50)}\n\n`;
+    text += `Content Type: ${brief.content_type_label || (form.isRefresh ? 'BLOG - REFRESH' : 'BLOG - NEW')}\n\n`;
+    text += `SEO Title\n${brief.seo_title}\n\n`;
+    text += `Keywords List\n${brief.secondary_keywords?.join('\n')}\n\n`;
+    text += `Main Keywords / Focus Keyphrase\n${form.focusKeyword}\n`;
+    if (brief.keyword_notes) text += `${brief.keyword_notes}\n`;
+    text += `\nMeta Description\n${brief.meta_description}\n\n`;
+    text += `Slug URL\n${brief.suggested_slug}\n`;
+    if (brief.needs_redirect) text += `Redirect needed: Yes\n`;
+    text += `\nCTA Links\n${brief.cta_links?.join('\n')}\n\n`;
+    text += `${'─'.repeat(40)}\n\nOVERVIEW\n${brief.overview}\n\n`;
     text += `SUGGESTED H1\n${brief.suggested_h1}\n\n`;
-    text += `LSI KEYWORDS\n${brief.lsi_keywords?.join(', ')}\n\n`;
-    text += `H2 STRUCTURE\n${brief.h2_structure?.map(h => `- ${h.h2}: ${h.description}`).join('\n')}\n\n`;
-    text += `FAQ SECTION\n${brief.faq_section?.map(f => `Q: ${f.question}\n   ${f.guidance}`).join('\n')}\n\n`;
-    text += `INTERNAL LINKS\n${brief.internal_links?.map(l => `- ${l.page}: ${l.reason}`).join('\n')}\n\n`;
-    text += `CTA\n${brief.cta_recommendation}\n\n`;
-    text += `SEO CHECKLIST\n${brief.seo_checklist?.map(c => `[ ] ${c}`).join('\n')}\n`;
+    text += `H2 STRUCTURE\n${brief.h2_structure?.map(h => `${h.h2}\n  ${h.description}`).join('\n\n')}\n\n`;
+    text += `FAQ SECTION\n${brief.faq_section?.map(f => `Q: ${f.question}\n  ${f.guidance}`).join('\n\n')}\n\n`;
+    text += `INTERNAL LINKS\n${brief.internal_links?.map(l => `- ${l.page}${l.url ? ` (${l.url})` : ''}: ${l.reason}`).join('\n')}\n\n`;
+    text += `CTA RECOMMENDATION\n${brief.cta_recommendation}\n\n`;
+    text += `${'─'.repeat(40)}\n\nSOCIAL POST TEXT\n\nFACEBOOK\n${brief.social_posts?.facebook || ''}\n\nINSTAGRAM\n${brief.social_posts?.instagram || ''}\n\n`;
+    text += `${'─'.repeat(40)}\n\nSEO CHECKLIST\n${brief.seo_checklist?.map(c => `[ ] ${c}`).join('\n')}\n`;
     navigator.clipboard.writeText(text);
     toast.success('Brief copied to clipboard!');
   };
@@ -180,7 +209,7 @@ export default function BriefGenerator() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-lg font-bold text-[#1a1a1a]">Content Brief Generator</h1>
-            <p className="text-[11px] text-gray-400">AI-powered structured briefs for blog posts and SEO pages</p>
+            <p className="text-[11px] text-gray-400">AI-powered structured briefs matching the CYL template</p>
           </div>
         </div>
 
@@ -203,14 +232,10 @@ export default function BriefGenerator() {
                     <select value={selectedPlanId} onChange={e => {
                       setSelectedPlanId(e.target.value);
                       const plan = clientPlans.find(p => p.id === e.target.value);
-                      if (plan) {
-                        setForm(f => ({ ...f, title: plan.title || f.title, focusKeyword: plan.focus_keyword || f.focusKeyword }));
-                      }
+                      if (plan) setForm(f => ({ ...f, title: plan.title || f.title, focusKeyword: plan.focus_keyword || f.focusKeyword }));
                     }} className="input-field">
                       <option value="">— No link —</option>
-                      {clientPlans.map(p => (
-                        <option key={p.id} value={p.id}>[{p.status}] {p.title}</option>
-                      ))}
+                      {clientPlans.map(p => <option key={p.id} value={p.id}>[{p.status}] {p.title}</option>)}
                     </select>
                   </div>
                 )}
@@ -228,13 +253,15 @@ export default function BriefGenerator() {
                 </div>
                 <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
                   <input type="checkbox" checked={form.isRefresh} onChange={e => setForm(f => ({ ...f, isRefresh: e.target.checked }))} className="accent-[#F5C518]" />
-                  This is a REFRESH (not new)
+                  This is a REFRESH / UPDATE (not new)
                 </label>
-                <div><Label>Article Title</Label><input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. QLD First Home Buyer: 7 Smart Steps..." className="input-field" /></div>
-                <div><Label>Focus Keyword</Label><input value={form.focusKeyword} onChange={e => setForm(f => ({ ...f, focusKeyword: e.target.value }))} placeholder="e.g. qld first home buyer" className="input-field" /></div>
+                <div><Label>Article Title</Label><input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Real Estate West End: 6 Facts..." className="input-field" /></div>
+                <div><Label>Focus Keyword</Label><input value={form.focusKeyword} onChange={e => setForm(f => ({ ...f, focusKeyword: e.target.value }))} placeholder="e.g. real estate west end" className="input-field" /></div>
+                <div><Label>Secondary Keywords (comma-separated)</Label><input value={form.secondaryKeywords} onChange={e => setForm(f => ({ ...f, secondaryKeywords: e.target.value }))} placeholder="e.g. real estate west end qld, west end real estate" className="input-field" /></div>
                 {form.isRefresh && (
                   <div><Label>Existing URL</Label><input value={form.existingUrl} onChange={e => setForm(f => ({ ...f, existingUrl: e.target.value }))} placeholder="https://..." className="input-field" /></div>
                 )}
+                <div><Label>CTA Link URL</Label><input value={form.ctaUrl} onChange={e => setForm(f => ({ ...f, ctaUrl: e.target.value }))} placeholder="e.g. https://lukeokelly.com.au/contact/" className="input-field" /></div>
                 <div><Label>Additional Context (optional)</Label><textarea value={form.context} onChange={e => setForm(f => ({ ...f, context: e.target.value }))} rows={2} placeholder="Tone, audience, special notes..." className="input-field resize-y" /></div>
                 <button onClick={handleGenerate} disabled={generating} className="btn-primary w-full py-2.5">
                   {generating ? 'Generating brief...' : 'Generate Brief'}
@@ -242,7 +269,6 @@ export default function BriefGenerator() {
               </div>
             </div>
 
-            {/* History */}
             {history.length > 0 && (
               <div className="bg-white border border-gray-200 rounded-xl p-4">
                 <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Recent Briefs</h3>
@@ -262,7 +288,7 @@ export default function BriefGenerator() {
               <div className="flex flex-col items-center justify-center h-64 text-center text-gray-400">
                 <div className="text-3xl mb-2 opacity-30">📝</div>
                 <p className="text-sm">Fill in the form and click Generate Brief</p>
-                <p className="text-[11px] mt-1">The AI will create a structured brief your team can work from immediately.</p>
+                <p className="text-[11px] mt-1">The AI will create a structured brief matching your CYL template.</p>
               </div>
             ) : generating ? (
               <div className="flex flex-col items-center justify-center h-64 text-gray-500">
@@ -281,21 +307,53 @@ export default function BriefGenerator() {
                   </div>
                 </div>
 
+                {/* Header card */}
+                <div className="bg-[#1a1a1a] rounded-lg p-4 mb-5 text-white">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#F5C518] mb-1">
+                    {brief.content_type_label || (form.isRefresh ? 'BLOG - REFRESH' : 'BLOG - NEW')}
+                  </div>
+                  <div className="text-[15px] font-semibold">{form.title}</div>
+                  <div className="text-[11px] text-white/50 mt-1">Client: {form.client}</div>
+                </div>
+
+                <Section title="SEO Title">
+                  <p className="text-[13px] font-semibold text-[#1a1a1a] bg-[#f8f8f6] rounded-lg p-3">{brief.seo_title}</p>
+                </Section>
+
+                <Section title="Keywords">
+                  <div className="mb-2">
+                    <div className="text-[10px] text-gray-400 mb-1">Focus Keyphrase</div>
+                    <span className="text-[11px] bg-[#F5C518]/20 text-[#1a1a1a] px-2.5 py-1 rounded-full font-semibold">{form.focusKeyword}</span>
+                  </div>
+                  <div className="mb-2">
+                    <div className="text-[10px] text-gray-400 mb-1">Secondary Keywords</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(brief.secondary_keywords || []).map((kw, i) => (
+                        <span key={i} className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{kw}</span>
+                      ))}
+                    </div>
+                  </div>
+                  {brief.keyword_notes && (
+                    <div className="text-[10px] text-gray-500 bg-[#f8f8f6] rounded p-2 leading-relaxed">{brief.keyword_notes}</div>
+                  )}
+                </Section>
+
+                <Section title="Meta Description">
+                  <p className="text-[12px] text-gray-700 bg-[#f8f8f6] rounded-lg p-3 leading-relaxed">{brief.meta_description}</p>
+                  <div className="text-[10px] text-gray-400 mt-1">{brief.meta_description?.length || 0} / 155 chars</div>
+                </Section>
+
+                <Section title="Slug URL">
+                  <p className="text-[12px] text-blue-600 bg-[#f8f8f6] rounded-lg p-3 font-mono">{brief.suggested_slug}</p>
+                  {brief.needs_redirect && <div className="text-[10px] text-orange-500 mt-1">Redirect from old URL may be needed</div>}
+                </Section>
+
                 <Section title="Overview">
                   <p className="text-[12px] text-gray-700 leading-relaxed">{brief.overview}</p>
                 </Section>
 
                 <Section title="Suggested H1">
                   <p className="text-[13px] font-semibold text-[#1a1a1a]">{brief.suggested_h1}</p>
-                </Section>
-
-                <Section title={`Focus Keyword + LSI Keywords`}>
-                  <div className="flex flex-wrap gap-1.5">
-                    <span className="text-[10px] bg-[#F5C518]/20 text-[#1a1a1a] px-2 py-0.5 rounded-full font-semibold">{form.focusKeyword}</span>
-                    {brief.lsi_keywords?.map((kw, i) => (
-                      <span key={i} className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{kw}</span>
-                    ))}
-                  </div>
                 </Section>
 
                 <Section title="H2 Structure">
@@ -318,17 +376,39 @@ export default function BriefGenerator() {
                   ))}
                 </Section>
 
+                <Section title="CTA Links">
+                  <p className="text-[12px] text-gray-700 leading-relaxed bg-[#F5C518]/10 rounded-lg p-3">{brief.cta_recommendation}</p>
+                  {brief.cta_links?.map((link, i) => (
+                    <div key={i} className="text-[11px] text-blue-600 mt-1 font-mono">{link}</div>
+                  ))}
+                </Section>
+
                 <Section title="Internal Link Suggestions">
                   {brief.internal_links?.map((link, i) => (
                     <div key={i} className="flex items-start gap-2 mb-1.5 text-[11px]">
                       <span className="text-[#F5C518] shrink-0 mt-0.5">→</span>
-                      <div><b className="text-gray-700">{link.page}</b> — <span className="text-gray-500">{link.reason}</span></div>
+                      <div>
+                        <b className="text-gray-700">{link.page}</b>
+                        {link.url && <span className="text-blue-500 ml-1 font-mono text-[10px]">{link.url}</span>}
+                        <span className="text-gray-400"> — {link.reason}</span>
+                      </div>
                     </div>
                   ))}
                 </Section>
 
-                <Section title="CTA Recommendation">
-                  <p className="text-[12px] text-gray-700 leading-relaxed bg-[#F5C518]/10 rounded-lg p-3">{brief.cta_recommendation}</p>
+                <Section title="Social Post Text">
+                  {brief.social_posts?.facebook && (
+                    <div className="mb-3">
+                      <div className="text-[10px] font-semibold text-[#1877F2] mb-1">FACEBOOK</div>
+                      <div className="text-[11px] text-gray-700 bg-[#f8f8f6] rounded-lg p-3 leading-relaxed whitespace-pre-wrap">{brief.social_posts.facebook}</div>
+                    </div>
+                  )}
+                  {brief.social_posts?.instagram && (
+                    <div>
+                      <div className="text-[10px] font-semibold text-[#E4405F] mb-1">INSTAGRAM</div>
+                      <div className="text-[11px] text-gray-700 bg-[#f8f8f6] rounded-lg p-3 leading-relaxed whitespace-pre-wrap">{brief.social_posts.instagram}</div>
+                    </div>
+                  )}
                 </Section>
 
                 <Section title="On-Page SEO Checklist">
