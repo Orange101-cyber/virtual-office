@@ -386,10 +386,11 @@ export default function SEODashboard({ clients, onAddClient }) {
               {selectedMonth === null && (
                 <Sparkline
                   data={analytics.monthlyData.map(m => m.avgScore)}
-                color={getScoreColor(analytics.avgScore)}
-              />
+                  color={getScoreColor(analytics.avgScore)}
+                />
+              )}
             </div>
-            <div className="text-[10px] mt-1" style={{ color: getScoreColor(analytics.avgScore) }}>
+            <div className="text-[10px] mt-1" style={{ color: getScoreColor(monthStats.avgScore) }}>
               {getScoreLabel(monthStats.avgScore)}
             </div>
           </div>
