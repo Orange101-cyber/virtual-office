@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
+import { useClients } from '../hooks/useClients';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
-const STATUSES = ['Planned', 'Researched', 'Briefed', 'Sent to Airtable'];
+const STATUSES = ['Planned', 'Researched', 'Briefed', 'Client Approved', 'Sent to Airtable'];
 const STATUS_COLORS = {
-  Planned: '#94a3b8', Researched: '#F5C518', Briefed: '#3b82f6', 'Sent to Airtable': '#27ae60',
+  Planned: '#94a3b8', Researched: '#F5C518', Briefed: '#3b82f6', 'Client Approved': '#10b981', 'Sent to Airtable': '#27ae60',
 };
 const QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4'];
 const MONTHS_MAP = { Q1: ['January', 'February', 'March'], Q2: ['April', 'May', 'June'], Q3: ['July', 'August', 'September'], Q4: ['October', 'November', 'December'] };
@@ -212,6 +213,7 @@ function PlanCard({ item, onClick }) {
 
 // ── Main ──
 export default function ContentPlanner() {
+  const { clients: dbClients } = useClients();
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('board');
@@ -233,11 +235,12 @@ export default function ContentPlanner() {
 
   useEffect(() => { fetchPlans(); }, [fetchPlans]);
 
-  const clients = useMemo(() => [...new Set(plans.map(p => p.client_name))].sort(), [plans]);
+  // Merge clients from the shared clients table + any names in existing plans
   const allClients = useMemo(() => {
+    const fromDb = dbClients.map(c => c.name);
     const fromPlans = plans.map(p => p.client_name);
-    return [...new Set(fromPlans)].sort();
-  }, [plans]);
+    return [...new Set([...fromDb, ...fromPlans])].filter(Boolean).sort();
+  }, [dbClients, plans]);
 
   const handleSave = async (item) => {
     if (item.id) {
@@ -295,6 +298,85 @@ export default function ContentPlanner() {
     URL.revokeObjectURL(url);
   };
 
+  const handleExportForReview = async () => {
+    const briefedItems = plans.filter(p => p.status === 'Briefed');
+    if (briefedItems.length === 0) { alert('No items in "Briefed" status to review.'); return; }
+
+    // Fetch briefs for these items
+    const { data: briefs } = await supabase
+      .from('content_briefs')
+      .select('*')
+      .in('plan_id', briefedItems.map(i => i.id));
+
+    const briefMap = {};
+    (briefs || []).forEach(b => { briefMap[b.plan_id] = b.brief_json; });
+
+    // Also match by title+keyword if plan_id not linked
+    (briefs || []).forEach(b => {
+      if (!b.plan_id) {
+        const match = briefedItems.find(i => i.title === b.title || i.focus_keyword === b.focus_keyword);
+        if (match && !briefMap[match.id]) briefMap[match.id] = b.brief_json;
+      }
+    });
+
+    let output = `CONTENT REVIEW DOCUMENT\n${'='.repeat(50)}\n`;
+    output += `Quarter: ${quarterFilter || 'All'}\nDate: ${new Date().toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}\n`;
+    output += `Items for Review: ${briefedItems.length}\n${'='.repeat(50)}\n\n`;
+
+    // Group by client
+    const grouped = {};
+    briefedItems.forEach(item => {
+      if (!grouped[item.client_name]) grouped[item.client_name] = [];
+      grouped[item.client_name].push(item);
+    });
+
+    Object.entries(grouped).forEach(([client, items]) => {
+      output += `\n${'─'.repeat(50)}\n`;
+      output += `CLIENT: ${client.toUpperCase()}\n`;
+      output += `${'─'.repeat(50)}\n\n`;
+
+      items.forEach((item, idx) => {
+        output += `${idx + 1}. ${item.is_refresh ? '[REFRESH]' : '[NEW]'} ${item.title}\n`;
+        output += `   FK: ${item.focus_keyword || '—'}`;
+        if (item.search_volume) output += ` | SV: ${item.search_volume.toLocaleString()}`;
+        if (item.kd !== null && item.kd !== undefined) output += ` | KD: ${item.kd}`;
+        output += `\n   Month: ${item.month || '—'} | Type: ${item.content_type}\n`;
+        if (item.notes) output += `   Notes: ${item.notes}\n`;
+
+        const brief = briefMap[item.id];
+        if (brief) {
+          output += `\n   BRIEF:\n`;
+          if (brief.overview) output += `   Overview: ${brief.overview}\n`;
+          if (brief.suggested_h1) output += `   Suggested H1: ${brief.suggested_h1}\n`;
+          if (brief.lsi_keywords?.length) output += `   LSI Keywords: ${brief.lsi_keywords.join(', ')}\n`;
+          if (brief.h2_structure?.length) {
+            output += `   H2 Structure:\n`;
+            brief.h2_structure.forEach(h => { output += `     - ${h.h2}: ${h.description}\n`; });
+          }
+          if (brief.faq_section?.length) {
+            output += `   FAQs:\n`;
+            brief.faq_section.forEach(f => { output += `     Q: ${f.question}\n`; });
+          }
+          if (brief.cta_recommendation) output += `   CTA: ${brief.cta_recommendation}\n`;
+        } else {
+          output += `   [No brief generated yet]\n`;
+        }
+        output += `\n   APPROVAL: [ ] Approved  [ ] Changes needed\n`;
+        output += `   Feedback: ___________________________________\n\n`;
+      });
+    });
+
+    output += `\n${'='.repeat(50)}\nGenerated by CYL Content Planner\n`;
+
+    const blob = new Blob([output], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Review-${quarterFilter.replace(' ', '-')}-${new Date().toISOString().split('T')[0]}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // Stats
   const stats = useMemo(() => {
     const s = { total: plans.length };
@@ -313,7 +395,8 @@ export default function ContentPlanner() {
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => setShowImport(true)} className="btn-secondary text-[11px]">Import</button>
-            <button onClick={handleExport} className="btn-secondary text-[11px]">Export</button>
+            <button onClick={handleExport} className="btn-secondary text-[11px]">Export Plan</button>
+            <button onClick={handleExportForReview} className="btn-secondary text-[11px]" style={{ borderColor: '#3b82f6', color: '#3b82f6' }}>Export for Review</button>
             <button onClick={() => { setEditItem(null); setShowAdd(true); }} className="btn-primary text-[11px]">+ Add Content</button>
           </div>
         </div>
@@ -337,6 +420,7 @@ export default function ContentPlanner() {
             <span>Planned: <b>{stats.Planned || 0}</b></span>
             <span>Researched: <b className="text-[#F5C518]">{stats.Researched || 0}</b></span>
             <span>Briefed: <b className="text-blue-500">{stats.Briefed || 0}</b></span>
+            <span>Approved: <b className="text-emerald-500">{stats['Client Approved'] || 0}</b></span>
             <span>Sent: <b className="text-green-600">{stats['Sent to Airtable'] || 0}</b></span>
           </div>
         </div>
