@@ -10,6 +10,7 @@ export default function Sidebar({
   onDeleteClient,
   onNewReport,
   onManageKeywords,
+  hasReport,
 }) {
   const [expandedClients, setExpandedClients] = useState(new Set());
   const currentYear = new Date().getFullYear();
@@ -82,14 +83,16 @@ export default function Sidebar({
         )}
       </div>
 
-      <div className="px-3.5 py-2.5">
-        <button
-          onClick={onNewReport}
-          className="w-full bg-transparent border border-dashed border-[#3a3a3a] text-[#777] rounded-[5px] py-1.5 text-[11px] cursor-pointer text-center hover:border-[#F5C518] hover:text-[#F5C518]"
-        >
-          + New Report
-        </button>
-      </div>
+      {hasReport && (
+        <div className="px-3.5 py-2.5">
+          <button
+            onClick={onNewReport}
+            className="w-full bg-transparent border border-dashed border-[#3a3a3a] text-[#777] rounded-[5px] py-1.5 text-[11px] cursor-pointer text-center hover:border-[#F5C518] hover:text-[#F5C518]"
+          >
+            + New Report
+          </button>
+        </div>
+      )}
     </div>
   );
 }

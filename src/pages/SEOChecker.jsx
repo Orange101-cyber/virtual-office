@@ -160,6 +160,7 @@ export default function SEOChecker() {
             onDeleteClient={handleDeleteClient}
             onNewReport={handleNewReport}
             onManageKeywords={(id) => setShowKeywordBank(id)}
+            hasReport={hasReport}
           />
 
           {hasReport ? (
