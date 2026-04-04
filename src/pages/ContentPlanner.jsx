@@ -18,7 +18,7 @@ function getQuarters() {
 }
 
 // ── Add/Edit Modal with Cannibalization Check ──
-function PlanModal({ open, onClose, onSave, item, clients, dbClients }) {
+function PlanModal({ open, onClose, onSave, onDelete, item, clients, dbClients }) {
   const [form, setForm] = useState({
     client_name: '', quarter: `Q${Math.ceil((new Date().getMonth() + 1) / 3)} ${CURRENT_YEAR}`,
     month: '', content_type: 'Blog', title: '', is_refresh: false,
@@ -179,7 +179,12 @@ function PlanModal({ open, onClose, onSave, item, clients, dbClients }) {
           <div><Label>Assigned To</Label><input value={form.assigned_to} onChange={e => setForm(f => ({ ...f, assigned_to: e.target.value }))} className="input-field" /></div>
           <div><Label>Notes</Label><input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="input-field" /></div>
         </div>
-        <div className="flex gap-2 justify-end mt-4">
+        <div className="flex gap-2 mt-4">
+          {item && (
+            <button onClick={() => { onDelete(item.id); onClose(); }} className="btn-secondary text-red-500 border-red-200 hover:bg-red-50 hover:border-red-300 mr-auto">
+              Delete
+            </button>
+          )}
           <button onClick={onClose} className="btn-secondary">Cancel</button>
           <button onClick={handleSave} disabled={!form.title.trim()} className="btn-primary">
             {cannibHits.length > 0 && !form.is_refresh ? 'Save Anyway' : 'Save'}
@@ -254,14 +259,21 @@ function ImportModal({ open, onClose, onImport, clients }) {
 }
 
 // ── Card Component ──
-function PlanCard({ item, onClick }) {
+function PlanCard({ item, onClick, onDelete }) {
   return (
-    <div onClick={onClick} className="bg-white border border-gray-200 rounded-lg p-3 mb-2 cursor-pointer hover:border-[#F5C518] transition-colors">
+    <div onClick={onClick} className="bg-white border border-gray-200 rounded-lg p-3 mb-2 cursor-pointer hover:border-[#F5C518] transition-colors group relative">
+      <button
+        onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
+        className="absolute top-1.5 right-1.5 bg-transparent border-none text-gray-300 cursor-pointer text-xs p-0 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-opacity"
+        title="Delete"
+      >
+        ✕
+      </button>
       <div className="flex items-start justify-between mb-1">
         <span className={`text-[8px] font-bold uppercase px-1.5 py-0 rounded ${item.is_refresh ? 'bg-orange-50 text-orange-500' : 'bg-blue-50 text-blue-600'}`}>
           {item.is_refresh ? 'Refresh' : 'New'}
         </span>
-        <span className="text-[8px] text-gray-400">{item.content_type}</span>
+        <span className="text-[8px] text-gray-400 mr-3">{item.content_type}</span>
       </div>
       <div className="text-[11px] font-medium text-[#1a1a1a] leading-snug mb-1.5 line-clamp-2">{item.title}</div>
       {item.focus_keyword && (
@@ -522,7 +534,7 @@ export default function ContentPlanner() {
                             <Draggable key={item.id} draggableId={item.id} index={idx}>
                               {(prov) => (
                                 <div ref={prov.innerRef} {...prov.draggableProps} {...prov.dragHandleProps}>
-                                  <PlanCard item={item} onClick={() => { setEditItem(item); setShowAdd(true); }} />
+                                  <PlanCard item={item} onClick={() => { setEditItem(item); setShowAdd(true); }} onDelete={handleDelete} />
                                 </div>
                               )}
                             </Draggable>
@@ -597,7 +609,7 @@ export default function ContentPlanner() {
         </div>
       )}
 
-      <PlanModal open={showAdd} onClose={() => { setShowAdd(false); setEditItem(null); }} onSave={handleSave} item={editItem} clients={allClients.length ? allClients : ['Client 1']} dbClients={dbClients} />
+      <PlanModal open={showAdd} onClose={() => { setShowAdd(false); setEditItem(null); }} onSave={handleSave} onDelete={handleDelete} item={editItem} clients={allClients.length ? allClients : ['Client 1']} dbClients={dbClients} />
       <ImportModal open={showImport} onClose={() => setShowImport(false)} onImport={handleImport} clients={allClients.length ? allClients : ['Client 1']} />
 
       <style>{`
