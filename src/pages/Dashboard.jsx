@@ -26,11 +26,27 @@ const TOOLS = [
     external: false,
   },
   {
-    name: 'Content Calendar',
-    description: 'Plan and schedule blog posts, social content, and campaigns across all clients.',
-    path: null,
+    name: 'Content Planner',
+    description: 'Per-client content plans with Kanban board. Track every piece from Planned through to Complete.',
+    path: '/content-planner',
     icon: '📅',
-    status: 'coming',
+    status: 'live',
+    external: false,
+  },
+  {
+    name: 'Brief Generator',
+    description: 'AI-powered content briefs from a keyword and title. Generates H2 structure, FAQs, internal links and SEO checklist.',
+    path: '/brief-generator',
+    icon: '📝',
+    status: 'live',
+    external: false,
+  },
+  {
+    name: 'Keyword Research',
+    description: 'AI first-pass keyword brainstorm per client niche. Get 10-15 keyword ideas with intent, titles and quick wins.',
+    path: '/keyword-research',
+    icon: '🔑',
+    status: 'live',
     external: false,
   },
 ];
@@ -59,26 +75,15 @@ export default function Dashboard() {
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="text-2xl">{tool.icon}</div>
-                  {tool.status === 'live' ? (
-                    <span className="text-[9px] font-bold uppercase bg-green-50 text-green-600 px-2 py-0.5 rounded-full">
-                      Live
-                    </span>
-                  ) : (
-                    <span className="text-[9px] font-bold uppercase bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full">
-                      Coming Soon
-                    </span>
-                  )}
+                  <span className="text-[9px] font-bold uppercase bg-green-50 text-green-600 px-2 py-0.5 rounded-full">
+                    Live
+                  </span>
                 </div>
                 <h3 className="text-sm font-semibold text-[#1a1a1a] mb-1">{tool.name}</h3>
                 <p className="text-xs text-gray-400 leading-relaxed">{tool.description}</p>
               </div>
             );
 
-            if (!tool.path) {
-              return <div key={tool.name}>{Card}</div>;
-            }
-
-            // External links (static pages like the office) use <a>, React routes use <Link>
             if (tool.external) {
               return (
                 <a key={tool.name} href={`${BASE}${tool.path}`} className="no-underline">

@@ -7,8 +7,15 @@ import AppShell from './components/AppShell';
 import Dashboard from './pages/Dashboard';
 import SEOChecker from './pages/SEOChecker';
 import ClientDashboard from './pages/ClientDashboard';
+import ContentPlanner from './pages/ContentPlanner';
+import BriefGenerator from './pages/BriefGenerator';
+import KeywordResearch from './pages/KeywordResearch';
 import Login from './pages/Login';
 import './index.css';
+
+function AuthRoute({ session, children }) {
+  return session ? <AppShell>{children}</AppShell> : <Navigate to="/login" replace />;
+}
 
 function Root() {
   const [session, setSession] = useState(undefined);
@@ -36,46 +43,13 @@ function Root() {
   return (
     <BrowserRouter basename="/virtual-office">
       <Routes>
-        <Route
-          path="/login"
-          element={session ? <Navigate to="/" replace /> : <Login />}
-        />
-        <Route
-          path="/"
-          element={
-            session ? (
-              <AppShell>
-                <Dashboard />
-              </AppShell>
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
-        <Route
-          path="/client-dashboard"
-          element={
-            session ? (
-              <AppShell>
-                <ClientDashboard />
-              </AppShell>
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
-        <Route
-          path="/seo-checker"
-          element={
-            session ? (
-              <AppShell>
-                <SEOChecker />
-              </AppShell>
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
+        <Route path="/login" element={session ? <Navigate to="/" replace /> : <Login />} />
+        <Route path="/" element={<AuthRoute session={session}><Dashboard /></AuthRoute>} />
+        <Route path="/client-dashboard" element={<AuthRoute session={session}><ClientDashboard /></AuthRoute>} />
+        <Route path="/seo-checker" element={<AuthRoute session={session}><SEOChecker /></AuthRoute>} />
+        <Route path="/content-planner" element={<AuthRoute session={session}><ContentPlanner /></AuthRoute>} />
+        <Route path="/brief-generator" element={<AuthRoute session={session}><BriefGenerator /></AuthRoute>} />
+        <Route path="/keyword-research" element={<AuthRoute session={session}><KeywordResearch /></AuthRoute>} />
       </Routes>
     </BrowserRouter>
   );
