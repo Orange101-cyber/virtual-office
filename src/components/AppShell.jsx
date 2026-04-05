@@ -5,11 +5,11 @@ const NAV_ITEMS = [
   { path: '/', label: 'Dashboard' },
   { path: '/office/', label: 'Virtual Office', external: true },
   { path: '/client-dashboard', label: 'Client Dashboard' },
-  { path: '/seo-checker', label: 'SEO Checker' },
-  { path: '/content-planner', label: 'Content Planner' },
-  { path: '/brief-generator', label: 'Brief Generator' },
   { path: '/keyword-research', label: 'Keyword Research' },
+  { path: '/brief-generator', label: 'Brief Generator' },
+  { path: '/content-planner', label: 'Content Planner' },
   { path: '/article-writer', label: 'Article Writer' },
+  { path: '/seo-checker', label: 'SEO Checker' },
 ];
 
 export default function AppShell({ children }) {
