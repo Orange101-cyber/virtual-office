@@ -176,7 +176,9 @@ export default function BriefGenerator() {
 
       if (!res.ok) throw new Error(`API error ${res.status}`);
       const msg = await res.json();
-      const parsed = JSON.parse(msg.content[0].text);
+      let rawText = msg.content[0].text;
+      rawText = rawText.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+      const parsed = JSON.parse(rawText);
       setBrief(parsed);
       toast.success('Brief generated!');
     } catch (err) {
