@@ -14,6 +14,7 @@ export default function ArticleWriter() {
   const [generating, setGenerating] = useState(false);
   const [wordTarget, setWordTarget] = useState(1100);
   const [contentType, setContentType] = useState('Blog Post');
+  const [readingLevel, setReadingLevel] = useState('grade-7');
   const [customInstructions, setCustomInstructions] = useState('');
 
   // Load clients
@@ -70,6 +71,15 @@ export default function ArticleWriter() {
         .join('\n\n');
     }
 
+    const readingInstructions = {
+      'grade-5': 'Write at a Grade 5 reading level. Use very simple everyday words. Keep sentences under 12 words on average. Use only common vocabulary. No jargon at all. Short paragraphs of 1-2 sentences.',
+      'grade-6': 'Write at a Grade 6 reading level. Use simple, clear language. Keep sentences under 15 words on average. Avoid complex words where simpler ones work. Short paragraphs of 2-3 sentences.',
+      'grade-7': 'Write at a Grade 7 reading level. Use plain English that is easy to scan. Keep sentences under 18 words on average. Occasional industry terms are OK if context makes them clear. Paragraphs of 2-3 sentences.',
+      'grade-8': 'Write at a Grade 8 reading level. Use clear but slightly more sophisticated language. Sentences can average 18-20 words. Industry-specific terms are fine with brief context. Paragraphs of 2-4 sentences.',
+      'grade-10': 'Write at a Grade 10 reading level. Use professional language appropriate for an informed audience. Sentences can be longer and more complex. Industry terminology expected. Paragraphs of 3-4 sentences.',
+      'grade-12': 'Write at a Grade 12 reading level. Use expert-level language with technical terminology. Complex sentence structures are acceptable. Assume the reader has domain knowledge. Detailed paragraphs of 3-5 sentences.',
+    };
+
     const prompt = `You are an expert SEO content writer for an Australian digital marketing agency.
 Write a complete, publish-ready ${contentType === 'SEO Page' ? 'SEO landing page' : 'blog article'} based on the brief below.
 
@@ -118,7 +128,7 @@ FORMATTING RULES:
 - Include the FAQ section with Q: and A: format
 - Focus keyword density of 1-2%
 - Use all secondary keywords naturally throughout
-- Write for Australian audiences in plain English at Grade 6-8 reading level
+- ${readingInstructions[readingLevel] || readingInstructions['grade-7']}
 - Short paragraphs (2-4 sentences max)
 - ${wordTarget}+ words total
 - DO NOT include any meta information, just the article body content`;
@@ -214,6 +224,26 @@ FORMATTING RULES:
                   <div>
                     <Label>Target Words</Label>
                     <input type="number" value={wordTarget} onChange={e => setWordTarget(e.target.value)} className="input-field" />
+                  </div>
+                </div>
+
+                <div>
+                  <Label>Reading Level</Label>
+                  <select value={readingLevel} onChange={e => setReadingLevel(e.target.value)} className="input-field">
+                    <option value="grade-5">Grade 5 — Very Easy (everyday language, short sentences)</option>
+                    <option value="grade-6">Grade 6 — Easy (simple words, clear structure)</option>
+                    <option value="grade-7">Grade 7 — Standard (recommended for most blogs)</option>
+                    <option value="grade-8">Grade 8 — Moderate (slightly more complex)</option>
+                    <option value="grade-10">Grade 10 — Advanced (professional audience)</option>
+                    <option value="grade-12">Grade 12 — Expert (technical/industry language)</option>
+                  </select>
+                  <div className="text-[9px] text-gray-400 mt-0.5">
+                    {readingLevel === 'grade-5' && 'Best for: general public, older demographics, accessibility'}
+                    {readingLevel === 'grade-6' && 'Best for: consumer blogs, broad audiences'}
+                    {readingLevel === 'grade-7' && 'Best for: most SEO content, property, finance blogs'}
+                    {readingLevel === 'grade-8' && 'Best for: informed audiences, B2B light'}
+                    {readingLevel === 'grade-10' && 'Best for: professional services, B2B, technical topics'}
+                    {readingLevel === 'grade-12' && 'Best for: expert audiences, whitepapers, research-heavy'}
                   </div>
                 </div>
 
