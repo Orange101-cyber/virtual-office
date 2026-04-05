@@ -116,10 +116,19 @@ export default function KeywordResearch() {
       setClients(unique);
       if (unique.length && !form.client) setForm(f => ({ ...f, client: unique[0] }));
     });
-    supabase.from('keyword_research').select('id, client_name, seed_topic, created_at')
-      .order('created_at', { ascending: false }).limit(10)
-      .then(({ data }) => setHistory(data || []));
   }, [dbClients]);
+
+  // Load history filtered by selected client
+  const loadHistory = (clientName) => {
+    let query = supabase.from('keyword_research').select('id, client_name, seed_topic, niche, created_at')
+      .order('created_at', { ascending: false }).limit(20);
+    if (clientName) query = query.eq('client_name', clientName);
+    query.then(({ data }) => setHistory(data || []));
+  };
+
+  useEffect(() => {
+    loadHistory(form.client);
+  }, [form.client]);
 
   const handleGenerate = async () => {
     if (!form.niche || !form.seedTopic) return toast.error('Niche and Seed Topic are required.');
@@ -148,7 +157,10 @@ export default function KeywordResearch() {
 
       if (!res.ok) throw new Error(`API error ${res.status}`);
       const msg = await res.json();
-      const parsed = JSON.parse(msg.content[0].text);
+      let rawText = msg.content[0].text;
+      // Strip markdown code fences if present
+      rawText = rawText.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+      const parsed = JSON.parse(rawText);
       setResults(parsed);
 
       // Save to DB
@@ -156,9 +168,8 @@ export default function KeywordResearch() {
         client_name: form.client, niche: form.niche,
         seed_topic: form.seedTopic, results_json: parsed,
       });
-      supabase.from('keyword_research').select('id, client_name, seed_topic, created_at')
-        .order('created_at', { ascending: false }).limit(10)
-        .then(({ data }) => setHistory(data || []));
+      loadHistory(form.client);
+      toast.success('Research saved!');
     } catch (err) {
       toast.error('Error: ' + err.message);
     }
@@ -221,11 +232,31 @@ export default function KeywordResearch() {
 
             {history.length > 0 && (
               <div className="bg-white border border-gray-200 rounded-xl p-4">
-                <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Recent Sessions</h3>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                    {form.client ? `${form.client} Research` : 'Recent Sessions'}
+                  </h3>
+                  <span className="text-[9px] text-gray-400">{history.length}</span>
+                </div>
                 {history.map(h => (
-                  <div key={h.id} onClick={() => handleLoadSession(h.id)} className="py-1.5 border-b border-gray-100 last:border-0 cursor-pointer hover:text-[#F5C518] text-[11px]">
-                    <div className="font-medium text-gray-700">{h.seed_topic}</div>
-                    <div className="text-[9px] text-gray-400">{h.client_name} · {new Date(h.created_at).toLocaleDateString()}</div>
+                  <div key={h.id} className="flex items-center gap-1 py-1.5 border-b border-gray-100 last:border-0 group">
+                    <div onClick={() => handleLoadSession(h.id)} className="flex-1 min-w-0 cursor-pointer hover:text-[#F5C518] text-[11px]">
+                      <div className="font-medium text-gray-700">{h.seed_topic}</div>
+                      <div className="text-[9px] text-gray-400">{h.niche || h.client_name} · {new Date(h.created_at).toLocaleDateString()}</div>
+                    </div>
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (!confirm('Delete this research session?')) return;
+                        await supabase.from('keyword_research').delete().eq('id', h.id);
+                        setHistory(prev => prev.filter(item => item.id !== h.id));
+                        toast.success('Session deleted');
+                      }}
+                      className="bg-transparent border-none text-gray-300 cursor-pointer text-[10px] p-0 opacity-0 group-hover:opacity-100 hover:text-red-500 shrink-0"
+                      title="Delete session"
+                    >
+                      ✕
+                    </button>
                   </div>
                 ))}
               </div>
