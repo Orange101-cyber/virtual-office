@@ -12,6 +12,9 @@ export default function ArticleWriter() {
   const [clientArticles, setClientArticles] = useState([]);
   const [article, setArticle] = useState('');
   const [generating, setGenerating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState(null);
+  const [saveTimer, setSaveTimer] = useState(null);
   const [wordTarget, setWordTarget] = useState(1100);
   const [contentType, setContentType] = useState('Blog Post');
   const [readingLevel, setReadingLevel] = useState('grade-7');
@@ -35,7 +38,9 @@ export default function ArticleWriter() {
       .select('*')
       .eq('client_name', selectedClient)
       .order('created_at', { ascending: false })
-      .then(({ data }) => setBriefs(data || []));
+      .then(({ data }) => {
+        setBriefs(data || []);
+      });
   }, [selectedClient]);
 
   // Load past articles for writing style
@@ -50,6 +55,36 @@ export default function ArticleWriter() {
       .limit(5)
       .then(({ data }) => setClientArticles(data || []));
   }, [selectedClient, dbClients]);
+
+  // Load saved draft when selecting a brief
+  useEffect(() => {
+    if (selectedBrief?.draft_article) {
+      setArticle(selectedBrief.draft_article);
+      setLastSaved(new Date());
+    } else {
+      setArticle('');
+      setLastSaved(null);
+    }
+  }, [selectedBrief?.id]);
+
+  // Auto-save draft with debounce
+  const saveDraft = async (text) => {
+    if (!selectedBrief?.id || !text) return;
+    setSaving(true);
+    await supabase.from('content_briefs')
+      .update({ draft_article: text })
+      .eq('id', selectedBrief.id);
+    setSaving(false);
+    setLastSaved(new Date());
+  };
+
+  const handleArticleChange = (newText) => {
+    setArticle(newText);
+    // Debounce auto-save: save 2 seconds after user stops typing
+    if (saveTimer) clearTimeout(saveTimer);
+    const timer = setTimeout(() => saveDraft(newText), 2000);
+    setSaveTimer(timer);
+  };
 
   const handleGenerate = async () => {
     if (!selectedBrief) return toast.error('Select a brief first.');
@@ -151,8 +186,18 @@ FORMATTING RULES:
 
       if (!res.ok) throw new Error(`API error ${res.status}`);
       const msg = await res.json();
-      setArticle(msg.content[0].text);
-      toast.success('Article generated!');
+      const generatedText = msg.content[0].text;
+      setArticle(generatedText);
+      // Auto-save to brief record
+      if (selectedBrief?.id) {
+        await supabase.from('content_briefs')
+          .update({ draft_article: generatedText })
+          .eq('id', selectedBrief.id);
+        setLastSaved(new Date());
+        // Update local state so brief shows it has a draft
+        setBriefs(prev => prev.map(b => b.id === selectedBrief.id ? { ...b, draft_article: generatedText } : b));
+      }
+      toast.success('Article generated and saved!');
     } catch (err) {
       toast.error('Error: ' + err.message);
     }
@@ -203,7 +248,12 @@ FORMATTING RULES:
                               : 'border-gray-200 hover:border-[#F5C518]/50'
                           }`}
                         >
-                          <div className="text-[11px] font-medium text-[#1a1a1a] truncate">{b.title}</div>
+                          <div className="flex items-center gap-1.5">
+                            <div className="text-[11px] font-medium text-[#1a1a1a] truncate flex-1">{b.title}</div>
+                            {b.draft_article && (
+                              <span className="text-[8px] font-bold uppercase bg-green-50 text-green-600 px-1.5 py-0 rounded-full shrink-0">Draft</span>
+                            )}
+                          </div>
                           <div className="text-[9px] text-gray-400 flex gap-2 mt-0.5">
                             <span>FK: {b.focus_keyword}</span>
                             <span>{new Date(b.created_at).toLocaleDateString()}</span>
@@ -355,6 +405,13 @@ FORMATTING RULES:
                       Download .txt
                     </button>
                     <button
+                      onClick={() => { saveDraft(article); toast.success('Draft saved!'); }}
+                      disabled={saving}
+                      className="btn-secondary text-[10px]"
+                    >
+                      {saving ? 'Saving...' : 'Save'}
+                    </button>
+                    <button
                       onClick={handleGenerate}
                       disabled={generating}
                       className="btn-primary text-[10px]"
@@ -383,9 +440,17 @@ FORMATTING RULES:
                   </div>
                 </div>
 
-                {/* Article content */}
-                <div className="bg-[#f8f8f6] border border-gray-200 rounded-lg p-5 max-h-[700px] overflow-y-auto">
-                  <pre className="text-[13px] text-gray-700 leading-[1.8] whitespace-pre-wrap font-sans">{article}</pre>
+                {/* Article content — editable */}
+                <div className="relative">
+                  <textarea
+                    value={article}
+                    onChange={e => handleArticleChange(e.target.value)}
+                    className="w-full bg-white border border-gray-200 rounded-lg p-5 text-[13px] text-gray-700 leading-[1.8] font-sans resize-y focus:outline-none focus:border-[#F5C518] min-h-[500px]"
+                    style={{ height: '700px' }}
+                  />
+                  <div className="absolute bottom-2 right-3 text-[9px] text-gray-400">
+                    {saving ? 'Saving...' : lastSaved ? `Auto-saved ${lastSaved.toLocaleTimeString()}` : ''}
+                  </div>
                 </div>
               </>
             )}
