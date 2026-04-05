@@ -3,11 +3,11 @@ import { Link } from 'react-router-dom';
 const TOOLS = [
   {
     name: 'Virtual Office',
-    description: 'The CYL pixel-art virtual office. Hang out, collaborate, and vibe with the team.',
-    path: '/office/',
-    icon: '🏢',
+    description: 'Team games hub with live leaderboards. Compete, earn points, and win the monthly prize.',
+    path: '/virtual-office-games',
+    icon: '🎮',
     status: 'live',
-    external: true,
+    external: false,
   },
   {
     name: 'SEO Blog Checker',

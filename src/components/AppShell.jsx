@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard' },
-  { path: '/office/', label: 'Virtual Office', external: true },
+  { path: '/virtual-office-games', label: 'Virtual Office' },
   { path: '/client-dashboard', label: 'Client Dashboard' },
   { path: '/keyword-research', label: 'Keyword Research' },
   { path: '/brief-generator', label: 'Brief Generator' },
