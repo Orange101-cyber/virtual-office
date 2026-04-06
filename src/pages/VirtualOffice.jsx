@@ -80,14 +80,40 @@ function OnboardingModal({ onSave }) {
 }
 
 // ── Game Card ──
-function GameCard({ game, personalBest, dailyLeader, todayPlays, onPlay }) {
+function GameCard({ game, personalBest, dailyLeader, todayPlays, gameTopScores, onPlay }) {
   const cappedToday = todayPlays >= game.dailyCap;
+  const [showScores, setShowScores] = useState(false);
 
   return (
     <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl p-5 hover:border-[#F5C518] hover:-translate-y-1 transition-all group">
-      <div className="text-3xl mb-3">{game.icon}</div>
+      <div className="flex items-start justify-between mb-2">
+        <div className="text-3xl">{game.icon}</div>
+        {gameTopScores?.length > 0 && (
+          <button onClick={(e) => { e.stopPropagation(); setShowScores(!showScores); }}
+            className="text-[9px] text-[#888882] hover:text-[#F5C518] bg-transparent border border-[#2A2A2A] rounded-full px-2 py-0.5 cursor-pointer font-dm">
+            {showScores ? 'Hide' : 'Top Scores'}
+          </button>
+        )}
+      </div>
       <h3 className="font-syne font-bold text-[#F0EDE6] text-base mb-1">{game.name}</h3>
-      <p className="text-[#888882] text-xs font-dm mb-4">{game.desc}</p>
+      <p className="text-[#888882] text-xs font-dm mb-3">{game.desc}</p>
+
+      {/* Per-game top scores */}
+      {showScores && gameTopScores?.length > 0 && (
+        <div className="mb-3 bg-[#0E0E0E] rounded-lg p-2.5 border border-[#2A2A2A]">
+          <div className="text-[9px] font-bold uppercase tracking-wider text-[#888882] mb-1.5">All-Time Top 5</div>
+          {gameTopScores.slice(0, 5).map((s, i) => (
+            <div key={i} className="flex items-center gap-2 py-0.5 text-[10px]">
+              <span className="w-4 text-center font-syne font-bold" style={{ color: i === 0 ? '#FFD700' : i === 1 ? '#C0C0C0' : i === 2 ? '#CD7F32' : '#888882' }}>
+                {i + 1}
+              </span>
+              <span className="text-[#F0EDE6] flex-1 font-dm">{s.display_name}</span>
+              <span className="text-[#F5C518] font-syne font-bold">{s.best_score}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="text-xs font-dm space-y-1 mb-4">
         <div className="text-[#888882]">Your best: <span className="text-[#F0EDE6] font-semibold">{personalBest ?? 'No score yet'}</span></div>
         <div className="text-[#888882]">Today's leader: <span className="text-[#F0EDE6] font-semibold">{dailyLeader ? `${dailyLeader.display_name} (${dailyLeader.raw_score})` : '—'}</span></div>
@@ -139,6 +165,7 @@ export default function VirtualOffice() {
   const [personalBests, setPersonalBests] = useState({});
   const [dailyLeaders, setDailyLeaders] = useState({});
   const [todayPlays, setTodayPlays] = useState({});
+  const [gameTopScores, setGameTopScores] = useState({});
 
   // Check if profile exists
   useEffect(() => {
@@ -175,6 +202,26 @@ export default function VirtualOffice() {
       setDailyLeaders(prev => ({ ...prev, [game.slug]: dl }));
       const plays = await getTodayScoreCount(game.slug);
       setTodayPlays(prev => ({ ...prev, [game.slug]: plays }));
+    });
+
+    // Load per-game all-time top scores from personal_bests
+    GAMES.forEach(async (game) => {
+      const { data } = await supabase.from('personal_bests')
+        .select('best_score, user_id')
+        .eq('game_slug', game.slug)
+        .order('best_score', { ascending: false })
+        .limit(5);
+      if (data && data.length > 0) {
+        // Get display names for these users
+        const userIds = data.map(d => d.user_id);
+        const { data: profiles } = await supabase.from('player_profiles')
+          .select('user_id, display_name')
+          .in('user_id', userIds);
+        const nameMap = {};
+        (profiles || []).forEach(p => { nameMap[p.user_id] = p.display_name; });
+        const scored = data.map(d => ({ ...d, display_name: nameMap[d.user_id] || 'Unknown' }));
+        setGameTopScores(prev => ({ ...prev, [game.slug]: scored }));
+      }
     });
   }, [userId, gameResult]);
 
@@ -290,6 +337,7 @@ export default function VirtualOffice() {
               personalBest={personalBests[game.slug]}
               dailyLeader={dailyLeaders[game.slug]}
               todayPlays={todayPlays[game.slug] || 0}
+              gameTopScores={gameTopScores[game.slug]}
               onPlay={() => { setActiveGame(game.slug); setGameResult(null); }}
             />
           ))}
