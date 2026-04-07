@@ -35,6 +35,7 @@ export default function SEOChecker() {
   const [showAddClient, setShowAddClient] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showKeywordBank, setShowKeywordBank] = useState(null);
+  const [prefillSave, setPrefillSave] = useState(null);
   const [hasReport, setHasReport] = useState(false);
 
   const handleNewReport = () => {
@@ -43,6 +44,20 @@ export default function SEOChecker() {
     }
     newReport();
     setHasReport(true);
+  };
+
+  const handleAddReportToMonth = (clientId, year, monthIndex) => {
+    if (dirty && hasReport) {
+      if (!confirm('You have unsaved changes. Start a new report anyway?')) return;
+    }
+    newReport();
+    setHasReport(true);
+    // Auto-open save modal pre-filled with the chosen client/month/year
+    setTimeout(() => {
+      setShowSaveModal(true);
+    }, 100);
+    // Store the pre-fill values
+    setPrefillSave({ clientId, year, monthIndex });
   };
 
   const handleOpenReport = useCallback(async (reportId) => {
@@ -160,6 +175,7 @@ export default function SEOChecker() {
             onDeleteClient={handleDeleteClient}
             onNewReport={handleNewReport}
             onManageKeywords={(id) => setShowKeywordBank(id)}
+            onAddReport={handleAddReportToMonth}
             hasReport={hasReport}
           />
 
@@ -200,11 +216,11 @@ export default function SEOChecker() {
 
       <SaveReportModal
         open={showSaveModal}
-        onClose={() => setShowSaveModal(false)}
+        onClose={() => { setShowSaveModal(false); setPrefillSave(null); }}
         onSave={handleSave}
         clients={clients}
-        defaultClientId={report?.client_id}
-        defaultMonthIndex={report?.month_index}
+        defaultClientId={prefillSave?.clientId || report?.client_id}
+        defaultMonthIndex={prefillSave?.monthIndex ?? report?.month_index}
         defaultName={report?.name || fields.article_title}
       />
 

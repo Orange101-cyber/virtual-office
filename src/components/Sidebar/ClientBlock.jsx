@@ -12,6 +12,7 @@ export default function ClientBlock({
   onOpenReport,
   onDeleteReport,
   onManageKeywords,
+  onAddReport,
   year,
 }) {
   const [reports, setReports] = useState([]);
@@ -76,10 +77,14 @@ export default function ClientBlock({
             <MonthBlock
               key={idx}
               monthName={`${month} ${year}`}
+              monthIndex={idx}
               reports={reportsByMonth[idx]}
               currentReportId={currentReportId}
               onOpenReport={onOpenReport}
               onDeleteReport={onDeleteReport}
+              onAddReport={onAddReport}
+              clientId={client.id}
+              year={year}
               defaultOpen={reportsByMonth[idx].length > 0}
             />
           ))}

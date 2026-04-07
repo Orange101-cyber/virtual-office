@@ -3,10 +3,14 @@ import ReportItem from './ReportItem';
 
 export default function MonthBlock({
   monthName,
+  monthIndex,
   reports,
   currentReportId,
   onOpenReport,
   onDeleteReport,
+  onAddReport,
+  clientId,
+  year,
   defaultOpen = false,
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -15,7 +19,7 @@ export default function MonthBlock({
     <div>
       <div
         onClick={() => setOpen(!open)}
-        className="flex items-center py-1 px-3.5 pl-7 cursor-pointer gap-1.5 select-none hover:bg-[#252525]"
+        className="flex items-center py-1 px-3.5 pl-7 cursor-pointer gap-1.5 select-none hover:bg-[#252525] group"
       >
         <span
           className={`text-[9px] text-[#555] shrink-0 transition-transform duration-150 ${
@@ -29,6 +33,18 @@ export default function MonthBlock({
           <span className="text-[9px] font-bold bg-[#F5C518]/20 text-[#F5C518] px-1.5 py-0 rounded-full shrink-0">
             {reports.length}
           </span>
+        )}
+        {onAddReport && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddReport(clientId, year, monthIndex);
+            }}
+            className="bg-transparent border-none text-[#555] cursor-pointer text-[12px] p-0 shrink-0 opacity-0 group-hover:opacity-100 hover:text-[#F5C518]"
+            title="Add new article to this month"
+          >
+            +
+          </button>
         )}
       </div>
       {open && (
