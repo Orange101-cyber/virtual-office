@@ -10,6 +10,7 @@ export default function Sidebar({
   onDeleteClient,
   onNewReport,
   onManageKeywords,
+  onAddReport,
   hasReport,
 }) {
   const [expandedClients, setExpandedClients] = useState(new Set());
@@ -74,6 +75,7 @@ export default function Sidebar({
               onToggle={() => toggleClient(client.id)}
               onDelete={() => onDeleteClient(client.id)}
               onManageKeywords={onManageKeywords}
+              onAddReport={onAddReport}
               currentReportId={currentReportId}
               onOpenReport={onOpenReport}
               onDeleteReport={onDeleteReport}
