@@ -137,6 +137,65 @@ export async function getRelatedKeywords(seed, limit = 30) {
       cpc: info.cpc || 0,
       competition: info.competition || 0,
       kd: item.keyword_data?.keyword_properties?.keyword_difficulty || 0,
+      source: 'related',
+    };
+  });
+  await setCached(cacheKey, result);
+  return result;
+}
+
+// ── Keyword suggestions (autocomplete-based) ──
+export async function getKeywordSuggestions(seed, limit = 50) {
+  const cacheKey = `suggestions:${seed.toLowerCase().trim()}:${limit}`;
+  const cached = await getCached(cacheKey);
+  if (cached) return cached;
+
+  const data = await callEndpoint('/dataforseo_labs/google/keyword_suggestions/live', {
+    keyword: seed,
+    location_code: LOCATION_AU,
+    language_code: LANGUAGE,
+    include_seed_keyword: false,
+    limit,
+  });
+  const items = data.tasks?.[0]?.result?.[0]?.items || [];
+  const result = items.map(item => {
+    const info = item.keyword_info || {};
+    return {
+      keyword: item.keyword || '',
+      search_volume: info.search_volume || 0,
+      cpc: info.cpc || 0,
+      competition: info.competition || 0,
+      kd: item.keyword_properties?.keyword_difficulty || 0,
+      source: 'suggestion',
+    };
+  });
+  await setCached(cacheKey, result);
+  return result;
+}
+
+// ── Keyword ideas (Google Keyword Planner data) ──
+export async function getKeywordIdeas(seeds, limit = 50) {
+  const seedsArr = Array.isArray(seeds) ? seeds : [seeds];
+  const cacheKey = `ideas:${seedsArr.map(s => s.toLowerCase()).sort().join('|')}:${limit}`;
+  const cached = await getCached(cacheKey);
+  if (cached) return cached;
+
+  const data = await callEndpoint('/dataforseo_labs/google/keyword_ideas/live', {
+    keywords: seedsArr,
+    location_code: LOCATION_AU,
+    language_code: LANGUAGE,
+    limit,
+  });
+  const items = data.tasks?.[0]?.result?.[0]?.items || [];
+  const result = items.map(item => {
+    const info = item.keyword_info || {};
+    return {
+      keyword: item.keyword || '',
+      search_volume: info.search_volume || 0,
+      cpc: info.cpc || 0,
+      competition: info.competition || 0,
+      kd: item.keyword_properties?.keyword_difficulty || 0,
+      source: 'idea',
     };
   });
   await setCached(cacheKey, result);

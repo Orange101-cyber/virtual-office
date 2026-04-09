@@ -4,8 +4,9 @@ import { useClients } from '../hooks/useClients';
 import * as dfs from '../lib/dataForSeo';
 import toast from 'react-hot-toast';
 
-const KW_PROMPT = ({ client, niche, seedTopic, contentGoal, preference }) => `You are an SEO keyword research assistant for an Australian digital marketing agency.
-Generate keyword ideas based on the inputs below. Return ONLY valid JSON.
+const SORT_PROMPT = ({ client, niche, seedTopic, contentGoal, preference, keywords, pastKeywords, plannedKeywords }) => `You are an SEO keyword research analyst for an Australian digital marketing agency.
+
+I have pulled ${keywords.length} real keywords from DataForSEO for this client. Your job is to analyse them, pick the best ~20 candidates, suggest article titles, and flag opportunities.
 
 Client: ${client}
 Industry/Niche: ${niche}
@@ -13,21 +14,32 @@ Seed Topic: ${seedTopic}
 Content Goal: ${contentGoal}
 Preference: ${preference}
 
-Return this exact JSON structure:
+${pastKeywords?.length ? `PAST CLIENT KEYWORDS (already targeted — flag as cannibalization risk if overlapping):
+${pastKeywords.join(', ')}
+` : ''}
+
+${plannedKeywords?.length ? `ALREADY PLANNED KEYWORDS (skip these — already in content plan):
+${plannedKeywords.join(', ')}
+` : ''}
+
+REAL KEYWORDS WITH DATA (sorted by search volume):
+${keywords.slice(0, 100).map(k => `- "${k.keyword}" (SV: ${k.search_volume}, KD: ${k.kd}, CPC: $${k.cpc?.toFixed(2) || 0})`).join('\n')}
+
+Return ONLY valid JSON with this exact structure. Pick the 15-20 best keywords considering relevance to the client niche, search volume, keyword difficulty, and the preference setting (${preference}). Exclude keywords that are already planned or too similar to past keywords (unless useful as refresh candidates).
+
 {
   "keywords": [
     {
-      "keyword": "exact keyword phrase",
-      "intent": "Informational or Navigational or Commercial or Transactional",
-      "content_type": "Blog or SEO Page",
-      "suggested_title": "Full article title suggestion"
+      "keyword": "exact keyword from the list above",
+      "intent": "Informational | Navigational | Commercial | Transactional",
+      "content_type": "Blog | SEO Page",
+      "suggested_title": "Full article title suggestion for Australian audience",
+      "opportunity_reason": "One-line reason why this is a good pick"
     }
   ],
-  "cannibalization_risks": "Brief note on any keywords that could clash with each other",
-  "quick_wins": ["keyword1 - reason", "keyword2 - reason", "keyword3 - reason"]
-}
-
-Generate 12-15 keyword ideas. Focus on Australian search patterns. For ${preference === 'Low KD focus' ? 'low competition keywords that are easier to rank for' : preference === 'High SV focus' ? 'high search volume keywords with the most traffic potential' : 'a balanced mix of search volume and difficulty'}.`;
+  "cannibalization_risks": "Brief note on any keywords that could clash with past content or each other",
+  "quick_wins": ["keyword - specific reason (e.g. low KD + decent SV)", "keyword - reason", "keyword - reason"]
+}`;
 
 function AddToPlanModal({ open, onClose, keyword, clients }) {
   const CURRENT_YEAR = new Date().getFullYear();
@@ -134,15 +146,85 @@ export default function KeywordResearch() {
     loadHistory(form.client);
   }, [form.client]);
 
+  const [genStep, setGenStep] = useState('');
+
   const handleGenerate = async () => {
     if (!form.niche || !form.seedTopic) return toast.error('Niche and Seed Topic are required.');
+    if (!dfs.isConfigured()) return toast.error('DataForSEO not configured. Check your credentials.');
+
     setGenerating(true);
     setResults(null);
 
     const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-    if (!apiKey) { toast.error('VITE_ANTHROPIC_API_KEY not set'); setGenerating(false); return; }
+    if (!apiKey) { toast.error('Anthropic API key not set'); setGenerating(false); return; }
 
     try {
+      // ── STEP 1: Load client's past keywords (for cannibalization filter) ──
+      setGenStep('Loading client history...');
+      let pastKeywords = [];
+      const dbClient = dbClients.find(c => c.name === form.client);
+      if (dbClient?.id) {
+        const { data } = await supabase.from('clients')
+          .select('past_keywords').eq('id', dbClient.id).single();
+        if (data?.past_keywords) {
+          pastKeywords = data.past_keywords.split('\n').map(k => k.trim().toLowerCase()).filter(Boolean);
+        }
+      }
+
+      // ── STEP 2: Load already-planned keywords from content_plans ──
+      const { data: planned } = await supabase.from('content_plans')
+        .select('focus_keyword').eq('client_name', form.client);
+      const plannedKeywords = (planned || [])
+        .map(p => p.focus_keyword?.toLowerCase().trim())
+        .filter(Boolean);
+
+      // ── STEP 3: Pull real keywords from DataForSEO (3 sources) ──
+      setGenStep('Fetching real keywords from DataForSEO...');
+      const [related, suggestions, ideas] = await Promise.all([
+        dfs.getRelatedKeywords(form.seedTopic, 50).catch(() => []),
+        dfs.getKeywordSuggestions(form.seedTopic, 50).catch(() => []),
+        dfs.getKeywordIdeas([form.seedTopic, form.niche], 50).catch(() => []),
+      ]);
+
+      // ── STEP 4: Merge, dedupe, filter ──
+      setGenStep('Filtering and deduping...');
+      const allKeywordsMap = new Map();
+      [...related, ...suggestions, ...ideas].forEach(kw => {
+        if (!kw.keyword) return;
+        const key = kw.keyword.toLowerCase().trim();
+        const existing = allKeywordsMap.get(key);
+        if (!existing || (kw.search_volume > existing.search_volume)) {
+          allKeywordsMap.set(key, kw);
+        }
+      });
+
+      // Filter out already-planned keywords
+      const filtered = Array.from(allKeywordsMap.values())
+        .filter(kw => {
+          const lower = kw.keyword.toLowerCase();
+          // Skip if exact match in planned keywords
+          if (plannedKeywords.includes(lower)) return false;
+          return true;
+        })
+        // Sort by SV descending
+        .sort((a, b) => (b.search_volume || 0) - (a.search_volume || 0));
+
+      if (filtered.length === 0) {
+        toast.error('No keywords found. Try a different seed topic.');
+        setGenerating(false);
+        setGenStep('');
+        return;
+      }
+
+      // ── STEP 5: Claude sorts, picks best, suggests titles ──
+      setGenStep(`Analysing ${filtered.length} keywords with AI...`);
+      const prompt = SORT_PROMPT({
+        ...form,
+        keywords: filtered,
+        pastKeywords,
+        plannedKeywords,
+      });
+
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -153,31 +235,59 @@ export default function KeywordResearch() {
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 1500,
-          system: 'You are an SEO keyword research assistant. Return ONLY valid JSON.',
-          messages: [{ role: 'user', content: KW_PROMPT(form) }],
+          max_tokens: 3000,
+          system: 'You are an SEO keyword research analyst. Return ONLY valid JSON, no markdown fences.',
+          messages: [{ role: 'user', content: prompt }],
         }),
       });
 
-      if (!res.ok) throw new Error(`API error ${res.status}`);
+      if (!res.ok) throw new Error(`Claude API error ${res.status}`);
       const msg = await res.json();
       let rawText = msg.content[0].text;
-      // Strip markdown code fences if present
       rawText = rawText.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
       const parsed = JSON.parse(rawText);
-      setResults(parsed);
+
+      // Enrich the Claude results with the real metrics we already have
+      const metricsMap = {};
+      filtered.forEach(k => { metricsMap[k.keyword.toLowerCase()] = k; });
+      const enriched = (parsed.keywords || []).map(k => {
+        const m = metricsMap[k.keyword.toLowerCase()];
+        return m ? {
+          ...k,
+          search_volume: m.search_volume,
+          kd: m.kd,
+          cpc: m.cpc,
+          real_data: true,
+        } : k;
+      });
+
+      const finalResults = {
+        ...parsed,
+        keywords: enriched,
+        data_sources: {
+          related: related.length,
+          suggestions: suggestions.length,
+          ideas: ideas.length,
+          total_unique: filtered.length,
+          past_filtered: pastKeywords.length,
+          planned_filtered: plannedKeywords.length,
+        },
+      };
+      setResults(finalResults);
 
       // Save to DB
       await supabase.from('keyword_research').insert({
         client_name: form.client, niche: form.niche,
-        seed_topic: form.seedTopic, results_json: parsed,
+        seed_topic: form.seedTopic, results_json: finalResults,
       });
       loadHistory(form.client);
-      toast.success('Research saved!');
+      toast.success(`Analysed ${filtered.length} keywords, picked ${enriched.length} best`);
     } catch (err) {
       toast.error('Error: ' + err.message);
+      console.error(err);
     }
     setGenerating(false);
+    setGenStep('');
   };
 
   const handleFetchRealMetrics = async () => {
@@ -287,7 +397,7 @@ export default function KeywordResearch() {
                   </select>
                 </div>
                 <button onClick={handleGenerate} disabled={generating} className="btn-primary w-full py-2.5">
-                  {generating ? 'Researching...' : 'Generate Keywords'}
+                  {generating ? (genStep || 'Researching...') : '🔍 Smart Research'}
                 </button>
               </div>
             </div>
@@ -335,10 +445,30 @@ export default function KeywordResearch() {
             ) : generating ? (
               <div className="bg-white border border-gray-200 rounded-xl p-6 flex flex-col items-center justify-center h-64 text-gray-500">
                 <div className="w-6 h-6 border-2 border-gray-200 border-t-[#F5C518] rounded-full animate-spin mb-3" />
-                <p className="text-sm">Researching keywords...</p>
+                <p className="text-sm">{genStep || 'Researching keywords...'}</p>
+                <p className="text-[10px] text-gray-400 mt-1">Real data from DataForSEO + AI analysis</p>
               </div>
             ) : (
               <>
+                {/* Data sources info */}
+                {results.data_sources && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3 text-[11px] text-green-700">
+                    <div className="font-semibold mb-1">✓ Real data from DataForSEO</div>
+                    <div className="flex gap-3 flex-wrap text-[10px]">
+                      <span>Related: <b>{results.data_sources.related}</b></span>
+                      <span>Suggestions: <b>{results.data_sources.suggestions}</b></span>
+                      <span>Ideas: <b>{results.data_sources.ideas}</b></span>
+                      <span className="text-green-800">Total unique: <b>{results.data_sources.total_unique}</b></span>
+                      {results.data_sources.past_filtered > 0 && (
+                        <span className="text-gray-500">Past keywords checked: <b>{results.data_sources.past_filtered}</b></span>
+                      )}
+                      {results.data_sources.planned_filtered > 0 && (
+                        <span className="text-gray-500">Already planned filtered: <b>{results.data_sources.planned_filtered}</b></span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Action bar */}
                 <div className="flex items-center gap-2 mb-3 flex-wrap">
                   <button
@@ -346,14 +476,14 @@ export default function KeywordResearch() {
                     disabled={fetchingMetrics}
                     className="text-[11px] bg-[#1a1a1a] text-white border-none rounded px-3 py-1.5 font-semibold cursor-pointer hover:bg-[#333] disabled:opacity-40"
                   >
-                    {fetchingMetrics ? 'Fetching...' : '⚡ Fetch Real Metrics (DataForSEO)'}
+                    {fetchingMetrics ? 'Fetching...' : '⚡ Refresh Metrics'}
                   </button>
                   <button
                     onClick={handleExpandWithRelated}
                     disabled={expanding}
                     className="text-[11px] bg-transparent border border-[#1a1a1a] text-[#1a1a1a] rounded px-3 py-1.5 font-semibold cursor-pointer hover:bg-[#1a1a1a] hover:text-white disabled:opacity-40"
                   >
-                    {expanding ? 'Expanding...' : '+ Find Related Keywords'}
+                    {expanding ? 'Expanding...' : '+ Add More Related'}
                   </button>
                   <span className="text-[10px] text-gray-400 ml-1">
                     {results.keywords?.filter(k => k.real_data).length || 0} / {results.keywords?.length || 0} with real data
@@ -399,7 +529,14 @@ export default function KeywordResearch() {
                               {kw.intent}
                             </span>
                           </td>
-                          <td className="px-3 py-2.5 text-gray-600 max-w-[250px] truncate" title={kw.suggested_title}>{kw.suggested_title}</td>
+                          <td className="px-3 py-2.5 text-gray-600 max-w-[250px]">
+                            <div className="truncate" title={kw.suggested_title}>{kw.suggested_title}</div>
+                            {kw.opportunity_reason && (
+                              <div className="text-[9px] text-[#F5C518] truncate mt-0.5" title={kw.opportunity_reason}>
+                                ★ {kw.opportunity_reason}
+                              </div>
+                            )}
+                          </td>
                           <td className="px-3 py-2.5">
                             <button onClick={() => setAddKw(kw)} className="text-[10px] text-[#F5C518] font-semibold bg-transparent border border-[#F5C518] rounded px-2 py-0.5 cursor-pointer hover:bg-[#F5C518] hover:text-[#1a1a1a]">
                               + Plan
