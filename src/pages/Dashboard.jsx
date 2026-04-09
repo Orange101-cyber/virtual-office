@@ -19,6 +19,12 @@ const TOOLS = [
     path: '/seo-tools',
     icon: '🛠️',
   },
+  {
+    name: 'Ads Hub',
+    description: 'Ad copy inspiration, creative briefs, copy library, and brand voice management for all clients.',
+    path: '/ads-hub',
+    icon: '📣',
+  },
 ];
 
 export default function Dashboard() {
