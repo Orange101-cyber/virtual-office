@@ -13,6 +13,11 @@ import KeywordResearch from './pages/KeywordResearch';
 import ArticleWriter from './pages/ArticleWriter';
 import VirtualOffice from './pages/VirtualOffice';
 import SEOTools from './pages/SEOTools';
+import AdsHub from './pages/AdsHub';
+import AdInspiration from './pages/AdInspiration';
+import AdCopyLibrary from './pages/AdCopyLibrary';
+import AdCreativeBrief from './pages/AdCreativeBrief';
+import BrandVoice from './pages/BrandVoice';
 import Login from './pages/Login';
 import { Toaster } from 'react-hot-toast';
 import './index.css';
@@ -57,6 +62,11 @@ function Root() {
         <Route path="/article-writer" element={<AuthRoute session={session}><ArticleWriter /></AuthRoute>} />
         <Route path="/virtual-office-games" element={<AuthRoute session={session}><VirtualOffice /></AuthRoute>} />
         <Route path="/seo-tools" element={<AuthRoute session={session}><SEOTools /></AuthRoute>} />
+        <Route path="/ads-hub" element={<AuthRoute session={session}><AdsHub /></AuthRoute>} />
+        <Route path="/ad-inspiration" element={<AuthRoute session={session}><AdInspiration /></AuthRoute>} />
+        <Route path="/ad-copy-library" element={<AuthRoute session={session}><AdCopyLibrary /></AuthRoute>} />
+        <Route path="/ad-creative-brief" element={<AuthRoute session={session}><AdCreativeBrief /></AuthRoute>} />
+        <Route path="/brand-voice" element={<AuthRoute session={session}><BrandVoice /></AuthRoute>} />
       </Routes>
     </BrowserRouter>
   );

@@ -36,6 +36,7 @@ jobs:
           VITE_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           VITE_DATAFORSEO_LOGIN: ${{ secrets.DATAFORSEO_LOGIN }}
           VITE_DATAFORSEO_PASSWORD: ${{ secrets.DATAFORSEO_PASSWORD }}
+          VITE_FAL_API_KEY: ${{ secrets.FAL_API_KEY }}
 
       - name: Verify build
         run: |
