@@ -12,6 +12,7 @@ import BriefGenerator from './pages/BriefGenerator';
 import KeywordResearch from './pages/KeywordResearch';
 import ArticleWriter from './pages/ArticleWriter';
 import VirtualOffice from './pages/VirtualOffice';
+import SEOTools from './pages/SEOTools';
 import Login from './pages/Login';
 import { Toaster } from 'react-hot-toast';
 import './index.css';
@@ -55,6 +56,7 @@ function Root() {
         <Route path="/keyword-research" element={<AuthRoute session={session}><KeywordResearch /></AuthRoute>} />
         <Route path="/article-writer" element={<AuthRoute session={session}><ArticleWriter /></AuthRoute>} />
         <Route path="/virtual-office-games" element={<AuthRoute session={session}><VirtualOffice /></AuthRoute>} />
+        <Route path="/seo-tools" element={<AuthRoute session={session}><SEOTools /></AuthRoute>} />
       </Routes>
     </BrowserRouter>
   );
