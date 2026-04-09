@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useClients } from '../hooks/useClients';
+import * as dfs from '../lib/dataForSeo';
 import toast from 'react-hot-toast';
 
-const BRIEF_PROMPT = ({ client, contentType, isRefresh, title, focusKeyword, secondaryKeywords, existingUrl, wordCount, context, ctaUrl, styleSamples }) => `You are an SEO content strategist working for a digital marketing agency in Australia.
+const BRIEF_PROMPT = ({ client, contentType, isRefresh, title, focusKeyword, secondaryKeywords, existingUrl, wordCount, context, ctaUrl, styleSamples, serpData }) => `You are an SEO content strategist working for a digital marketing agency in Australia.
 Your job is to write structured content briefs for blog posts and SEO pages.
 Always write for Australian audiences. Use plain English at a Grade 6 reading level.
 Avoid jargon. Format your output as valid JSON. Never pad content. Be specific and practical.
@@ -25,6 +26,16 @@ WRITING STYLE REFERENCE — Below are excerpts from previous articles written fo
 ${styleSamples}
 
 END OF STYLE REFERENCE — Use the above as a guide for tone, structure, and vocabulary when generating the brief and any content suggestions.
+` : ''}
+${serpData?.items?.length ? `
+LIVE SERP DATA — These are the top articles currently ranking on Google for "${focusKeyword}". Use their titles to benchmark your H2 structure and make yours more comprehensive:
+
+${serpData.items.slice(0, 10).map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.description || ''}`).join('\n\n')}
+` : ''}
+${serpData?.paa?.length ? `
+PEOPLE ALSO ASK — These are real questions Google users are asking. Use these as your FAQ section:
+
+${serpData.paa.map(q => `- ${q.question}`).join('\n')}
 ` : ''}
 Return this exact JSON structure:
 {
@@ -99,6 +110,8 @@ export default function BriefGenerator() {
   const [clientPlans, setClientPlans] = useState([]);
   const [selectedPlanId, setSelectedPlanId] = useState('');
   const [clientArticles, setClientArticles] = useState([]);
+  const [serpData, setSerpData] = useState(null);
+  const [fetchingSerp, setFetchingSerp] = useState(false);
   const [styleLoaded, setStyleLoaded] = useState(false);
 
   useEffect(() => {
@@ -137,6 +150,20 @@ export default function BriefGenerator() {
       .then(({ data }) => setClientPlans(data || []));
   }, [form.client]);
 
+  const handleFetchSerp = async () => {
+    if (!form.focusKeyword) return toast.error('Enter a focus keyword first');
+    if (!dfs.isConfigured()) return toast.error('DataForSEO not configured');
+    setFetchingSerp(true);
+    try {
+      const serp = await dfs.getSerpResults(form.focusKeyword);
+      setSerpData(serp);
+      toast.success(`Fetched top ${serp?.items?.length || 0} results + ${serp?.paa?.length || 0} PAA questions`);
+    } catch (err) {
+      toast.error('DataForSEO error: ' + err.message);
+    }
+    setFetchingSerp(false);
+  };
+
   const handleGenerate = async () => {
     if (!form.title || !form.focusKeyword) return toast.error('Title and Focus Keyword are required.');
     setGenerating(true);
@@ -170,7 +197,7 @@ export default function BriefGenerator() {
           model: 'claude-sonnet-4-20250514',
           max_tokens: 2500,
           system: 'You are an SEO content strategist. Return ONLY valid JSON with no markdown fences.',
-          messages: [{ role: 'user', content: BRIEF_PROMPT({ ...form, styleSamples }) }],
+          messages: [{ role: 'user', content: BRIEF_PROMPT({ ...form, styleSamples, serpData }) }],
         }),
       });
 
@@ -417,6 +444,23 @@ RULES:
                     }
                   </div>
                 )}
+
+                {/* DataForSEO SERP fetch */}
+                <div>
+                  <button
+                    onClick={handleFetchSerp}
+                    disabled={fetchingSerp || !form.focusKeyword}
+                    className="w-full bg-[#1a1a1a] text-white border-none rounded-[5px] px-3 py-2 text-[11px] font-bold cursor-pointer hover:bg-[#333] disabled:opacity-40"
+                  >
+                    {fetchingSerp ? 'Fetching SERP...' : '⚡ Fetch Live SERP Data (DataForSEO)'}
+                  </button>
+                  {serpData && (
+                    <div className="mt-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-[10px] text-green-700">
+                      ✓ Loaded {serpData.items?.length || 0} top results + {serpData.paa?.length || 0} PAA questions — will be used in brief
+                    </div>
+                  )}
+                </div>
+
                 <button onClick={handleGenerate} disabled={generating} className="btn-primary w-full py-2.5">
                   {generating ? 'Generating brief...' : 'Generate Brief'}
                 </button>

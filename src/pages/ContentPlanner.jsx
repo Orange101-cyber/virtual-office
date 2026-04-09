@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { useClients } from '../hooks/useClients';
+import * as dfs from '../lib/dataForSeo';
+import toast from 'react-hot-toast';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 const STATUSES = ['Planned', 'Researched', 'Briefed', 'Client Approved', 'Sent to Airtable'];
@@ -27,6 +29,9 @@ function PlanModal({ open, onClose, onSave, onDelete, item, clients, dbClients }
   });
   const [clientKeywords, setClientKeywords] = useState('');
   const [cannibHits, setCannibHits] = useState([]);
+  const [liveRanking, setLiveRanking] = useState(null);
+  const [checkingRank, setCheckingRank] = useState(false);
+  const [fetchingMetrics, setFetchingMetrics] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -67,6 +72,61 @@ function PlanModal({ open, onClose, onSave, onDelete, item, clients, dbClients }
     });
     setCannibHits(hits);
   }, [form.focus_keyword, clientKeywords, form.is_refresh]);
+
+  // Detect client domain from existing URL or other client plans
+  const detectClientDomain = () => {
+    if (form.existing_url) {
+      try { return new URL(form.existing_url).hostname.replace(/^www\./, ''); } catch {}
+    }
+    return null;
+  };
+
+  const handleCheckLiveRanking = async () => {
+    if (!form.focus_keyword) return toast.error('Enter a focus keyword');
+    if (!dfs.isConfigured()) return toast.error('DataForSEO not configured');
+    setCheckingRank(true);
+    setLiveRanking(null);
+    try {
+      const domain = detectClientDomain();
+      if (domain) {
+        const ranking = await dfs.checkDomainRanking(form.focus_keyword, domain);
+        if (ranking) {
+          setLiveRanking({ ranked: true, ...ranking, domain });
+          toast.success(`${domain} ranks at #${ranking.rank}`);
+        } else {
+          setLiveRanking({ ranked: false, domain });
+          toast(`${domain} does not rank in top 10 — safe to publish`);
+        }
+      } else {
+        // Just fetch the top 10 SERP if no domain known
+        const serp = await dfs.getSerpResults(form.focus_keyword);
+        setLiveRanking({ ranked: false, topResults: serp?.items?.slice(0, 5) || [] });
+      }
+    } catch (err) {
+      toast.error('DataForSEO error: ' + err.message);
+    }
+    setCheckingRank(false);
+  };
+
+  const handleFetchMetrics = async () => {
+    if (!form.focus_keyword) return toast.error('Enter a focus keyword');
+    if (!dfs.isConfigured()) return toast.error('DataForSEO not configured');
+    setFetchingMetrics(true);
+    try {
+      const metrics = await dfs.getKeywordMetrics([form.focus_keyword]);
+      if (metrics[0]) {
+        setForm(f => ({
+          ...f,
+          search_volume: metrics[0].search_volume || '',
+          kd: metrics[0].kd || '',
+        }));
+        toast.success(`SV: ${metrics[0].search_volume}, KD: ${metrics[0].kd}`);
+      }
+    } catch (err) {
+      toast.error('DataForSEO error: ' + err.message);
+    }
+    setFetchingMetrics(false);
+  };
 
   const handleSave = () => {
     if (!form.title.trim() || !form.client_name) return;
@@ -132,11 +192,64 @@ function PlanModal({ open, onClose, onSave, onDelete, item, clients, dbClients }
             This is a REFRESH / UPDATE of an existing article
           </label>
         </div>
-        <div className="grid grid-cols-3 gap-3 mb-3">
+        <div className="grid grid-cols-3 gap-3 mb-2">
           <div><Label>Focus Keyword</Label><input value={form.focus_keyword} onChange={e => setForm(f => ({ ...f, focus_keyword: e.target.value }))} className="input-field" /></div>
           <div><Label>Search Volume</Label><input type="number" value={form.search_volume} onChange={e => setForm(f => ({ ...f, search_volume: e.target.value }))} className="input-field" /></div>
           <div><Label>KD (0-100)</Label><input type="number" value={form.kd} onChange={e => setForm(f => ({ ...f, kd: e.target.value }))} className="input-field" /></div>
         </div>
+
+        {/* DataForSEO buttons */}
+        {form.focus_keyword && (
+          <div className="flex gap-2 mb-3">
+            <button
+              type="button"
+              onClick={handleFetchMetrics}
+              disabled={fetchingMetrics}
+              className="text-[10px] bg-[#1a1a1a] text-white border-none rounded px-2.5 py-1 font-bold cursor-pointer hover:bg-[#333] disabled:opacity-40"
+            >
+              {fetchingMetrics ? 'Fetching...' : '⚡ Fetch SV/KD'}
+            </button>
+            <button
+              type="button"
+              onClick={handleCheckLiveRanking}
+              disabled={checkingRank}
+              className="text-[10px] bg-transparent border border-[#1a1a1a] text-[#1a1a1a] rounded px-2.5 py-1 font-bold cursor-pointer hover:bg-[#1a1a1a] hover:text-white disabled:opacity-40"
+            >
+              {checkingRank ? 'Checking...' : '🔍 Check Live Google Ranking'}
+            </button>
+          </div>
+        )}
+
+        {/* Live ranking result */}
+        {liveRanking && (
+          <div className="mb-3">
+            {liveRanking.ranked ? (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 text-[11px]">
+                <div className="font-semibold text-orange-600 mb-0.5">
+                  ⚠ {liveRanking.domain} already ranks at #{liveRanking.rank}
+                </div>
+                <div className="text-gray-600 truncate" title={liveRanking.title}>{liveRanking.title}</div>
+                <div className="text-[10px] text-gray-400 truncate" title={liveRanking.url}>{liveRanking.url}</div>
+                <div className="text-[9px] text-orange-400 mt-1">
+                  Consider marking this as REFRESH / UPDATE if you're updating this existing page.
+                </div>
+              </div>
+            ) : liveRanking.topResults?.length > 0 ? (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-[11px]">
+                <div className="font-semibold text-blue-600 mb-1">Top ranking competitors:</div>
+                {liveRanking.topResults.map((r, i) => (
+                  <div key={i} className="text-[10px] text-gray-600 truncate mb-0.5">
+                    <span className="text-blue-500 font-semibold">#{r.rank}</span> {r.domain}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-[11px] text-green-700">
+                ✓ {liveRanking.domain} does not rank for this keyword — safe to publish a new article
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Cannibalization check */}
         {form.focus_keyword?.trim() && kwCount > 0 && !form.is_refresh && (

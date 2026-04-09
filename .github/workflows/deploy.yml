@@ -34,6 +34,8 @@ jobs:
           VITE_SUPABASE_URL: https://rdrufdlhfrwczqvmvzgr.supabase.co
           VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkcnVmZGxoZnJ3Y3pxdm12emdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2ODY5OTgsImV4cCI6MjA4ODI2Mjk5OH0.k8EiIOB2HiHxjuPITlIYf5xWGCNWV7EA5Tfe3br7yew
           VITE_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          VITE_DATAFORSEO_LOGIN: ${{ secrets.DATAFORSEO_LOGIN }}
+          VITE_DATAFORSEO_PASSWORD: ${{ secrets.DATAFORSEO_PASSWORD }}
 
       - name: Verify build
         run: |

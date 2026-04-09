@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useClients } from '../hooks/useClients';
+import * as dfs from '../lib/dataForSeo';
 import toast from 'react-hot-toast';
 
 const KW_PROMPT = ({ client, niche, seedTopic, contentGoal, preference }) => `You are an SEO keyword research assistant for an Australian digital marketing agency.
@@ -52,7 +53,6 @@ function AddToPlanModal({ open, onClose, keyword, clients }) {
   }, [open, keyword, clients]);
 
   const handleSave = async () => {
-    const qMonths = MONTHS_MAP[form.quarter?.split(' ')[0]] || [];
     await supabase.from('content_plans').insert({
       client_name: form.client_name,
       quarter: form.quarter,
@@ -61,6 +61,8 @@ function AddToPlanModal({ open, onClose, keyword, clients }) {
       title: form.title,
       is_refresh: false,
       focus_keyword: form.focus_keyword,
+      search_volume: keyword?.search_volume || null,
+      kd: keyword?.kd || null,
       status: 'Planned',
     });
     onClose();
@@ -105,6 +107,8 @@ export default function KeywordResearch() {
   });
   const [results, setResults] = useState(null);
   const [generating, setGenerating] = useState(false);
+  const [fetchingMetrics, setFetchingMetrics] = useState(false);
+  const [expanding, setExpanding] = useState(false);
   const [history, setHistory] = useState([]);
   const [addKw, setAddKw] = useState(null);
 
@@ -174,6 +178,64 @@ export default function KeywordResearch() {
       toast.error('Error: ' + err.message);
     }
     setGenerating(false);
+  };
+
+  const handleFetchRealMetrics = async () => {
+    if (!results?.keywords?.length) return;
+    if (!dfs.isConfigured()) return toast.error('DataForSEO not configured');
+    setFetchingMetrics(true);
+    try {
+      const keywords = results.keywords.map(k => k.keyword);
+      const metrics = await dfs.getKeywordMetrics(keywords);
+      const metricsMap = {};
+      metrics.forEach(m => { metricsMap[m.keyword.toLowerCase()] = m; });
+      const enriched = results.keywords.map(k => {
+        const m = metricsMap[k.keyword.toLowerCase()];
+        return m ? {
+          ...k,
+          search_volume: m.search_volume,
+          cpc: m.cpc,
+          kd: m.kd,
+          real_data: true,
+        } : k;
+      });
+      setResults({ ...results, keywords: enriched });
+      toast.success(`Fetched real metrics for ${metrics.length} keywords`);
+    } catch (err) {
+      toast.error('DataForSEO error: ' + err.message);
+    }
+    setFetchingMetrics(false);
+  };
+
+  const handleExpandWithRelated = async () => {
+    if (!form.seedTopic) return toast.error('Enter a seed topic first');
+    if (!dfs.isConfigured()) return toast.error('DataForSEO not configured');
+    setExpanding(true);
+    try {
+      const related = await dfs.getRelatedKeywords(form.seedTopic, 30);
+      const newKeywords = related.map(r => ({
+        keyword: r.keyword,
+        intent: 'Informational',
+        content_type: 'Blog',
+        suggested_title: r.keyword.charAt(0).toUpperCase() + r.keyword.slice(1),
+        search_volume: r.search_volume,
+        cpc: r.cpc,
+        kd: r.kd,
+        real_data: true,
+      }));
+      const existing = results?.keywords || [];
+      const existingKws = new Set(existing.map(k => k.keyword.toLowerCase()));
+      const unique = newKeywords.filter(k => !existingKws.has(k.keyword.toLowerCase()));
+      setResults({
+        keywords: [...existing, ...unique],
+        quick_wins: results?.quick_wins || [],
+        cannibalization_risks: results?.cannibalization_risks || '',
+      });
+      toast.success(`Added ${unique.length} related keywords`);
+    } catch (err) {
+      toast.error('DataForSEO error: ' + err.message);
+    }
+    setExpanding(false);
   };
 
   const handleLoadSession = async (id) => {
@@ -277,14 +339,37 @@ export default function KeywordResearch() {
               </div>
             ) : (
               <>
+                {/* Action bar */}
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  <button
+                    onClick={handleFetchRealMetrics}
+                    disabled={fetchingMetrics}
+                    className="text-[11px] bg-[#1a1a1a] text-white border-none rounded px-3 py-1.5 font-semibold cursor-pointer hover:bg-[#333] disabled:opacity-40"
+                  >
+                    {fetchingMetrics ? 'Fetching...' : '⚡ Fetch Real Metrics (DataForSEO)'}
+                  </button>
+                  <button
+                    onClick={handleExpandWithRelated}
+                    disabled={expanding}
+                    className="text-[11px] bg-transparent border border-[#1a1a1a] text-[#1a1a1a] rounded px-3 py-1.5 font-semibold cursor-pointer hover:bg-[#1a1a1a] hover:text-white disabled:opacity-40"
+                  >
+                    {expanding ? 'Expanding...' : '+ Find Related Keywords'}
+                  </button>
+                  <span className="text-[10px] text-gray-400 ml-1">
+                    {results.keywords?.filter(k => k.real_data).length || 0} / {results.keywords?.length || 0} with real data
+                  </span>
+                </div>
+
                 {/* Keyword table */}
                 <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-4">
                   <table className="w-full text-[11px]">
                     <thead>
                       <tr className="bg-[#f8f8f6] border-b border-gray-200">
-                        <th className="text-left px-3 py-2 font-semibold text-gray-500">Keyword Idea</th>
-                        <th className="text-left px-3 py-2 font-semibold text-gray-500">Intent</th>
-                        <th className="text-left px-3 py-2 font-semibold text-gray-500">Type</th>
+                        <th className="text-left px-3 py-2 font-semibold text-gray-500">Keyword</th>
+                        <th className="text-right px-2 py-2 font-semibold text-gray-500">SV</th>
+                        <th className="text-right px-2 py-2 font-semibold text-gray-500">KD</th>
+                        <th className="text-right px-2 py-2 font-semibold text-gray-500">CPC</th>
+                        <th className="text-left px-2 py-2 font-semibold text-gray-500">Intent</th>
                         <th className="text-left px-3 py-2 font-semibold text-gray-500">Suggested Title</th>
                         <th className="px-3 py-2"></th>
                       </tr>
@@ -292,17 +377,32 @@ export default function KeywordResearch() {
                     <tbody>
                       {results.keywords?.map((kw, i) => (
                         <tr key={i} className="border-b border-gray-100 hover:bg-[#f8f8f6]">
-                          <td className="px-3 py-2.5 font-medium text-[#1a1a1a]">{kw.keyword}</td>
-                          <td className="px-3 py-2.5">
+                          <td className="px-3 py-2.5 font-medium text-[#1a1a1a]">
+                            {kw.keyword}
+                            {kw.real_data && <span className="ml-1 text-[8px] text-green-600" title="Real DataForSEO data">●</span>}
+                          </td>
+                          <td className="px-2 py-2.5 text-right text-gray-700 font-semibold">
+                            {kw.search_volume != null ? kw.search_volume.toLocaleString() : '—'}
+                          </td>
+                          <td className="px-2 py-2.5 text-right">
+                            {kw.kd != null ? (
+                              <span className={`font-semibold ${kw.kd <= 20 ? 'text-green-600' : kw.kd <= 50 ? 'text-orange-500' : 'text-red-500'}`}>
+                                {kw.kd}
+                              </span>
+                            ) : '—'}
+                          </td>
+                          <td className="px-2 py-2.5 text-right text-gray-500">
+                            {kw.cpc != null && kw.cpc > 0 ? `$${Number(kw.cpc).toFixed(2)}` : '—'}
+                          </td>
+                          <td className="px-2 py-2.5">
                             <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${intentColors[kw.intent] || 'bg-gray-100 text-gray-500'}`}>
                               {kw.intent}
                             </span>
                           </td>
-                          <td className="px-3 py-2.5 text-gray-500">{kw.content_type}</td>
-                          <td className="px-3 py-2.5 text-gray-600 max-w-[250px]">{kw.suggested_title}</td>
+                          <td className="px-3 py-2.5 text-gray-600 max-w-[250px] truncate" title={kw.suggested_title}>{kw.suggested_title}</td>
                           <td className="px-3 py-2.5">
                             <button onClick={() => setAddKw(kw)} className="text-[10px] text-[#F5C518] font-semibold bg-transparent border border-[#F5C518] rounded px-2 py-0.5 cursor-pointer hover:bg-[#F5C518] hover:text-[#1a1a1a]">
-                              Add to Plan
+                              + Plan
                             </button>
                           </td>
                         </tr>

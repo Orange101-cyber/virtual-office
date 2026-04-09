@@ -17,6 +17,7 @@ import InternalLinks from '../RightColumn/InternalLinks';
 import ScoreHistory from '../RightColumn/ScoreHistory';
 import SchemaGenerator from '../RightColumn/SchemaGenerator';
 import SocialPreview from '../RightColumn/SocialPreview';
+import LiveSeoStats from '../RightColumn/LiveSeoStats';
 import ImageAudit from '../RightColumn/ImageAudit';
 
 export default function ReportArea({
@@ -132,6 +133,10 @@ export default function ReportArea({
             title={fields.article_title}
             metaDescription={fields.meta_description}
             url={fields.url}
+          />
+          <LiveSeoStats
+            url={fields.url}
+            focusKeyphrase={fields.focus_keyphrase}
           />
           <ScoreHistory checklistState={checklistState} reportId={reportId} />
           <CategoryProgress checklistState={checklistState} />
