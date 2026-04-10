@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useClients } from '../hooks/useClients';
-import { COPY_LIMITS, PLATFORM_SPECS } from '../lib/imageGen';
+import { COPY_LIMITS, PLATFORM_SPECS, MODELS } from '../lib/imageGen';
+import * as imageGen from '../lib/imageGen';
 import toast from 'react-hot-toast';
 
 function Label({ children }) {
@@ -19,6 +20,9 @@ export default function AdCreativeBrief() {
   const [generating, setGenerating] = useState(false);
   const [savedCopy, setSavedCopy] = useState([]);
   const [selectedCopy, setSelectedCopy] = useState([]);
+  const [generatingImages, setGeneratingImages] = useState(false);
+  const [generatedImages, setGeneratedImages] = useState([]);
+  const [selectedModel, setSelectedModel] = useState(MODELS[0].id);
 
   useEffect(() => {
     const names = dbClients.map(c => c.name);
@@ -135,6 +139,43 @@ Return ONLY valid JSON:
     toast.success('Brief copied!');
   };
 
+  const handleGenerateImages = async () => {
+    if (!brief?.image_prompt) return toast.error('Generate brief first');
+    if (!imageGen.isConfigured()) return toast.error('Fal.ai API key not configured');
+    setGeneratingImages(true);
+    setGeneratedImages([]);
+
+    try {
+      // Generate images for different platform formats
+      const formats = Object.entries(PLATFORM_SPECS)
+        .filter(([k]) => k.startsWith(form.platform))
+        .slice(0, 2); // Max 2 formats
+
+      if (formats.length === 0) formats.push(['Default', { width: 1080, height: 1080 }]);
+
+      const images = [];
+      for (const [formatName, spec] of formats) {
+        const img = await imageGen.generateImage(brief.image_prompt, {
+          width: spec.width, height: spec.height, model: selectedModel,
+        });
+        images.push({ ...img, format: formatName, dimensions: `${spec.width}x${spec.height}` });
+
+        // Save to DB
+        await supabase.from('ad_generated_images').insert({
+          client_name: form.client, prompt: brief.image_prompt,
+          image_url: img.url, platform: form.platform,
+          dimensions: `${spec.width}x${spec.height}`,
+        });
+      }
+
+      setGeneratedImages(images);
+      toast.success(`Generated ${images.length} ad mockups!`);
+    } catch (err) {
+      toast.error('Image error: ' + err.message);
+    }
+    setGeneratingImages(false);
+  };
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="max-w-5xl mx-auto px-6 py-6">
@@ -229,6 +270,48 @@ Return ONLY valid JSON:
                       ))}
                     </div>
                   )}
+
+                  {/* Image generation */}
+                  <div className="pt-4 mt-4 border-t border-gray-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <div className="text-[9px] font-bold uppercase text-gray-400">Ad Mockups (Fal.ai)</div>
+                        <div className="text-[10px] text-gray-400">Generate visual inspiration for your designer</div>
+                      </div>
+                      <button onClick={handleGenerateImages} disabled={generatingImages}
+                        className="btn-primary text-[10px]">
+                        {generatingImages ? 'Generating...' : imageGen.isConfigured() ? 'Generate Mockups' : 'Fal.ai Key Needed'}
+                      </button>
+                    </div>
+                    <div className="mb-2">
+                      <Label>AI Model</Label>
+                      <select value={selectedModel} onChange={e => setSelectedModel(e.target.value)} className="input-field text-[11px]">
+                        {MODELS.map(m => <option key={m.id} value={m.id}>{m.name} — {m.desc}</option>)}
+                      </select>
+                    </div>
+                    {brief.image_prompt && (
+                      <div className="bg-[#f8f8f6] rounded-lg p-2.5 text-[10px] text-gray-500 mb-3">
+                        <span className="font-semibold text-gray-600">Prompt: </span>{brief.image_prompt}
+                      </div>
+                    )}
+                    {generatingImages && (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="w-8 h-8 border-2 border-gray-200 border-t-[#F5C518] rounded-full animate-spin" />
+                      </div>
+                    )}
+                    {generatedImages.length > 0 && (
+                      <div className="grid grid-cols-2 gap-3">
+                        {generatedImages.map((img, i) => (
+                          <div key={i} className="border border-gray-200 rounded-lg overflow-hidden">
+                            <img src={img.url} alt={`Ad mockup ${i + 1}`} className="w-full" />
+                            <div className="px-2 py-1.5 bg-[#f8f8f6] text-[9px] text-gray-500">
+                              {img.format} · {img.dimensions}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </>
             )}

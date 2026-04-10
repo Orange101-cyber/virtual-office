@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 
 const PLATFORMS = ['Meta', 'Google', 'LinkedIn', 'TikTok'];
 
-const AD_PROMPT = ({ client, platform, goal, audience, offer, brandVoice }) => `You are an expert ad copywriter for an Australian digital marketing agency.
+const AD_PROMPT = ({ client, platform, goal, audience, offer, brandVoice, pastCopyText }) => `You are an expert ad copywriter for an Australian digital marketing agency.
 Generate ad copy variations for this campaign. Return ONLY valid JSON.
 
 Client: ${client}
@@ -16,7 +16,13 @@ Campaign Goal: ${goal}
 Target Audience: ${audience}
 Offer/Hook: ${offer}
 ${brandVoice ? `Brand Voice Notes: ${brandVoice}` : ''}
+${pastCopyText ? `
+PAST AD COPY FOR THIS CLIENT — Learn from what's worked before. Match the tone and style. If any have performance notes, prioritise that style:
 
+${pastCopyText}
+
+END OF PAST COPY — Use the above as reference for tone, style, and what resonates with this client's audience.
+` : ''}
 Platform specs for ${platform}:
 ${JSON.stringify(COPY_LIMITS[platform] || COPY_LIMITS.Meta, null, 2)}
 
@@ -52,6 +58,7 @@ export default function AdInspiration() {
   const [generatedImage, setGeneratedImage] = useState(null);
   const [savedImages, setSavedImages] = useState([]);
   const [selectedModel, setSelectedModel] = useState(MODELS[0].id);
+  const [pastCopy, setPastCopy] = useState([]);
 
   useEffect(() => {
     const names = dbClients.map(c => c.name);
@@ -64,6 +71,10 @@ export default function AdInspiration() {
     if (!form.client) return;
     supabase.from('client_brand_voice').select('*').eq('client_name', form.client).single()
       .then(({ data }) => setBrandVoice(data));
+    // Load past ad copy for learning
+    supabase.from('ad_copy').select('*').eq('client_name', form.client)
+      .order('created_at', { ascending: false }).limit(20)
+      .then(({ data }) => setPastCopy(data || []));
     // Load saved images
     supabase.from('ad_generated_images').select('*').eq('client_name', form.client)
       .order('created_at', { ascending: false }).limit(10)
@@ -80,6 +91,19 @@ export default function AdInspiration() {
 
     try {
       const bv = brandVoice ? `Tone: ${brandVoice.tone || ''}. USPs: ${brandVoice.key_selling_points || ''}. Avoid: ${brandVoice.words_to_avoid || ''}.` : '';
+
+      // Build past copy reference (prioritise ones with performance notes)
+      const sortedPast = [...pastCopy].sort((a, b) => {
+        if (a.performance_notes && !b.performance_notes) return -1;
+        if (!a.performance_notes && b.performance_notes) return 1;
+        return 0;
+      });
+      const pastCopyText = sortedPast.slice(0, 8).map((c, i) => {
+        let entry = `${i + 1}. [${c.status}] ${c.platform}\n   Headline: ${c.headline || '—'}\n   Text: ${c.primary_text || '—'}`;
+        if (c.performance_notes) entry += `\n   PERFORMANCE: ${c.performance_notes}`;
+        return entry;
+      }).join('\n\n');
+
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -89,7 +113,7 @@ export default function AdInspiration() {
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514', max_tokens: 2000,
           system: 'You are an expert ad copywriter. Return ONLY valid JSON, no markdown fences.',
-          messages: [{ role: 'user', content: AD_PROMPT({ ...form, brandVoice: bv }) }],
+          messages: [{ role: 'user', content: AD_PROMPT({ ...form, brandVoice: bv, pastCopyText }) }],
         }),
       });
       if (!res.ok) throw new Error(`API error ${res.status}`);
@@ -184,6 +208,15 @@ export default function AdInspiration() {
                   </div>
                 )}
 
+                {pastCopy.length > 0 && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-[10px] text-blue-700">
+                    ✓ {pastCopy.length} past ads loaded — AI will learn from {form.client}'s ad history
+                    {pastCopy.filter(c => c.performance_notes).length > 0 && (
+                      <span className="ml-1">({pastCopy.filter(c => c.performance_notes).length} with performance notes)</span>
+                    )}
+                  </div>
+                )}
+
                 <button onClick={handleGenerate} disabled={generating} className="btn-primary w-full py-2.5">
                   {generating ? 'Generating...' : 'Generate Ad Copy'}
                 </button>
@@ -263,7 +296,11 @@ export default function AdInspiration() {
                     <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Primary Text</h3>
                     <div className="space-y-2">
                       {results.primary_text?.map((t, i) => (
-                        <div key={i} className="p-3 bg-[#f8f8f6] rounded-lg text-[12px] text-gray-700 leading-relaxed">{t}</div>
+                        <div key={i} className="p-3 bg-[#f8f8f6] rounded-lg text-[12px] text-gray-700 leading-relaxed group relative cursor-pointer hover:bg-[#F5C518]/5"
+                          onClick={() => handleSaveCopy('', t, '')}>
+                          {t}
+                          <span className="absolute top-2 right-2 text-[9px] text-gray-300 group-hover:text-[#F5C518] opacity-0 group-hover:opacity-100 transition-opacity">Save</span>
+                        </div>
                       ))}
                     </div>
                   </div>
