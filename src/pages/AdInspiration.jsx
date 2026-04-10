@@ -137,7 +137,23 @@ export default function AdInspiration() {
       headline, primary_text: primaryText, description, cta: results?.cta_recommendation,
       status: 'Draft',
     });
-    toast.success('Copy saved to Ad Copy Library!');
+    toast.success('Saved to Ad Copy Library!');
+  };
+
+  const handleSaveAll = async () => {
+    if (!results) return;
+    const items = [];
+    // Save each angle as a separate copy
+    results.angles?.forEach(a => {
+      items.push({
+        client_name: form.client, platform: form.platform,
+        headline: a.angle, primary_text: a.copy,
+        cta: results.cta_recommendation, status: 'Draft',
+      });
+    });
+    if (items.length === 0) return toast.error('Nothing to save');
+    await supabase.from('ad_copy').insert(items);
+    toast.success(`Saved ${items.length} copy variations to Ad Copy Library!`);
   };
 
   const limits = COPY_LIMITS[form.platform] || COPY_LIMITS.Meta;
@@ -219,14 +235,23 @@ export default function AdInspiration() {
               </div>
             ) : (
               <>
+                {/* Action bar */}
+                <div className="flex items-center gap-2 mb-3">
+                  <button onClick={handleSaveAll} className="text-[11px] bg-[#F5C518] text-[#1a1a1a] border-none rounded px-3 py-1.5 font-bold cursor-pointer hover:bg-[#e6b800]">
+                    Save All Copy to Library
+                  </button>
+                  <span className="text-[10px] text-gray-400">Saves all copy angles for {form.client}</span>
+                </div>
+
                 {/* Headlines */}
                 <div className="bg-white border border-gray-200 rounded-xl p-5">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Headlines ({limits.headline} char limit)</h3>
                   <div className="space-y-1.5">
                     {results.headlines?.map((h, i) => (
-                      <div key={i} className="flex items-center gap-2 p-2 bg-[#f8f8f6] rounded-lg">
+                      <div key={i} className="flex items-center gap-2 p-2 bg-[#f8f8f6] rounded-lg group">
                         <span className="text-[12px] text-gray-700 flex-1">{h}</span>
                         <span className={`text-[9px] shrink-0 ${h.length <= limits.headline ? 'text-green-600' : 'text-red-500'}`}>{h.length}/{limits.headline}</span>
+                        <button onClick={() => handleSaveCopy(h, '', '')} className="text-[9px] text-gray-300 hover:text-[#F5C518] bg-transparent border-none cursor-pointer opacity-0 group-hover:opacity-100 shrink-0">Save</button>
                       </div>
                     ))}
                   </div>
