@@ -17,6 +17,8 @@ export default function AdCreativeBrief() {
   const [brandVoice, setBrandVoice] = useState(null);
   const [brief, setBrief] = useState(null);
   const [generating, setGenerating] = useState(false);
+  const [savedCopy, setSavedCopy] = useState([]);
+  const [selectedCopy, setSelectedCopy] = useState([]);
 
   useEffect(() => {
     const names = dbClients.map(c => c.name);
@@ -28,6 +30,10 @@ export default function AdCreativeBrief() {
     if (!form.client) return;
     supabase.from('client_brand_voice').select('*').eq('client_name', form.client).single()
       .then(({ data }) => setBrandVoice(data));
+    // Load saved ad copy for this client
+    supabase.from('ad_copy').select('*').eq('client_name', form.client)
+      .order('created_at', { ascending: false }).limit(20)
+      .then(({ data }) => setSavedCopy(data || []));
   }, [form.client]);
 
   const handleGenerate = async () => {
@@ -41,6 +47,8 @@ export default function AdCreativeBrief() {
     const limits = COPY_LIMITS[form.platform] || COPY_LIMITS.Meta;
     const specs = Object.entries(PLATFORM_SPECS).filter(([k]) => k.startsWith(form.platform)).map(([k, v]) => `${k}: ${v.dimensions} (${v.label})`).join(', ');
     const bv = brandVoice ? `Tone: ${brandVoice.tone || ''}. USPs: ${brandVoice.key_selling_points || ''}. Avoid: ${brandVoice.words_to_avoid || ''}.` : '';
+    const selectedCopyTexts = savedCopy.filter(c => selectedCopy.includes(c.id))
+      .map(c => `Headline: ${c.headline || ''}\nText: ${c.primary_text || ''}\nCTA: ${c.cta || ''}`).join('\n\n');
 
     const prompt = `You are a creative director at an Australian digital marketing agency. Generate a comprehensive ad creative brief.
 
@@ -52,7 +60,10 @@ Offer/Hook: ${form.offer || 'Not specified'}
 Budget: ${form.budget || 'Not specified'}
 Duration: ${form.duration || 'Not specified'}
 ${bv ? `Brand Voice: ${bv}` : ''}
-
+${selectedCopyTexts ? `
+APPROVED AD COPY TO USE (build the brief around this copy):
+${selectedCopyTexts}
+` : ''}
 Platform specs:
 - Copy limits: Headline ${limits.headline} chars, Primary ${limits.primary_text || 'N/A'} chars, Description ${limits.description || 'N/A'} chars
 - Image sizes: ${specs}
@@ -146,6 +157,27 @@ Return ONLY valid JSON:
                 <div><Label>Duration</Label><input value={form.duration} onChange={e => setForm(f => ({ ...f, duration: e.target.value }))} placeholder="e.g. 4 weeks" className="input-field" /></div>
               </div>
               {brandVoice && <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-[10px] text-green-700">✓ Brand voice loaded</div>}
+
+              {/* Saved copy from library */}
+              {savedCopy.length > 0 && (
+                <div>
+                  <Label>Use Saved Copy from Library (optional)</Label>
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {savedCopy.map(c => (
+                      <label key={c.id} className="flex items-start gap-2 p-2 bg-[#f8f8f6] rounded-lg cursor-pointer text-[11px] hover:bg-[#F5C518]/5">
+                        <input type="checkbox" checked={selectedCopy.includes(c.id)}
+                          onChange={() => setSelectedCopy(prev => prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id])}
+                          className="mt-0.5 accent-[#F5C518]" />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-gray-700 truncate">{c.headline || '(no headline)'}</div>
+                          <div className="text-[9px] text-gray-400">{c.platform} · {c.status}</div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="text-[9px] text-gray-400 mt-1">{selectedCopy.length} selected — will be included in the brief</div>
+                </div>
+              )}
               <button onClick={handleGenerate} disabled={generating} className="btn-primary w-full py-2.5">
                 {generating ? 'Generating...' : 'Generate Creative Brief'}
               </button>
