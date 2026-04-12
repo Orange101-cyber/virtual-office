@@ -269,6 +269,7 @@ export default function Checklist({ checklistState, onToggle, fields, onFieldCha
   const [proposalsByItem, setProposalsByItem] = useState({});
   const [loadingItem, setLoadingItem] = useState(null);
   const [expandedItem, setExpandedItem] = useState(null);
+  const [scopeFilter, setScopeFilter] = useState('all'); // 'all' | 'writing' | 'technical'
 
   const toggleCat = (idx) => {
     setCollapsedCats((prev) => {
@@ -328,8 +329,38 @@ export default function Checklist({ checklistState, onToggle, fields, onFieldCha
 
   return (
     <div>
+      {/* Scope filter */}
+      <div className="flex items-center gap-1 px-3.5 py-2 border-b border-gray-200 bg-white">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mr-2">View:</span>
+        <button onClick={() => setScopeFilter('all')}
+          className={`text-[10px] font-semibold px-2.5 py-1 rounded-full border cursor-pointer ${scopeFilter === 'all' ? 'bg-[#1a1a1a] text-white border-[#1a1a1a]' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>
+          All Items
+        </button>
+        <button onClick={() => setScopeFilter('writing')}
+          className={`text-[10px] font-semibold px-2.5 py-1 rounded-full border cursor-pointer ${scopeFilter === 'writing' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>
+          ✍️ Writer Only
+        </button>
+        <button onClick={() => setScopeFilter('technical')}
+          className={`text-[10px] font-semibold px-2.5 py-1 rounded-full border cursor-pointer ${scopeFilter === 'technical' ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>
+          ⚙️ Tech Only
+        </button>
+        <span className="text-[9px] text-gray-400 ml-auto">
+          {scopeFilter === 'writing' && 'Showing items SEO writers control'}
+          {scopeFilter === 'technical' && 'Showing post-publish/admin items'}
+          {scopeFilter === 'all' && 'Showing all items'}
+        </span>
+      </div>
+
       {CHECKS.map((cat, ci) => {
-        const passed = cat.items.filter((i) => checklistState[i.id]).length;
+        // Filter items by scope
+        const visibleItems = scopeFilter === 'all'
+          ? cat.items
+          : cat.items.filter(i => i.scope === scopeFilter);
+
+        // Skip categories with no visible items
+        if (visibleItems.length === 0) return null;
+
+        const passed = visibleItems.filter((i) => checklistState[i.id]).length;
         const collapsed = collapsedCats.has(ci);
 
         return (
@@ -340,11 +371,11 @@ export default function Checklist({ checklistState, onToggle, fields, onFieldCha
             >
               <span>{cat.cat}</span>
               <span className="font-normal normal-case tracking-normal text-gray-400">
-                {passed}/{cat.items.length}
+                {passed}/{visibleItems.length}
               </span>
             </div>
             {!collapsed &&
-              cat.items.map((item) => {
+              visibleItems.map((item) => {
                 const isChecked = checklistState[item.id];
                 const canFix = !isChecked && AUTO_FIXABLE.has(item.id);
                 const proposal = proposalsByItem[item.id];
@@ -380,6 +411,16 @@ export default function Checklist({ checklistState, onToggle, fields, onFieldCha
                           {item.auto && (
                             <span className="inline-block text-[9px] font-bold uppercase bg-blue-100 text-blue-700 px-1.5 py-0 rounded-full ml-1 align-middle">
                               Auto
+                            </span>
+                          )}
+                          {item.scope === 'writing' && (
+                            <span className="inline-block text-[9px] font-bold uppercase bg-purple-50 text-purple-600 px-1.5 py-0 rounded-full ml-1 align-middle" title="Writer's responsibility">
+                              ✍️ Writer
+                            </span>
+                          )}
+                          {item.scope === 'technical' && (
+                            <span className="inline-block text-[9px] font-bold uppercase bg-gray-100 text-gray-600 px-1.5 py-0 rounded-full ml-1 align-middle" title="Technical/post-publish admin work">
+                              ⚙️ Tech
                             </span>
                           )}
                         </div>
