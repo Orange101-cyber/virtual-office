@@ -2,6 +2,7 @@ import { useState } from 'react';
 import ArticleInputs from './ArticleInputs';
 import ScoreBar from './ScoreBar';
 import Checklist from './Checklist';
+import AIFixPanel from './AIFixPanel';
 import IssuesTab from './IssuesTab';
 import AIFindings from './AIFindings';
 import ExportPdf from './ExportPdf';
@@ -87,6 +88,13 @@ export default function ReportArea({
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_290px] gap-4 items-start">
         {/* Left column */}
         <div className="flex flex-col gap-4">
+          <AIFixPanel
+            fields={fields}
+            checklistState={checklistState}
+            clientName={clients?.find(c => c.id === clientId)?.name}
+            onFieldChange={onFieldChange}
+            onChecklistUpdate={(ids) => ids.forEach(id => { if (!checklistState[id]) onToggle(id); })}
+          />
           <div className="bg-white border border-gray-200 rounded-[7px] overflow-hidden">
             <div className="flex border-b border-gray-200">
               {tabs.map((tab) => (
