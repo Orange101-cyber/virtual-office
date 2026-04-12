@@ -2,15 +2,19 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useClients } from '../hooks/useClients';
 import * as dfs from '../lib/dataForSeo';
+import { getClientContext, formatContextForPrompt } from '../lib/clientContext';
 import toast from 'react-hot-toast';
 
-const BRIEF_PROMPT = ({ client, contentType, isRefresh, title, focusKeyword, secondaryKeywords, existingUrl, wordCount, context, ctaUrl, styleSamples, serpData }) => `You are an SEO content strategist working for a digital marketing agency in Australia.
+const BRIEF_PROMPT = ({ client, contentType, isRefresh, title, focusKeyword, secondaryKeywords, existingUrl, wordCount, context, ctaUrl, styleSamples, serpData, clientContextText }) => `You are an SEO content strategist working for a digital marketing agency in Australia.
 Your job is to write structured content briefs for blog posts and SEO pages.
 Always write for Australian audiences. Use plain English at a Grade 6 reading level.
 Avoid jargon. Format your output as valid JSON. Never pad content. Be specific and practical.
 
 Generate a full content brief for:
-Client: ${client}
+${clientContextText ? `CLIENT CONTEXT:
+${clientContextText}
+
+` : ''}Client: ${client}
 Content Type: ${contentType}
 New or Refresh: ${isRefresh ? 'REFRESH' : 'NEW'}
 Article Title: ${title}
@@ -184,6 +188,10 @@ export default function BriefGenerator() {
       if (samples) styleSamples = samples;
     }
 
+    // Load full client context (business info, USPs, etc.)
+    const clientCtx = await getClientContext(form.client);
+    const clientContextText = formatContextForPrompt(clientCtx);
+
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -197,7 +205,7 @@ export default function BriefGenerator() {
           model: 'claude-sonnet-4-20250514',
           max_tokens: 2500,
           system: 'You are an SEO content strategist. Return ONLY valid JSON with no markdown fences.',
-          messages: [{ role: 'user', content: BRIEF_PROMPT({ ...form, styleSamples, serpData }) }],
+          messages: [{ role: 'user', content: BRIEF_PROMPT({ ...form, styleSamples, serpData, clientContextText }) }],
         }),
       });
 

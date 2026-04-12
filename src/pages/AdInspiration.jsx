@@ -3,14 +3,18 @@ import { supabase } from '../lib/supabase';
 import { useClients } from '../hooks/useClients';
 import * as imageGen from '../lib/imageGen';
 import { COPY_LIMITS, MODELS } from '../lib/imageGen';
+import { getClientContext, formatContextForPrompt } from '../lib/clientContext';
 import toast from 'react-hot-toast';
 
 const PLATFORMS = ['Meta', 'Google', 'LinkedIn', 'TikTok'];
 
-const AD_PROMPT = ({ client, platform, goal, audience, offer, brandVoice, pastCopyText }) => `You are an expert ad copywriter for an Australian digital marketing agency.
+const AD_PROMPT = ({ client, platform, goal, audience, offer, brandVoice, pastCopyText, clientContextText }) => `You are an expert ad copywriter for an Australian digital marketing agency.
 Generate ad copy variations for this campaign. Return ONLY valid JSON.
 
-Client: ${client}
+${clientContextText ? `CLIENT CONTEXT:
+${clientContextText}
+
+` : ''}Client: ${client}
 Platform: ${platform}
 Campaign Goal: ${goal}
 Target Audience: ${audience}
@@ -104,6 +108,10 @@ export default function AdInspiration() {
         return entry;
       }).join('\n\n');
 
+      // Load full client context
+      const clientCtx = await getClientContext(form.client);
+      const clientContextText = formatContextForPrompt(clientCtx);
+
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -113,7 +121,7 @@ export default function AdInspiration() {
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514', max_tokens: 2000,
           system: 'You are an expert ad copywriter. Return ONLY valid JSON, no markdown fences.',
-          messages: [{ role: 'user', content: AD_PROMPT({ ...form, brandVoice: bv, pastCopyText }) }],
+          messages: [{ role: 'user', content: AD_PROMPT({ ...form, brandVoice: bv, pastCopyText, clientContextText }) }],
         }),
       });
       if (!res.ok) throw new Error(`API error ${res.status}`);

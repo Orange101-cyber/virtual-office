@@ -8,6 +8,12 @@ const TOOLS = [
     icon: '🎮',
   },
   {
+    name: 'Clients',
+    description: 'Per-client hub with all content, ads, briefs, and activity in one place. The single source of truth per client.',
+    path: '/clients',
+    icon: '👥',
+  },
+  {
     name: 'Client Dashboard',
     description: 'Performance reporting and analytics for CYL clients.',
     path: '/client-dashboard',
