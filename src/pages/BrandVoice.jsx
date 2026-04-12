@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useClients } from '../hooks/useClients';
+import { fetchUrlContent } from '../lib/urlFetcher';
 import toast from 'react-hot-toast';
 
 function Label({ children }) {
@@ -86,39 +87,91 @@ export default function BrandVoice() {
     toast.success('Client profile saved!');
   };
 
+  const [suggesting, setSuggesting] = useState(false);
+
   const handleAISuggest = async () => {
+    if (!form.website_url?.trim()) {
+      return toast.error('Enter a website URL first — AI needs to read the site to make real suggestions');
+    }
     const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
     if (!apiKey) return toast.error('API key not set');
-    toast('Generating suggestions...');
 
-    const prompt = `Research the Australian business "${selectedClient}" and suggest a complete client profile. Return ONLY valid JSON:
-{
-  "website_url": "Their likely website URL",
-  "business_description": "1-2 sentence description",
-  "services": "Main services offered, one per line",
-  "locations_served": "Geographic areas",
-  "differentiators": "3-5 unique differentiators",
-  "target_personas": "Main customer personas",
-  "tone": "Recommended tone of voice",
-  "key_selling_points": "3-5 USPs",
-  "words_to_avoid": "Comma-separated list"
-}`;
+    setSuggesting(true);
+    toast('Scraping website...');
 
     try {
+      // Step 1: Scrape the website to get real content
+      const siteData = await fetchUrlContent(form.website_url.trim());
+
+      if (!siteData.article_content || siteData.article_content.length < 100) {
+        toast.error('Could not read the website — check the URL is correct');
+        setSuggesting(false);
+        return;
+      }
+
+      toast('Analysing website content with AI...');
+
+      // Step 2: Feed real content to AI for analysis
+      const prompt = `You are analysing a real Australian business website to build their client profile. Use ONLY the website content below — do not make anything up.
+
+CLIENT NAME: ${selectedClient}
+WEBSITE URL: ${form.website_url}
+
+SCRAPED WEBSITE CONTENT (homepage and meta):
+Title: ${siteData.article_title || ''}
+Meta: ${siteData.meta_description || ''}
+
+${siteData.article_content.substring(0, 6000)}
+
+Based ONLY on the above content, return a JSON profile. If information isn't visible on the page, use an empty string "" for that field rather than guessing.
+
+Return ONLY valid JSON with this exact structure:
+{
+  "business_description": "1-2 sentence description based on what the site says",
+  "services": "Services/products mentioned on the site, one per line",
+  "locations_served": "Geographic areas mentioned on the site",
+  "differentiators": "Unique points actually mentioned on the site, one per line",
+  "target_personas": "Who the site is speaking to (if evident)",
+  "target_demographics": "Age/lifestyle/demographics if mentioned",
+  "tone": "Tone of voice used on the website (describe what you observe)",
+  "key_selling_points": "USPs actually mentioned on the site, one per line",
+  "words_to_avoid": "Words/phrases that would clash with their current tone",
+  "business_goals": "Business goals inferable from the site content"
+}`;
+
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, system: 'Return ONLY valid JSON, no markdown fences.', messages: [{ role: 'user', content: prompt }] }),
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1500,
+          system: 'You are a business analyst. Return ONLY valid JSON, no markdown fences. Only use information from the provided website content — never make up or guess details.',
+          messages: [{ role: 'user', content: prompt }],
+        }),
       });
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+
       const msg = await res.json();
       let raw = msg.content[0].text;
       raw = raw.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
       const data = JSON.parse(raw);
-      setForm(f => ({ ...f, ...data }));
-      toast.success('AI suggestions loaded — review and save');
+
+      // Only update fields that have content, and don't overwrite existing data
+      setForm(f => {
+        const updates = {};
+        Object.entries(data).forEach(([key, value]) => {
+          if (value && value !== '' && !f[key]) {
+            updates[key] = value;
+          }
+        });
+        return { ...f, ...updates };
+      });
+
+      toast.success('Profile populated from website — review and save');
     } catch (err) {
       toast.error('Error: ' + err.message);
     }
+    setSuggesting(false);
   };
 
   return (
@@ -137,8 +190,13 @@ export default function BrandVoice() {
                 {clients.map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
-            <button onClick={handleAISuggest} className="text-[10px] text-gray-400 hover:text-[#F5C518] bg-transparent border border-gray-200 rounded px-2.5 py-1 cursor-pointer">
-              AI Suggest
+            <button
+              onClick={handleAISuggest}
+              disabled={suggesting || !form.website_url?.trim()}
+              title={!form.website_url?.trim() ? 'Enter a website URL first' : 'Scrape website and suggest profile'}
+              className="text-[10px] text-gray-400 hover:text-[#F5C518] bg-transparent border border-gray-200 rounded px-2.5 py-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {suggesting ? 'Analysing...' : '🔍 AI Suggest from Website'}
             </button>
           </div>
 
