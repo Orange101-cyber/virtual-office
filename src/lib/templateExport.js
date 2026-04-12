@@ -1,6 +1,6 @@
 import {
   Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, HeadingLevel,
-  WidthType, BorderStyle, AlignmentType, ShadingType, PageOrientation, TableLayoutType,
+  WidthType, BorderStyle, AlignmentType, ShadingType, PageOrientation,
 } from 'docx';
 
 // ── Page / table geometry ──
@@ -36,12 +36,15 @@ function para(text, opts = {}) {
   return new Paragraph({ children: runsFromText(text, opts) });
 }
 
-function cell(children, { widthDxa, shading = null, align } = {}) {
+// NOTE: We intentionally do NOT set cell widths. The `columnWidths` on the
+// Table level produces a <w:tblGrid> which Word, LibreOffice, and Google Docs
+// all respect for column sizing. Setting <w:tcW> on individual cells
+// sometimes confuses Google Docs and produces the collapsed 1-char column bug.
+function cell(children, { shading = null, align } = {}) {
   const paragraphs = Array.isArray(children)
     ? children.map(c => (typeof c === 'string' ? para(c) : c))
     : [typeof children === 'string' ? para(children) : children];
   return new TableCell({
-    width: { size: widthDxa, type: WidthType.DXA },
     shading: shading ? { type: ShadingType.CLEAR, color: 'auto', fill: shading } : undefined,
     borders: BORDER,
     children: paragraphs,
@@ -52,7 +55,7 @@ function cell(children, { widthDxa, shading = null, align } = {}) {
 function labelCell(text) {
   return cell(
     [new Paragraph({ children: [new TextRun({ text, bold: true, size: 20 })] })],
-    { widthDxa: LABEL_W, shading: 'F3F3F3' }
+    { shading: 'F3F3F3' }
   );
 }
 
@@ -63,7 +66,7 @@ function valueCell(children) {
       ? new Paragraph({ children: [new TextRun({ text: c, size: 20 })] })
       : c
   );
-  return cell(paragraphs, { widthDxa: VALUE_W });
+  return cell(paragraphs);
 }
 
 function makeRow(label, value) {
@@ -122,7 +125,8 @@ function parseBodyParagraphs(content) {
 }
 
 // ── Checklist table (4 columns) ──
-function chkCell(children, widthDxa, { shading = null, bold = false, color = '000000', size = 20 } = {}) {
+// No cell widths — we rely on columnWidths on the Table for <w:tblGrid>.
+function chkCell(children, { shading = null, bold = false, color = '000000', size = 20 } = {}) {
   const arr = Array.isArray(children) ? children : [children];
   const paragraphs = arr.map(c =>
     typeof c === 'string'
@@ -130,7 +134,6 @@ function chkCell(children, widthDxa, { shading = null, bold = false, color = '00
       : c
   );
   return new TableCell({
-    width: { size: widthDxa, type: WidthType.DXA },
     shading: shading ? { type: ShadingType.CLEAR, color: 'auto', fill: shading } : undefined,
     borders: BORDER,
     children: paragraphs,
@@ -143,10 +146,10 @@ function buildChecklistTable() {
     new TableRow({
       tableHeader: true,
       children: [
-        chkCell('Internal CYL Checklist', CHK_C1, { shading: headerShade, bold: true, size: 22 }),
-        chkCell('Approved by (Admin)', CHK_C2, { shading: headerShade, bold: true, size: 18 }),
-        chkCell('', CHK_C3, { shading: headerShade }),
-        chkCell('Date', CHK_C4, { shading: headerShade, bold: true, size: 18 }),
+        chkCell('Internal CYL Checklist', { shading: headerShade, bold: true, size: 22 }),
+        chkCell('Approved by (Admin)', { shading: headerShade, bold: true, size: 18 }),
+        chkCell('', { shading: headerShade }),
+        chkCell('Date', { shading: headerShade, bold: true, size: 18 }),
       ],
     }),
   ];
@@ -159,20 +162,20 @@ function buildChecklistTable() {
   items.forEach(label => {
     rows.push(new TableRow({
       children: [
-        chkCell(label, CHK_C1, { size: 20 }),
-        chkCell('Make a selection', CHK_C2, { size: 18, color: '888888' }),
-        chkCell('', CHK_C3),
-        chkCell('', CHK_C4),
+        chkCell(label, { size: 20 }),
+        chkCell('Make a selection', { size: 18, color: '888888' }),
+        chkCell(''),
+        chkCell(''),
       ],
     }));
   });
 
   rows.push(new TableRow({
     children: [
-      chkCell('Final confirmation', CHK_C1, { shading: headerShade, bold: true, size: 22 }),
-      chkCell('Approved by (Admin)', CHK_C2, { shading: headerShade, bold: true, size: 18 }),
-      chkCell('', CHK_C3, { shading: headerShade }),
-      chkCell('Date', CHK_C4, { shading: headerShade, bold: true, size: 18 }),
+      chkCell('Final confirmation', { shading: headerShade, bold: true, size: 22 }),
+      chkCell('Approved by (Admin)', { shading: headerShade, bold: true, size: 18 }),
+      chkCell('', { shading: headerShade }),
+      chkCell('Date', { shading: headerShade, bold: true, size: 18 }),
     ],
   }));
 
@@ -183,10 +186,10 @@ function buildChecklistTable() {
   finalItems.forEach(label => {
     rows.push(new TableRow({
       children: [
-        chkCell(label, CHK_C1, { size: 20 }),
-        chkCell('Make a selection', CHK_C2, { size: 18, color: '888888' }),
-        chkCell('', CHK_C3),
-        chkCell('', CHK_C4),
+        chkCell(label, { size: 20 }),
+        chkCell('Make a selection', { size: 18, color: '888888' }),
+        chkCell(''),
+        chkCell(''),
       ],
     }));
   });
@@ -194,7 +197,6 @@ function buildChecklistTable() {
   return new Table({
     width: { size: USABLE_WIDTH, type: WidthType.DXA },
     columnWidths: CHECK_COLS,
-    layout: TableLayoutType.FIXED,
     rows,
   });
 }
@@ -212,7 +214,6 @@ export async function exportToTemplate({ fields, clientName = 'Client', brief = 
   const dataTable = new Table({
     width: { size: USABLE_WIDTH, type: WidthType.DXA },
     columnWidths: DATA_COLS,
-    layout: TableLayoutType.FIXED,
     rows: [
       makeRow('Is this an existing blog/LLP?', 'No'),
       makeRow('What type of content is this?', 'BLOG - NEW'),
@@ -329,6 +330,9 @@ export async function exportToTemplate({ fields, clientName = 'Client', brief = 
           new Paragraph(''),
 
           buildChecklistTable(),
+
+          // Terminating paragraph — required after a table so sectPr is valid
+          new Paragraph(''),
         ],
       },
     ],

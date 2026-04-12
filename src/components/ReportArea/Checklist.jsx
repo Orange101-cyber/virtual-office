@@ -79,9 +79,20 @@ function FixModal({ proposal, onClose, onApprove, onReject }) {
                 </div>
               </div>
               <div className="flex flex-col overflow-hidden">
-                <div className="px-4 py-2 bg-green-50 border-b border-green-100">
-                  <div className="text-[10px] font-bold uppercase text-green-600">After</div>
-                  <div className="text-[9px] text-gray-500">{(proposal.proposed_value || '').length.toLocaleString()} chars</div>
+                <div className="px-4 py-2 bg-green-50 border-b border-green-100 flex items-center justify-between">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase text-green-600">After</div>
+                    <div className="text-[9px] text-gray-500">{(proposal.proposed_value || '').length.toLocaleString()} chars</div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (navigator.clipboard?.writeText) {
+                        navigator.clipboard.writeText(proposal.proposed_value || '');
+                        toast.success('Copied');
+                      }
+                    }}
+                    className="text-[10px] font-bold uppercase text-green-700 bg-white border border-green-300 rounded px-2 py-1 cursor-pointer hover:bg-green-100"
+                  >📋 Copy</button>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4">
                   <pre className="text-[12px] text-gray-700 leading-relaxed whitespace-pre-wrap font-sans">{proposal.proposed_value || '(empty)'}</pre>
@@ -115,8 +126,19 @@ function FixModal({ proposal, onClose, onApprove, onReject }) {
 
           {viewMode === 'after-only' && (
             <div className="h-full overflow-y-auto p-6 bg-[#fafafa]">
-              <div className="text-[10px] text-gray-400 uppercase font-bold mb-3">
-                Proposed new content — this is what will replace the current value
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-[10px] text-gray-400 uppercase font-bold">
+                  Proposed new content — this is what will replace the current value
+                </div>
+                <button
+                  onClick={() => {
+                    if (navigator.clipboard?.writeText) {
+                      navigator.clipboard.writeText(proposal.proposed_value || '');
+                      toast.success('Copied');
+                    }
+                  }}
+                  className="text-[10px] font-bold uppercase text-green-700 bg-white border border-green-300 rounded px-2 py-1 cursor-pointer hover:bg-green-100"
+                >📋 Copy</button>
               </div>
               <div className="bg-white rounded-lg border border-green-200 p-5">
                 <pre className="text-[13px] text-gray-700 leading-relaxed whitespace-pre-wrap font-sans">{proposal.proposed_value || '(empty)'}</pre>
@@ -143,6 +165,32 @@ function FixModal({ proposal, onClose, onApprove, onReject }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// Small copy-to-clipboard button, compact for inline use
+function CopyBtn({ text, label = 'Copy' }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = (e) => {
+    e?.stopPropagation();
+    if (!text) return;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+      toast.success('Copied');
+    } else {
+      toast.error('Clipboard unavailable');
+    }
+  };
+  return (
+    <button
+      onClick={handleCopy}
+      className="text-[9px] font-bold uppercase text-green-600 bg-green-50 border border-green-200 rounded px-1.5 py-0.5 cursor-pointer hover:bg-green-100 flex items-center gap-1 shrink-0"
+      title="Copy to clipboard"
+    >
+      {copied ? '✓ Copied' : `📋 ${label}`}
+    </button>
   );
 }
 
@@ -223,8 +271,11 @@ function FixProposal({ proposal, onApprove, onReject, onExpand }) {
               </div>
             </div>
           </div>
-          <div className="text-[10px] text-gray-400 mt-2 italic">
-            Content is too long to preview inline. Click <b className="text-blue-600">⛶ Expand</b> to review the full change before applying.
+          <div className="flex items-center justify-between mt-2 gap-2">
+            <div className="text-[10px] text-gray-400 italic flex-1">
+              Content is too long to preview inline. Click <b className="text-blue-600">⛶ Expand</b> to review the full change before applying.
+            </div>
+            <CopyBtn text={proposal.proposed_value || ''} label="Copy After" />
           </div>
         </div>
       ) : (
@@ -237,7 +288,10 @@ function FixProposal({ proposal, onApprove, onReject, onExpand }) {
             </div>
           </div>
           <div>
-            <div className="text-[9px] font-bold text-green-600 uppercase mb-1">After</div>
+            <div className="flex items-center justify-between mb-1 gap-2">
+              <div className="text-[9px] font-bold text-green-600 uppercase">After</div>
+              <CopyBtn text={proposal.proposed_value || ''} />
+            </div>
             <div className="bg-white border border-green-200 rounded-lg p-2.5 text-[11px] text-gray-700 leading-relaxed whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
               {proposal.proposed_value || <span className="text-gray-300 italic">(empty)</span>}
             </div>

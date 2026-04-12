@@ -40,11 +40,11 @@ export const CHECKS = [
   {
     cat: 'Images & Media',
     items: [
-      { id: 'img_hero', label: 'Hero/header image present', auto: true, scope: 'writing' },
-      { id: 'img_alts', label: 'All images have descriptive alt text', auto: true, crit: true, scope: 'writing' },
-      { id: 'img_kw_alt', label: 'At least one alt tag includes focus keyphrase', auto: true, scope: 'writing' },
+      { id: 'img_hero', label: 'Hero/header image present', auto: true, scope: 'technical' },
+      { id: 'img_alts', label: 'All images have descriptive alt text', auto: true, crit: true, scope: 'technical' },
+      { id: 'img_kw_alt', label: 'At least one alt tag includes focus keyphrase', auto: true, scope: 'technical' },
       { id: 'img_webp', label: 'Images are WebP format', auto: true, note: 'Reduces file size, improves Core Web Vitals', scope: 'technical' },
-      { id: 'img_filename', label: 'Image filenames include keyword', scope: 'writing' },
+      { id: 'img_filename', label: 'Image filenames include keyword', scope: 'technical' },
       { id: 'img_filesize', label: 'Images compressed under 200KB each', scope: 'technical' },
     ],
   },
