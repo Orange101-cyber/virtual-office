@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { CHECKS } from '../../data/checklist';
-import { exportToTemplate, downloadTemplateFile } from '../../lib/templateExport';
+import { downloadTemplateFile } from '../../lib/templateExport';
 import * as dfs from '../../lib/dataForSeo';
 import toast from 'react-hot-toast';
 
 export default function AIFixPanel({ fields, checklistState, clientName }) {
   const [validating, setValidating] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [keywordValidation, setKeywordValidation] = useState(null);
 
   // Get all failed checks
@@ -13,11 +14,15 @@ export default function AIFixPanel({ fields, checklistState, clientName }) {
   const failedItems = allItems.filter(i => !checklistState[i.id]);
   const criticalFailed = failedItems.filter(i => i.crit);
 
-  const handleExportTemplate = () => {
-    const doc = exportToTemplate({ fields, clientName });
-    const fileName = `${clientName || 'Article'} - ${fields.article_title || 'Blog'}`.replace(/[^a-zA-Z0-9 -]/g, '').substring(0, 60) + '.txt';
-    downloadTemplateFile(doc, fileName);
-    toast.success('Template exported!');
+  const handleExportTemplate = async () => {
+    setExporting(true);
+    try {
+      await downloadTemplateFile(fields, clientName || 'Article');
+      toast.success('Template exported as .docx');
+    } catch (err) {
+      toast.error('Export error: ' + err.message);
+    }
+    setExporting(false);
   };
 
   const handleValidateKeyword = async () => {
@@ -89,9 +94,10 @@ export default function AIFixPanel({ fields, checklistState, clientName }) {
 
           <button
             onClick={handleExportTemplate}
-            className="bg-transparent border border-gray-300 text-gray-700 rounded-[5px] px-3 py-1.5 text-[11px] font-semibold cursor-pointer hover:border-[#F5C518] flex items-center gap-1.5"
+            disabled={exporting}
+            className="bg-transparent border border-gray-300 text-gray-700 rounded-[5px] px-3 py-1.5 text-[11px] font-semibold cursor-pointer hover:border-[#F5C518] flex items-center gap-1.5 disabled:opacity-40"
           >
-            📄 Export to Template
+            {exporting ? 'Generating...' : '📄 Export to Template (.docx)'}
           </button>
         </div>
 
