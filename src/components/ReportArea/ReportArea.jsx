@@ -92,6 +92,8 @@ export default function ReportArea({
             fields={fields}
             checklistState={checklistState}
             clientName={clients?.find(c => c.id === clientId)?.name}
+            onFieldChange={onFieldChange}
+            onBulkCheck={(ids) => ids.forEach(id => { if (!checklistState[id]) onToggle(id); })}
           />
           <div className="bg-white border border-gray-200 rounded-[7px] overflow-hidden">
             <div className="flex border-b border-gray-200">
