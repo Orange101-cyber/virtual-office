@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useClients } from '../hooks/useClients';
 import { COPY_LIMITS, PLATFORM_SPECS, MODELS } from '../lib/imageGen';
 import * as imageGen from '../lib/imageGen';
+import { getClientContext, formatContextForPrompt } from '../lib/clientContext';
 import toast from 'react-hot-toast';
 
 function Label({ children }) {
@@ -54,9 +55,16 @@ export default function AdCreativeBrief() {
     const selectedCopyTexts = savedCopy.filter(c => selectedCopy.includes(c.id))
       .map(c => `Headline: ${c.headline || ''}\nText: ${c.primary_text || ''}\nCTA: ${c.cta || ''}`).join('\n\n');
 
+    // Load full client context
+    const clientCtx = await getClientContext(form.client);
+    const clientContextText = formatContextForPrompt(clientCtx);
+
     const prompt = `You are a creative director at an Australian digital marketing agency. Generate a comprehensive ad creative brief.
 
-Client: ${form.client}
+${clientContextText ? `CLIENT CONTEXT:
+${clientContextText}
+
+` : ''}Client: ${form.client}
 Platform: ${form.platform}
 Campaign Goal: ${form.goal}
 Target Audience: ${form.audience || 'Not specified'}

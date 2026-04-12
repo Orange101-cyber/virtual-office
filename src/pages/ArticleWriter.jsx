@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useClients } from '../hooks/useClients';
+import { getClientContext, formatContextForPrompt } from '../lib/clientContext';
 import toast from 'react-hot-toast';
 
 export default function ArticleWriter() {
@@ -115,10 +116,17 @@ export default function ArticleWriter() {
       'grade-12': 'Write at a Grade 12 reading level. Use expert-level language with technical terminology. Complex sentence structures are acceptable. Assume the reader has domain knowledge. Detailed paragraphs of 3-5 sentences.',
     };
 
+    // Load full client context
+    const clientCtx = await getClientContext(selectedClient);
+    const clientContextText = formatContextForPrompt(clientCtx);
+
     const prompt = `You are an expert SEO content writer for an Australian digital marketing agency.
 Write a complete, publish-ready ${contentType === 'SEO Page' ? 'SEO landing page' : 'blog article'} based on the brief below.
 
-CLIENT: ${selectedClient}
+${clientContextText ? `CLIENT CONTEXT (use this to inform the article):
+${clientContextText}
+
+` : ''}CLIENT: ${selectedClient}
 CONTENT TYPE: ${contentType}
 TARGET WORD COUNT: ${wordTarget} words
 

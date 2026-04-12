@@ -23,7 +23,8 @@ const ADS_PATHS = ADS_TOOLS.map(t => t.path);
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard' },
   { path: '/virtual-office-games', label: 'Virtual Office' },
-  { path: '/client-dashboard', label: 'Client Dashboard' },
+  { path: '/clients', label: 'Clients' },
+  { path: '/client-dashboard', label: 'Performance' },
   { path: '/seo-tools', label: 'SEO Tools', dropdown: 'seo' },
   { path: '/ads-hub', label: 'Ads Hub', dropdown: 'ads' },
 ];
