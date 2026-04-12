@@ -92,8 +92,6 @@ export default function ReportArea({
             fields={fields}
             checklistState={checklistState}
             clientName={clients?.find(c => c.id === clientId)?.name}
-            onFieldChange={onFieldChange}
-            onChecklistUpdate={(ids) => ids.forEach(id => { if (!checklistState[id]) onToggle(id); })}
           />
           <div className="bg-white border border-gray-200 rounded-[7px] overflow-hidden">
             <div className="flex border-b border-gray-200">
@@ -113,7 +111,13 @@ export default function ReportArea({
             </div>
 
             {activeTab === 'checklist' && (
-              <Checklist checklistState={checklistState} onToggle={onToggle} />
+              <Checklist
+                checklistState={checklistState}
+                onToggle={onToggle}
+                fields={fields}
+                onFieldChange={onFieldChange}
+                clientName={clients?.find(c => c.id === clientId)?.name}
+              />
             )}
             {activeTab === 'issues' && (
               <IssuesTab checklistState={checklistState} />

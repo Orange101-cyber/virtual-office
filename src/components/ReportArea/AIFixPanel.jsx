@@ -1,78 +1,17 @@
 import { useState } from 'react';
 import { CHECKS } from '../../data/checklist';
-import { fixSeoIssues } from '../../lib/seoFixer';
 import { exportToTemplate, downloadTemplateFile } from '../../lib/templateExport';
-import { getClientContext, formatContextForPrompt } from '../../lib/clientContext';
 import * as dfs from '../../lib/dataForSeo';
 import toast from 'react-hot-toast';
 
-export default function AIFixPanel({ fields, checklistState, clientName, onFieldChange, onChecklistUpdate }) {
-  const [fixing, setFixing] = useState(false);
+export default function AIFixPanel({ fields, checklistState, clientName }) {
   const [validating, setValidating] = useState(false);
-  const [lastFix, setLastFix] = useState(null);
   const [keywordValidation, setKeywordValidation] = useState(null);
 
   // Get all failed checks
   const allItems = CHECKS.flatMap(c => c.items);
   const failedItems = allItems.filter(i => !checklistState[i.id]);
   const criticalFailed = failedItems.filter(i => i.crit);
-  const autoFixable = failedItems.filter(i => {
-    // Items that can be auto-fixed by editing fields
-    const fixable = [
-      'meta_title_kw', 'meta_title_len', 'meta_desc_kw', 'meta_desc_len',
-      'meta_slug', 'kw_h1', 'kw_first100', 'kw_density', 'kw_secondary',
-      'kw_variations', 'kw_wordcount', 'kw_toc', 'kw_faq',
-      'h_one_h1', 'h_has_h2', 'h_kw_in_h', 'h_intro',
-      'link_internal', 'link_external', 'link_cta_top', 'link_cta_bot',
-      'eeat_author', 'eeat_date', 'eeat_location', 'eeat_data',
-      'ux_scannable',
-    ];
-    return fixable.includes(i.id);
-  });
-
-  const handleFixAll = async () => {
-    if (autoFixable.length === 0) {
-      toast('Nothing to auto-fix');
-      return;
-    }
-    if (!fields.article_content?.trim()) {
-      toast.error('Add article content first');
-      return;
-    }
-
-    setFixing(true);
-    try {
-      const ctx = clientName ? await getClientContext(clientName) : null;
-      const clientContextText = ctx ? formatContextForPrompt(ctx) : '';
-
-      const result = await fixSeoIssues({
-        fields,
-        failedItemIds: autoFixable.map(i => i.id),
-        clientContextText,
-      });
-
-      // Apply updated fields
-      const updates = result.updated_fields || {};
-      Object.entries(updates).forEach(([key, value]) => {
-        if (value && value !== 'null' && value !== fields[key]) {
-          onFieldChange(key, value);
-        }
-      });
-
-      // Mark the fixed items as complete in the checklist
-      if (result.fixes_applied && onChecklistUpdate) {
-        const fixedIds = result.fixes_applied.map(f => f.check_id);
-        onChecklistUpdate(fixedIds);
-      }
-
-      setLastFix(result);
-      const count = result.fixes_applied?.length || 0;
-      toast.success(`Applied ${count} fixes`);
-    } catch (err) {
-      toast.error('Fix error: ' + err.message);
-    }
-    setFixing(false);
-  };
 
   const handleExportTemplate = () => {
     const doc = exportToTemplate({ fields, clientName });
@@ -136,18 +75,10 @@ export default function AIFixPanel({ fields, checklistState, clientName, onField
       </div>
       <div className="p-3.5">
         <div className="text-[10px] text-gray-400 mb-3 leading-relaxed">
-          AI can automatically fix red checklist items by editing your article content, meta, and title. DataForSEO validates your keywords are real and have search volume.
+          Click <b>⚡ Fix</b> next to any red item below to get a proposed fix you can review and approve. Validate your keywords are real and have search volume. Export the cleaned article in CYL template format.
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <button
-            onClick={handleFixAll}
-            disabled={fixing || autoFixable.length === 0}
-            className="bg-[#F5C518] text-[#1a1a1a] border-none rounded-[5px] px-3 py-1.5 text-[11px] font-bold cursor-pointer hover:bg-[#e6b800] disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
-          >
-            {fixing ? 'Fixing...' : `⚡ Fix ${autoFixable.length} Issues`}
-          </button>
-
           <button
             onClick={handleValidateKeyword}
             disabled={validating || !fields.focus_keyphrase}
@@ -183,33 +114,6 @@ export default function AIFixPanel({ fields, checklistState, clientName, onField
             {keywordValidation.some(v => !v.valid) && (
               <div className="text-[10px] text-red-600 mt-2">
                 ⚠ Some keywords have zero search volume — verify they're real and spelled correctly.
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Last fix results */}
-        {lastFix && (
-          <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3">
-            <div className="text-[10px] font-bold uppercase text-green-700 mb-2">Last AI Fix Report</div>
-            {lastFix.fixes_applied?.length > 0 && (
-              <div className="space-y-1 mb-2">
-                {lastFix.fixes_applied.map((f, i) => (
-                  <div key={i} className="text-[10px] text-green-700">
-                    <span className="font-semibold">✓ {f.description}</span>
-                    {f.after && <div className="text-[9px] text-green-600 mt-0.5 truncate">→ {f.after.substring(0, 80)}</div>}
-                  </div>
-                ))}
-              </div>
-            )}
-            {lastFix.cannot_auto_fix?.length > 0 && (
-              <div className="pt-2 border-t border-green-200">
-                <div className="text-[9px] font-bold uppercase text-orange-600 mb-1">Needs Manual Fix</div>
-                {lastFix.cannot_auto_fix.map((f, i) => (
-                  <div key={i} className="text-[9px] text-gray-600 mb-0.5">
-                    <span className="font-semibold">{f.check_id}:</span> {f.reason}
-                  </div>
-                ))}
               </div>
             )}
           </div>
