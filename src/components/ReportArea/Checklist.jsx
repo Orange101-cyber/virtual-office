@@ -1,8 +1,150 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { CHECKS } from '../../data/checklist';
 import { proposeFixForItem } from '../../lib/seoFixer';
 import { getClientContext, formatContextForPrompt } from '../../lib/clientContext';
 import toast from 'react-hot-toast';
+
+// Find the common prefix and suffix between two strings to highlight what changed
+function computeDiff(before, after) {
+  if (!before) return { commonStart: 0, commonEnd: 0, beforeMiddle: '', afterMiddle: after || '' };
+  if (!after) return { commonStart: 0, commonEnd: 0, beforeMiddle: before, afterMiddle: '' };
+
+  // Find common start
+  let start = 0;
+  const minLen = Math.min(before.length, after.length);
+  while (start < minLen && before[start] === after[start]) start++;
+
+  // Find common end (don't cross into start)
+  let end = 0;
+  while (end < minLen - start && before[before.length - 1 - end] === after[after.length - 1 - end]) end++;
+
+  return {
+    commonStart: start,
+    commonEnd: end,
+    beforeStart: before.substring(0, start),
+    beforeMiddle: before.substring(start, before.length - end),
+    beforeEnd: before.substring(before.length - end),
+    afterStart: after.substring(0, start),
+    afterMiddle: after.substring(start, after.length - end),
+    afterEnd: after.substring(after.length - end),
+  };
+}
+
+// Full-screen modal to inspect a proposal
+function FixModal({ proposal, onClose, onApprove, onReject }) {
+  const [viewMode, setViewMode] = useState('side-by-side'); // 'side-by-side' | 'diff' | 'after-only'
+  const diff = useMemo(() => computeDiff(proposal.current_value || '', proposal.proposed_value || ''), [proposal]);
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl w-full max-w-[1400px] max-h-[92vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between shrink-0">
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-blue-600">
+              Review Fix · <span className="font-mono text-gray-600">{proposal.field_to_update}</span>
+            </div>
+            <div className="text-sm font-semibold text-[#1a1a1a] mt-0.5">{proposal.explanation}</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
+              <button onClick={() => setViewMode('side-by-side')}
+                className={`px-2.5 py-1 text-[10px] font-semibold rounded-md cursor-pointer border-none ${viewMode === 'side-by-side' ? 'bg-white text-[#1a1a1a] shadow-sm' : 'bg-transparent text-gray-500'}`}>
+                Side-by-Side
+              </button>
+              <button onClick={() => setViewMode('diff')}
+                className={`px-2.5 py-1 text-[10px] font-semibold rounded-md cursor-pointer border-none ${viewMode === 'diff' ? 'bg-white text-[#1a1a1a] shadow-sm' : 'bg-transparent text-gray-500'}`}>
+                Diff
+              </button>
+              <button onClick={() => setViewMode('after-only')}
+                className={`px-2.5 py-1 text-[10px] font-semibold rounded-md cursor-pointer border-none ${viewMode === 'after-only' ? 'bg-white text-[#1a1a1a] shadow-sm' : 'bg-transparent text-gray-500'}`}>
+                After Only
+              </button>
+            </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-[#1a1a1a] bg-transparent border-none text-xl cursor-pointer leading-none p-1">×</button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-hidden">
+          {viewMode === 'side-by-side' && (
+            <div className="h-full grid grid-cols-2 divide-x divide-gray-200">
+              <div className="flex flex-col overflow-hidden">
+                <div className="px-4 py-2 bg-red-50 border-b border-red-100">
+                  <div className="text-[10px] font-bold uppercase text-red-600">Before</div>
+                  <div className="text-[9px] text-gray-500">{(proposal.current_value || '').length.toLocaleString()} chars</div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4">
+                  <pre className="text-[12px] text-gray-700 leading-relaxed whitespace-pre-wrap font-sans">{proposal.current_value || '(empty)'}</pre>
+                </div>
+              </div>
+              <div className="flex flex-col overflow-hidden">
+                <div className="px-4 py-2 bg-green-50 border-b border-green-100">
+                  <div className="text-[10px] font-bold uppercase text-green-600">After</div>
+                  <div className="text-[9px] text-gray-500">{(proposal.proposed_value || '').length.toLocaleString()} chars</div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4">
+                  <pre className="text-[12px] text-gray-700 leading-relaxed whitespace-pre-wrap font-sans">{proposal.proposed_value || '(empty)'}</pre>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {viewMode === 'diff' && (
+            <div className="h-full overflow-y-auto p-6 bg-[#fafafa]">
+              <div className="text-[10px] text-gray-400 uppercase font-bold mb-3">
+                Changed Content — unchanged parts shown in grey, additions in green, removals in red
+              </div>
+              <div className="bg-white rounded-lg border border-gray-200 p-5">
+                <pre className="text-[13px] leading-relaxed whitespace-pre-wrap font-sans">
+                  <span className="text-gray-400">{diff.beforeStart || diff.afterStart}</span>
+                  {diff.beforeMiddle && (
+                    <span className="bg-red-100 text-red-800 line-through px-0.5 rounded">{diff.beforeMiddle}</span>
+                  )}
+                  {diff.afterMiddle && (
+                    <span className="bg-green-100 text-green-800 px-0.5 rounded">{diff.afterMiddle}</span>
+                  )}
+                  <span className="text-gray-400">{diff.beforeEnd || diff.afterEnd}</span>
+                </pre>
+              </div>
+              {diff.beforeMiddle?.length === 0 && diff.afterMiddle?.length === 0 && (
+                <div className="text-center text-gray-400 text-sm mt-4">No changes detected</div>
+              )}
+            </div>
+          )}
+
+          {viewMode === 'after-only' && (
+            <div className="h-full overflow-y-auto p-6 bg-[#fafafa]">
+              <div className="text-[10px] text-gray-400 uppercase font-bold mb-3">
+                Proposed new content — this is what will replace the current value
+              </div>
+              <div className="bg-white rounded-lg border border-green-200 p-5">
+                <pre className="text-[13px] text-gray-700 leading-relaxed whitespace-pre-wrap font-sans">{proposal.proposed_value || '(empty)'}</pre>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-between shrink-0 bg-[#fafafa]">
+          <div className="text-[10px] text-gray-500">
+            Review carefully — this will {proposal.current_value ? 'replace' : 'set'} the <span className="font-mono font-semibold">{proposal.field_to_update}</span> field.
+          </div>
+          <div className="flex gap-2">
+            <button onClick={onReject}
+              className="bg-transparent border border-gray-300 text-gray-600 rounded-lg px-4 py-2 text-xs font-semibold cursor-pointer hover:border-gray-400">
+              Reject
+            </button>
+            <button onClick={onApprove}
+              className="bg-[#F5C518] text-[#1a1a1a] border-none rounded-lg px-5 py-2 text-xs font-bold cursor-pointer hover:bg-[#e6b800]">
+              ✓ Apply Fix
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Items that can be auto-fixed
 const AUTO_FIXABLE = new Set([
@@ -15,12 +157,12 @@ const AUTO_FIXABLE = new Set([
   'ux_scannable', 'ux_related',
 ]);
 
-function FixProposal({ proposal, onApprove, onReject }) {
+function FixProposal({ proposal, onApprove, onReject, onExpand }) {
   if (!proposal) return null;
 
   if (!proposal.can_fix) {
     return (
-      <div className="mt-2 bg-orange-50 border border-orange-200 rounded-lg p-2.5">
+      <div className="mt-2 bg-orange-50 border border-orange-200 rounded-lg p-3">
         <div className="text-[10px] font-bold uppercase text-orange-600 mb-1">Cannot Auto-Fix</div>
         <div className="text-[11px] text-gray-700 mb-1.5">{proposal.reason}</div>
         {proposal.manual_instructions && (
@@ -38,44 +180,82 @@ function FixProposal({ proposal, onApprove, onReject }) {
     );
   }
 
-  return (
-    <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg p-2.5">
-      <div className="text-[10px] font-bold uppercase text-blue-600 mb-1">
-        Proposed Fix · Field: <span className="font-mono">{proposal.field_to_update}</span>
-      </div>
-      <div className="text-[11px] text-gray-700 mb-2 italic">{proposal.explanation}</div>
+  const beforeLen = (proposal.current_value || '').length;
+  const afterLen = (proposal.proposed_value || '').length;
+  const isLong = beforeLen > 300 || afterLen > 300;
 
-      {proposal.current_value && (
-        <div className="mb-1.5">
-          <div className="text-[9px] font-bold text-gray-400 uppercase mb-0.5">Before</div>
-          <div className="bg-white border border-red-100 rounded p-2 text-[10px] text-gray-600 max-h-20 overflow-y-auto">
-            {proposal.current_value.length > 200 ? proposal.current_value.substring(0, 200) + '...' : proposal.current_value}
+  // For short content, show inline side-by-side
+  // For long content, show a compact summary with Expand button
+  return (
+    <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex-1 min-w-0">
+          <div className="text-[9px] font-bold uppercase text-blue-600 mb-0.5">
+            Proposed Fix · Field: <span className="font-mono">{proposal.field_to_update}</span>
+          </div>
+          <div className="text-[11px] text-gray-700 italic leading-relaxed">{proposal.explanation}</div>
+        </div>
+        <button
+          onClick={onExpand}
+          className="shrink-0 text-[9px] font-bold bg-white border border-blue-300 text-blue-600 rounded px-2 py-1 cursor-pointer hover:bg-blue-100 flex items-center gap-1"
+          title="Open full review"
+        >
+          ⛶ Expand
+        </button>
+      </div>
+
+      {/* Content preview */}
+      {isLong ? (
+        // Long content: compact summary
+        <div className="bg-white border border-gray-200 rounded-lg p-2.5 mb-2">
+          <div className="grid grid-cols-2 gap-2 text-[10px]">
+            <div>
+              <div className="font-bold uppercase text-red-500 mb-0.5">Before</div>
+              <div className="text-gray-500">{beforeLen.toLocaleString()} chars</div>
+            </div>
+            <div>
+              <div className="font-bold uppercase text-green-600 mb-0.5">After</div>
+              <div className="text-gray-500">
+                {afterLen.toLocaleString()} chars
+                {afterLen > beforeLen && <span className="text-green-600"> (+{(afterLen - beforeLen).toLocaleString()})</span>}
+                {afterLen < beforeLen && <span className="text-red-500"> ({(afterLen - beforeLen).toLocaleString()})</span>}
+              </div>
+            </div>
+          </div>
+          <div className="text-[10px] text-gray-400 mt-2 italic">
+            Content is too long to preview inline. Click <b className="text-blue-600">⛶ Expand</b> to review the full change before applying.
+          </div>
+        </div>
+      ) : (
+        // Short content: show both inline with proper wrapping
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
+          <div>
+            <div className="text-[9px] font-bold text-red-500 uppercase mb-1">Before</div>
+            <div className="bg-white border border-red-100 rounded-lg p-2.5 text-[11px] text-gray-700 leading-relaxed whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
+              {proposal.current_value || <span className="text-gray-300 italic">(empty)</span>}
+            </div>
+          </div>
+          <div>
+            <div className="text-[9px] font-bold text-green-600 uppercase mb-1">After</div>
+            <div className="bg-white border border-green-200 rounded-lg p-2.5 text-[11px] text-gray-700 leading-relaxed whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
+              {proposal.proposed_value || <span className="text-gray-300 italic">(empty)</span>}
+            </div>
           </div>
         </div>
       )}
 
-      <div className="mb-2">
-        <div className="text-[9px] font-bold text-gray-400 uppercase mb-0.5">After</div>
-        <div className="bg-white border border-green-200 rounded p-2 text-[10px] text-gray-700 max-h-32 overflow-y-auto">
-          {proposal.proposed_value?.length > 400 ? proposal.proposed_value.substring(0, 400) + '...' : proposal.proposed_value}
-        </div>
-        {proposal.proposed_value?.length > 400 && (
-          <div className="text-[9px] text-gray-400 mt-0.5">
-            Preview truncated · full change will be applied ({proposal.proposed_value.length} chars)
-          </div>
-        )}
-      </div>
-
+      {/* Action buttons */}
       <div className="flex gap-2">
         <button
           onClick={onApprove}
-          className="bg-[#F5C518] text-[#1a1a1a] border-none rounded-[5px] px-3 py-1 text-[10px] font-bold cursor-pointer hover:bg-[#e6b800]"
+          className="bg-[#F5C518] text-[#1a1a1a] border-none rounded-[5px] px-3 py-1.5 text-[10px] font-bold cursor-pointer hover:bg-[#e6b800]"
         >
           ✓ Apply Fix
         </button>
         <button
           onClick={onReject}
-          className="bg-transparent border border-gray-300 text-gray-600 rounded-[5px] px-3 py-1 text-[10px] font-semibold cursor-pointer hover:border-gray-400"
+          className="bg-transparent border border-gray-300 text-gray-600 rounded-[5px] px-3 py-1.5 text-[10px] font-semibold cursor-pointer hover:border-gray-400"
         >
           Reject
         </button>
@@ -88,6 +268,7 @@ export default function Checklist({ checklistState, onToggle, fields, onFieldCha
   const [collapsedCats, setCollapsedCats] = useState(new Set());
   const [proposalsByItem, setProposalsByItem] = useState({});
   const [loadingItem, setLoadingItem] = useState(null);
+  const [expandedItem, setExpandedItem] = useState(null);
 
   const toggleCat = (idx) => {
     setCollapsedCats((prev) => {
@@ -221,6 +402,7 @@ export default function Checklist({ checklistState, onToggle, fields, onFieldCha
                         proposal={proposal}
                         onApprove={() => handleApprove(item.id)}
                         onReject={() => handleReject(item.id)}
+                        onExpand={() => setExpandedItem(item.id)}
                       />
                     )}
                   </div>
@@ -229,6 +411,22 @@ export default function Checklist({ checklistState, onToggle, fields, onFieldCha
           </div>
         );
       })}
+
+      {/* Full-screen fix review modal */}
+      {expandedItem && proposalsByItem[expandedItem] && (
+        <FixModal
+          proposal={proposalsByItem[expandedItem]}
+          onClose={() => setExpandedItem(null)}
+          onApprove={() => {
+            handleApprove(expandedItem);
+            setExpandedItem(null);
+          }}
+          onReject={() => {
+            handleReject(expandedItem);
+            setExpandedItem(null);
+          }}
+        />
+      )}
     </div>
   );
 }
