@@ -5,6 +5,68 @@ import * as dfs from '../../lib/dataForSeo';
 import { mapCrawlToChecklist } from '../../lib/onPageAudit';
 import toast from 'react-hot-toast';
 
+// ── Writer-friendly helpers for SERP features ──
+function getRecommendedFormat(f) {
+  const hints = [];
+  if (f.has_featured_snippet) hints.push('short, direct answer in the intro (50–60 words) formatted as a paragraph or bullet list');
+  if (f.has_people_also_ask) hints.push('an FAQ section using H2 questions');
+  if (f.has_video) hints.push('an embedded video');
+  if (f.has_local_pack) hints.push('location-specific content (suburb, NAP, local references)');
+  if (f.has_images) hints.push('multiple optimised images with descriptive alt text');
+  if (f.has_knowledge_graph) hints.push('entity-rich headings that clearly name the topic');
+  if (f.has_shopping) hints.push('a product comparison table with prices');
+  if (f.has_top_stories) hints.push('a news-worthy angle with a recent date');
+  if (hints.length === 0) return 'Standard blog post format — no special SERP features detected. Focus on depth, on-page SEO basics and matching top rankers.';
+  if (hints.length === 1) return `Google wants ${hints[0]}.`;
+  const last = hints.pop();
+  return `Google wants ${hints.join(', ')} and ${last}.`;
+}
+
+function getMustIncludeActions(f) {
+  const actions = [];
+  if (f.has_people_also_ask && f.paa_questions?.length) {
+    actions.push(`FAQ section with ${f.paa_questions.length} PAA question${f.paa_questions.length === 1 ? '' : 's'} as H2 headings`);
+  }
+  if (f.has_featured_snippet) {
+    actions.push('Direct answer in your intro (50–60 words)');
+    actions.push('Use a numbered list or short paragraph format');
+  }
+  if (f.has_local_pack) {
+    actions.push('Mention the suburb/city by name in H1, intro and conclusion');
+    actions.push('NAP (name, address, phone) or a Google Business Profile link');
+  }
+  if (f.has_knowledge_graph) {
+    actions.push('Clear entity headings (who/what/where)');
+  }
+  if (actions.length === 0) {
+    actions.push('Strong on-page SEO (title, meta, H1, image alts)');
+    actions.push('Match or exceed top-ranker content depth');
+  }
+  return actions;
+}
+
+function getConsiderActions(f) {
+  const actions = [];
+  if (f.has_video) actions.push('Embed a relevant YouTube/Vimeo video');
+  if (f.has_images) actions.push('Add 4–6 optimised images with alt text');
+  if (f.has_top_stories) actions.push('Add a news hook or recent date reference');
+  if (f.has_shopping) actions.push('Add a product comparison table');
+  if (f.has_twitter) actions.push('Embed social proof / tweets');
+  if (f.has_related_searches) actions.push('Cover related search terms in H2/H3 subheadings');
+  if (actions.length === 0) {
+    actions.push('Author bio block (E-E-A-T signals)');
+    actions.push('Internal links to related content');
+    actions.push('External links to authoritative sources');
+  }
+  return actions;
+}
+
+// Normalise related searches to strings regardless of API shape
+function flattenRelated(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.map(r => (typeof r === 'string' ? r : (r?.title || r?.keyword || ''))).filter(Boolean);
+}
+
 export default function AIFixPanel({ fields, checklistState, clientName, onFieldChange, onBulkCheck }) {
   const [validating, setValidating] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -367,40 +429,136 @@ export default function AIFixPanel({ fields, checklistState, clientName, onField
           </div>
         )}
 
-        {/* SERP Features */}
+        {/* SERP Features — Writer's Playbook */}
         {serpFeatures && (
-          <div className="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <div className="text-[10px] font-bold uppercase text-blue-700 mb-2">SERP Features for "{fields.focus_keyphrase}"</div>
-            <div className="grid grid-cols-2 gap-1.5 mb-2">
-              {[
-                ['Featured Snippet', serpFeatures.has_featured_snippet],
-                ['People Also Ask', serpFeatures.has_people_also_ask],
-                ['Video Carousel', serpFeatures.has_video],
-                ['Image Pack', serpFeatures.has_images],
-                ['Knowledge Graph', serpFeatures.has_knowledge_graph],
-                ['Local Pack', serpFeatures.has_local_pack],
-              ].map(([label, present]) => (
-                <div key={label} className="flex items-center gap-1.5 text-[11px]">
-                  <span className={present ? 'text-green-600' : 'text-gray-300'}>{present ? '✓' : '○'}</span>
-                  <span className={present ? 'text-gray-700 font-semibold' : 'text-gray-400'}>{label}</span>
-                </div>
-              ))}
+          <div className="mt-3 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-3.5">
+            {/* Header */}
+            <div className="flex items-start justify-between mb-3 pb-2.5 border-b border-blue-200">
+              <div className="min-w-0">
+                <div className="text-[9px] font-bold uppercase text-blue-500 tracking-wider">SERP Writer's Playbook</div>
+                <div className="text-[12px] font-bold text-[#1a1a1a] truncate">"{fields.focus_keyphrase}"</div>
+              </div>
+              <button
+                onClick={() => setSerpFeatures(null)}
+                className="text-[12px] text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer shrink-0 ml-2"
+                title="Close"
+              >✕</button>
             </div>
-            {serpFeatures.has_people_also_ask && serpFeatures.paa_questions?.length > 0 && (
-              <div className="mt-2 pt-2 border-t border-blue-200">
-                <div className="text-[9px] font-bold uppercase text-blue-600 mb-1">PAA Questions — add these as FAQ</div>
-                <ul className="space-y-0.5">
-                  {serpFeatures.paa_questions.slice(0, 5).map((q, i) => (
-                    <li key={i} className="text-[10px] text-gray-600">• {q}</li>
+
+            {/* Recommended format banner */}
+            <div className="bg-white border-l-4 border-blue-500 rounded p-2.5 mb-3">
+              <div className="text-[9px] font-bold uppercase text-blue-600 mb-0.5">🎯 Recommended Content Format</div>
+              <div className="text-[11px] text-gray-800 leading-snug">{getRecommendedFormat(serpFeatures)}</div>
+            </div>
+
+            {/* Two-column action lists */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+              <div className="bg-white rounded border border-green-200 p-2.5">
+                <div className="text-[9px] font-bold uppercase text-green-600 mb-1.5">✓ Must Include</div>
+                <ul className="space-y-1 text-[10px]">
+                  {getMustIncludeActions(serpFeatures).map((action, i) => (
+                    <li key={i} className="text-gray-700 leading-snug flex gap-1.5">
+                      <span className="text-green-500 shrink-0">•</span>
+                      <span>{action}</span>
+                    </li>
                   ))}
                 </ul>
               </div>
-            )}
-            <div className="text-[9px] text-gray-500 mt-2">
-              {serpFeatures.has_featured_snippet && '💡 Featured snippet triggered — optimise intro for paragraph/list format. '}
-              {serpFeatures.has_video && '🎥 Video carousel triggered — consider embedding a video. '}
-              {serpFeatures.has_images && '🖼️ Image pack triggered — add more optimised images. '}
+              <div className="bg-white rounded border border-orange-200 p-2.5">
+                <div className="text-[9px] font-bold uppercase text-orange-600 mb-1.5">💡 Consider Adding</div>
+                <ul className="space-y-1 text-[10px]">
+                  {getConsiderActions(serpFeatures).map((action, i) => (
+                    <li key={i} className="text-gray-700 leading-snug flex gap-1.5">
+                      <span className="text-orange-500 shrink-0">•</span>
+                      <span>{action}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
+
+            {/* Featured snippet detail */}
+            {serpFeatures.has_featured_snippet && serpFeatures.featured_snippet && (
+              <div className="bg-white rounded border border-yellow-300 p-2.5 mb-3">
+                <div className="text-[9px] font-bold uppercase text-yellow-600 mb-1">⭐ Featured Snippet — who owns it now</div>
+                <div className="text-[11px] font-semibold text-gray-800 leading-snug">{serpFeatures.featured_snippet.title}</div>
+                <div className="text-[9px] text-gray-400 mb-1 truncate">{serpFeatures.featured_snippet.domain}</div>
+                {serpFeatures.featured_snippet.description && (
+                  <div className="text-[10px] text-gray-600 italic bg-[#fffbeb] border border-yellow-100 rounded p-1.5 mt-1 leading-snug">
+                    "{serpFeatures.featured_snippet.description}"
+                  </div>
+                )}
+                <div className="text-[9px] text-yellow-700 mt-1.5 font-semibold">
+                  → Write your intro in this same format to steal the snippet
+                </div>
+              </div>
+            )}
+
+            {/* PAA questions — copy to clipboard */}
+            {serpFeatures.paa_questions?.length > 0 && (
+              <div className="bg-white rounded border border-blue-300 p-2.5 mb-3">
+                <div className="flex items-center justify-between mb-1.5 gap-2">
+                  <div className="text-[9px] font-bold uppercase text-blue-600">📝 Add these {serpFeatures.paa_questions.length} questions as FAQ H2s</div>
+                  <button
+                    onClick={() => {
+                      const text = serpFeatures.paa_questions.join('\n');
+                      if (navigator.clipboard?.writeText) {
+                        navigator.clipboard.writeText(text);
+                        toast.success('Copied — paste into your article');
+                      } else {
+                        toast.error('Clipboard not available');
+                      }
+                    }}
+                    className="text-[9px] font-bold uppercase text-blue-600 bg-blue-50 border border-blue-200 rounded px-2 py-0.5 cursor-pointer hover:bg-blue-100 shrink-0"
+                  >📋 Copy all</button>
+                </div>
+                <ol className="space-y-1 text-[10px] pl-4 list-decimal marker:text-blue-400">
+                  {serpFeatures.paa_questions.map((q, i) => (
+                    <li key={i} className="text-gray-700 leading-snug pl-0.5">{q}</li>
+                  ))}
+                </ol>
+              </div>
+            )}
+
+            {/* Related searches / long-tail keywords */}
+            {flattenRelated(serpFeatures.related_searches).length > 0 && (
+              <div className="bg-white rounded border border-purple-200 p-2.5 mb-3">
+                <div className="text-[9px] font-bold uppercase text-purple-600 mb-1.5">🔗 Related Keywords — work these into H2s / body copy</div>
+                <div className="flex flex-wrap gap-1">
+                  {flattenRelated(serpFeatures.related_searches).slice(0, 12).map((rs, i) => (
+                    <span key={i} className="text-[10px] bg-purple-50 text-purple-700 border border-purple-100 px-1.5 py-0.5 rounded-full">
+                      {rs}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Top 3 competitors */}
+            {serpFeatures.top_10?.length > 0 && (
+              <div className="bg-white rounded border border-gray-200 p-2.5">
+                <div className="text-[9px] font-bold uppercase text-gray-500 mb-1.5">🏆 Top 3 you're competing with</div>
+                <div className="space-y-1.5">
+                  {serpFeatures.top_10.slice(0, 3).map((t, i) => (
+                    <a
+                      key={i}
+                      href={t.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-start gap-2 text-[10px] no-underline hover:bg-gray-50 rounded px-1 py-0.5 -mx-1"
+                    >
+                      <span className={`font-bold shrink-0 w-5 ${i === 0 ? 'text-yellow-600' : i === 1 ? 'text-gray-500' : 'text-orange-600'}`}>
+                        #{t.rank}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-gray-800 font-semibold truncate">{t.title}</div>
+                        <div className="text-gray-400 truncate text-[9px]">{t.domain}</div>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
