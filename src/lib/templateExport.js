@@ -1,7 +1,25 @@
 import {
   Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, HeadingLevel,
-  WidthType, BorderStyle, AlignmentType, ShadingType,
+  WidthType, BorderStyle, AlignmentType, ShadingType, PageOrientation, TableLayoutType,
 } from 'docx';
+
+// ── Page / table geometry ──
+// US Letter page width = 12240 twips, margins 1440 each side → usable 9360 twips.
+const PAGE_WIDTH = 12240;
+const PAGE_MARGIN = 1440;
+const USABLE_WIDTH = PAGE_WIDTH - PAGE_MARGIN * 2; // 9360 twips
+
+// 2-column data table: label 30% / value 70%
+const LABEL_W = Math.round(USABLE_WIDTH * 0.30); // 2808
+const VALUE_W = USABLE_WIDTH - LABEL_W;           // 6552
+const DATA_COLS = [LABEL_W, VALUE_W];
+
+// 4-column checklist table: 50 / 20 / 15 / 15
+const CHK_C1 = Math.round(USABLE_WIDTH * 0.50); // 4680
+const CHK_C2 = Math.round(USABLE_WIDTH * 0.20); // 1872
+const CHK_C3 = Math.round(USABLE_WIDTH * 0.15); // 1404
+const CHK_C4 = USABLE_WIDTH - CHK_C1 - CHK_C2 - CHK_C3;
+const CHECK_COLS = [CHK_C1, CHK_C2, CHK_C3, CHK_C4];
 
 const BORDER = {
   top: { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC' },
@@ -10,30 +28,46 @@ const BORDER = {
   right: { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC' },
 };
 
-function cell(text, opts = {}) {
-  const { bold = false, shading = null, width = 50, color = '000000', size = 20 } = opts;
+function runsFromText(text, { bold = false, color = '000000', size = 20, italics = false } = {}) {
+  return [new TextRun({ text: text || '', bold, color, size, italics })];
+}
+
+function para(text, opts = {}) {
+  return new Paragraph({ children: runsFromText(text, opts) });
+}
+
+function cell(children, { widthDxa, shading = null, align } = {}) {
+  const paragraphs = Array.isArray(children)
+    ? children.map(c => (typeof c === 'string' ? para(c) : c))
+    : [typeof children === 'string' ? para(children) : children];
   return new TableCell({
-    width: { size: width, type: WidthType.PERCENTAGE },
+    width: { size: widthDxa, type: WidthType.DXA },
     shading: shading ? { type: ShadingType.CLEAR, color: 'auto', fill: shading } : undefined,
     borders: BORDER,
-    children: Array.isArray(text)
-      ? text.map(t => typeof t === 'string'
-          ? new Paragraph({ children: [new TextRun({ text: t, bold, color, size })] })
-          : t)
-      : [new Paragraph({ children: [new TextRun({ text: text || '', bold, color, size })] })],
+    children: paragraphs,
+    ...(align ? { verticalAlign: align } : {}),
   });
 }
 
 function labelCell(text) {
-  return cell(text, { bold: true, shading: 'F3F3F3', width: 30, size: 20 });
+  return cell(
+    [new Paragraph({ children: [new TextRun({ text, bold: true, size: 20 })] })],
+    { widthDxa: LABEL_W, shading: 'F3F3F3' }
+  );
 }
 
-function valueCell(text, opts = {}) {
-  return cell(text, { width: 70, size: 20, ...opts });
+function valueCell(children) {
+  const arr = Array.isArray(children) ? children : [children];
+  const paragraphs = arr.map(c =>
+    typeof c === 'string'
+      ? new Paragraph({ children: [new TextRun({ text: c, size: 20 })] })
+      : c
+  );
+  return cell(paragraphs, { widthDxa: VALUE_W });
 }
 
 function makeRow(label, value) {
-  return new TableRow({ children: [labelCell(label), valueCell(value)] });
+  return new TableRow({ children: [labelCell(label), valueCell(value || '')] });
 }
 
 function generateSlug(title, keyword) {
@@ -52,7 +86,6 @@ function parseBodyParagraphs(content) {
     const trimmed = line.trim();
     if (!trimmed) return new Paragraph('');
 
-    // Detect H1 (first non-empty line or starts with # )
     if (trimmed.startsWith('# ')) {
       return new Paragraph({
         heading: HeadingLevel.HEADING_1,
@@ -71,60 +104,53 @@ function parseBodyParagraphs(content) {
         children: [new TextRun({ text: trimmed.replace(/^### /, ''), bold: true, size: 24 })],
       });
     }
-    // Bullet points
     if (trimmed.startsWith('- ') || trimmed.startsWith('* ') || trimmed.startsWith('• ')) {
       return new Paragraph({
         bullet: { level: 0 },
         children: [new TextRun({ text: trimmed.replace(/^[-*•]\s/, ''), size: 22 })],
       });
     }
-    // CTA buttons in brackets
     if (trimmed.startsWith('[CTA') || trimmed.match(/\[CTA Button/i)) {
       return new Paragraph({
         children: [new TextRun({ text: trimmed, bold: true, color: 'DC2626', size: 22 })],
       });
     }
-    // Regular paragraph
     return new Paragraph({
       children: [new TextRun({ text: trimmed, size: 22 })],
     });
   });
 }
 
+// ── Checklist table (4 columns) ──
+function chkCell(children, widthDxa, { shading = null, bold = false, color = '000000', size = 20 } = {}) {
+  const arr = Array.isArray(children) ? children : [children];
+  const paragraphs = arr.map(c =>
+    typeof c === 'string'
+      ? new Paragraph({ children: [new TextRun({ text: c, bold, color, size })] })
+      : c
+  );
+  return new TableCell({
+    width: { size: widthDxa, type: WidthType.DXA },
+    shading: shading ? { type: ShadingType.CLEAR, color: 'auto', fill: shading } : undefined,
+    borders: BORDER,
+    children: paragraphs,
+  });
+}
+
 function buildChecklistTable() {
+  const headerShade = 'F3F3F3';
   const rows = [
-    // Header row
     new TableRow({
+      tableHeader: true,
       children: [
-        new TableCell({
-          shading: { type: ShadingType.CLEAR, color: 'auto', fill: 'F3F3F3' },
-          width: { size: 50, type: WidthType.PERCENTAGE },
-          borders: BORDER,
-          children: [new Paragraph({ children: [new TextRun({ text: 'Internal CYL Checklist', bold: true, size: 22 })] })],
-        }),
-        new TableCell({
-          shading: { type: ShadingType.CLEAR, color: 'auto', fill: 'F3F3F3' },
-          width: { size: 20, type: WidthType.PERCENTAGE },
-          borders: BORDER,
-          children: [new Paragraph({ children: [new TextRun({ text: 'Approved by (Admin)', bold: true, size: 18 })] })],
-        }),
-        new TableCell({
-          shading: { type: ShadingType.CLEAR, color: 'auto', fill: 'F3F3F3' },
-          width: { size: 15, type: WidthType.PERCENTAGE },
-          borders: BORDER,
-          children: [new Paragraph({ children: [new TextRun({ text: '', bold: true, size: 18 })] })],
-        }),
-        new TableCell({
-          shading: { type: ShadingType.CLEAR, color: 'auto', fill: 'F3F3F3' },
-          width: { size: 15, type: WidthType.PERCENTAGE },
-          borders: BORDER,
-          children: [new Paragraph({ children: [new TextRun({ text: 'Date', bold: true, size: 18 })] })],
-        }),
+        chkCell('Internal CYL Checklist', CHK_C1, { shading: headerShade, bold: true, size: 22 }),
+        chkCell('Approved by (Admin)', CHK_C2, { shading: headerShade, bold: true, size: 18 }),
+        chkCell('', CHK_C3, { shading: headerShade }),
+        chkCell('Date', CHK_C4, { shading: headerShade, bold: true, size: 18 }),
       ],
     }),
   ];
 
-  // Checklist items
   const items = [
     'Trello Card (Web Development)',
     "Client Bucketlist: Client's Bucket lists",
@@ -133,45 +159,23 @@ function buildChecklistTable() {
   items.forEach(label => {
     rows.push(new TableRow({
       children: [
-        cell(label, { width: 50, size: 20 }),
-        cell('Make a selection', { width: 20, size: 18, color: '888888' }),
-        cell('', { width: 15 }),
-        cell('', { width: 15 }),
+        chkCell(label, CHK_C1, { size: 20 }),
+        chkCell('Make a selection', CHK_C2, { size: 18, color: '888888' }),
+        chkCell('', CHK_C3),
+        chkCell('', CHK_C4),
       ],
     }));
   });
 
-  // Final confirmation header
   rows.push(new TableRow({
     children: [
-      new TableCell({
-        shading: { type: ShadingType.CLEAR, color: 'auto', fill: 'F3F3F3' },
-        width: { size: 50, type: WidthType.PERCENTAGE },
-        borders: BORDER,
-        children: [new Paragraph({ children: [new TextRun({ text: 'Final confirmation', bold: true, size: 22 })] })],
-      }),
-      new TableCell({
-        shading: { type: ShadingType.CLEAR, color: 'auto', fill: 'F3F3F3' },
-        width: { size: 20, type: WidthType.PERCENTAGE },
-        borders: BORDER,
-        children: [new Paragraph({ children: [new TextRun({ text: 'Approved by (Admin)', bold: true, size: 18 })] })],
-      }),
-      new TableCell({
-        shading: { type: ShadingType.CLEAR, color: 'auto', fill: 'F3F3F3' },
-        width: { size: 15, type: WidthType.PERCENTAGE },
-        borders: BORDER,
-        children: [new Paragraph('')],
-      }),
-      new TableCell({
-        shading: { type: ShadingType.CLEAR, color: 'auto', fill: 'F3F3F3' },
-        width: { size: 15, type: WidthType.PERCENTAGE },
-        borders: BORDER,
-        children: [new Paragraph({ children: [new TextRun({ text: 'Date', bold: true, size: 18 })] })],
-      }),
+      chkCell('Final confirmation', CHK_C1, { shading: headerShade, bold: true, size: 22 }),
+      chkCell('Approved by (Admin)', CHK_C2, { shading: headerShade, bold: true, size: 18 }),
+      chkCell('', CHK_C3, { shading: headerShade }),
+      chkCell('Date', CHK_C4, { shading: headerShade, bold: true, size: 18 }),
     ],
   }));
 
-  // Final items
   const finalItems = [
     'FOR LLP: Has the link been added to the menu?',
     'I confirm that all items above are complete and I have published the page.',
@@ -179,16 +183,18 @@ function buildChecklistTable() {
   finalItems.forEach(label => {
     rows.push(new TableRow({
       children: [
-        cell(label, { width: 50, size: 20 }),
-        cell('Make a selection', { width: 20, size: 18, color: '888888' }),
-        cell('', { width: 15 }),
-        cell('', { width: 15 }),
+        chkCell(label, CHK_C1, { size: 20 }),
+        chkCell('Make a selection', CHK_C2, { size: 18, color: '888888' }),
+        chkCell('', CHK_C3),
+        chkCell('', CHK_C4),
       ],
     }));
   });
 
   return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: { size: USABLE_WIDTH, type: WidthType.DXA },
+    columnWidths: CHECK_COLS,
+    layout: TableLayoutType.FIXED,
     rows,
   });
 }
@@ -202,9 +208,11 @@ export async function exportToTemplate({ fields, clientName = 'Client', brief = 
   const seoTitle = fields.seo_title || title;
   const slug = url || `https://example.com/${generateSlug(title, fk)}/`;
 
-  // Build SEO data table (top of doc)
+  // ── Top SEO data table ──
   const dataTable = new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: { size: USABLE_WIDTH, type: WidthType.DXA },
+    columnWidths: DATA_COLS,
+    layout: TableLayoutType.FIXED,
     rows: [
       makeRow('Is this an existing blog/LLP?', 'No'),
       makeRow('What type of content is this?', 'BLOG - NEW'),
@@ -214,11 +222,11 @@ export async function exportToTemplate({ fields, clientName = 'Client', brief = 
           labelCell('Keywords list'),
           valueCell([
             new Paragraph({ children: [new TextRun({ text: 'The general rule of thumb is to use three to four keywords per post. That should be one head or main keyword, and a few long tail keywords (or at least variations of the main keyword).', size: 18, color: '666666' })] }),
-            new Paragraph({ children: [new TextRun({ text: '' })] }),
+            new Paragraph(''),
             new Paragraph({ children: [new TextRun({ text: 'Note: A good keyword density is between 1-2%. If your keyword density is too high, Google may penalise your blog post for keyword stuffing.', size: 18, color: '666666' })] }),
-            new Paragraph({ children: [new TextRun({ text: '' })] }),
+            new Paragraph(''),
             new Paragraph({ children: [new TextRun({ text: 'Check here: https://www.seoreviewtools.com/keyword-density-checker/?text-input', size: 18, color: '0066CC' })] }),
-            new Paragraph({ children: [new TextRun({ text: '' })] }),
+            new Paragraph(''),
             ...secondaryKeywords.map(kw => new Paragraph({ children: [new TextRun({ text: kw, size: 20 })] })),
           ]),
         ],
@@ -252,7 +260,7 @@ export async function exportToTemplate({ fields, clientName = 'Client', brief = 
           valueCell([
             new Paragraph({ children: [new TextRun({ text: 'FACEBOOK', bold: true, size: 20 })] }),
             new Paragraph({ children: [new TextRun({ text: brief?.social_posts?.facebook || '[Facebook post copy to be written]', size: 20 })] }),
-            new Paragraph({ children: [new TextRun({ text: '' })] }),
+            new Paragraph(''),
             new Paragraph({ children: [new TextRun({ text: 'INSTAGRAM', bold: true, size: 20 })] }),
             new Paragraph({ children: [new TextRun({ text: brief?.social_posts?.instagram || '[Instagram post copy to be written]', size: 20 })] }),
           ]),
@@ -262,7 +270,6 @@ export async function exportToTemplate({ fields, clientName = 'Client', brief = 
     ],
   });
 
-  // Build the document
   const doc = new Document({
     styles: {
       default: {
@@ -271,53 +278,56 @@ export async function exportToTemplate({ fields, clientName = 'Client', brief = 
     },
     sections: [
       {
+        properties: {
+          page: {
+            size: {
+              width: PAGE_WIDTH,
+              height: 15840, // 11" in twips
+              orientation: PageOrientation.PORTRAIT,
+            },
+            margin: {
+              top: PAGE_MARGIN,
+              right: PAGE_MARGIN,
+              bottom: PAGE_MARGIN,
+              left: PAGE_MARGIN,
+            },
+          },
+        },
         children: [
-          // Main header
           new Paragraph({
             heading: HeadingLevel.HEADING_1,
             children: [new TextRun({
               text: `${clientName} - Blog - NEW: ${title}`,
               bold: true,
               size: 32,
+              color: '1F4E79',
             })],
           }),
-          new Paragraph({ children: [new TextRun({ text: '' })] }),
+          new Paragraph(''),
 
-          // Top data table
           dataTable,
 
-          // Spacer
-          new Paragraph({ children: [new TextRun({ text: '' })] }),
-          new Paragraph({ children: [new TextRun({ text: '' })] }),
-          new Paragraph({ children: [new TextRun({ text: '' })] }),
+          new Paragraph(''),
+          new Paragraph(''),
+          new Paragraph(''),
 
-          // Body heading
-          new Paragraph({
-            children: [new TextRun({ text: 'Body:', bold: true, size: 24 })],
-          }),
-          new Paragraph({ children: [new TextRun({ text: '' })] }),
+          new Paragraph({ children: [new TextRun({ text: 'Body:', bold: true, size: 24 })] }),
+          new Paragraph(''),
 
-          // Title of article
           new Paragraph({
             heading: HeadingLevel.HEADING_1,
             children: [new TextRun({ text: title, bold: true, size: 32 })],
           }),
-          new Paragraph({ children: [new TextRun({ text: '' })] }),
+          new Paragraph(''),
 
-          // Table of contents placeholder
-          new Paragraph({
-            children: [new TextRun({ text: 'Table of Contents', bold: true, size: 22 })],
-          }),
-          new Paragraph({ children: [new TextRun({ text: '' })] }),
+          new Paragraph({ children: [new TextRun({ text: 'Table of Contents', bold: true, size: 22 })] }),
+          new Paragraph(''),
 
-          // Article body paragraphs
           ...parseBodyParagraphs(fields.article_content || ''),
 
-          // Spacer before checklist
-          new Paragraph({ children: [new TextRun({ text: '' })] }),
-          new Paragraph({ children: [new TextRun({ text: '' })] }),
+          new Paragraph(''),
+          new Paragraph(''),
 
-          // CYL Checklist
           buildChecklistTable(),
         ],
       },
