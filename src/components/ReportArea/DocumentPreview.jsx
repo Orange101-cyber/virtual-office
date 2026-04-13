@@ -186,6 +186,10 @@ export default function DocumentPreview({ fields, clientName = 'Client' }) {
   const secondaryKeywords = (fields.secondary_keywords || '')
     .split(',').map(k => k.trim()).filter(Boolean);
   const seoTitle = fields.seo_title || title;
+  const pageTypeLabels = { blog: 'Blog', seo_page: 'SEO Page', landing_page: 'Landing Page' };
+  const pageType = pageTypeLabels[fields.page_type] || 'Blog';
+  const isNew = !fields.is_refresh;
+  const docHeading = `${clientName} - ${pageType} - ${isNew ? 'NEW' : 'REFRESH'}: ${title}`;
 
   const handleExport = async () => {
     setExporting(true);
@@ -201,7 +205,7 @@ export default function DocumentPreview({ fields, clientName = 'Client' }) {
   const buildFullMarkdown = () => {
     // Useful for one-click "copy everything"
     return [
-      `${clientName} - Blog - NEW: ${title}`,
+      `${clientName} - ${pageType} - ${isNew ? 'NEW' : 'REFRESH'}: ${title}`,
       '',
       `SEO Title: ${seoTitle}`,
       `Focus Keyphrase: ${fk}`,
@@ -241,14 +245,15 @@ export default function DocumentPreview({ fields, clientName = 'Client' }) {
           {/* Title */}
           <h1 className="text-[22px] font-bold text-[#1F4E79] leading-tight mb-4 flex items-start gap-2">
             <span className="flex-1">{clientName} - Blog - NEW: {title}</span>
-            <Copy text={`${clientName} - Blog - NEW: ${title}`} />
+            <Copy text={`${clientName} - ${pageType} - ${isNew ? 'NEW' : 'REFRESH'}: ${title}`} />
           </h1>
 
           {/* Meta table */}
           <table className="w-full border-collapse border border-gray-300 mb-6">
             <tbody>
-              <MetaRow label="Is this an existing blog/LLP?" value="No" />
-              <MetaRow label="What type of content is this?" value="BLOG - NEW" />
+              <MetaRow label="Is this an existing blog/LLP?" value={fields.is_refresh ? 'Yes — Refresh' : 'No'} />
+              <MetaRow label="What type of content is this?" value={`${pageType.toUpperCase()} - ${isNew ? 'NEW' : 'REFRESH'}`} />
+              <MetaRow label="Index Setting" value={fields.index_setting === 'noindex' ? 'NO-INDEX' : 'INDEX'} />
               <MetaRow label="SEO Title" value={seoTitle} />
               <MetaRow label="Keywords list">
                 <div>

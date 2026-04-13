@@ -6,11 +6,12 @@ export const CHECKS = [
   {
     cat: 'Meta & Technical',
     items: [
-      { id: 'meta_title_kw', label: 'SEO title includes focus keyphrase', auto: true, crit: true, scope: 'writing' },
-      { id: 'meta_title_len', label: 'SEO title is under 60 characters', auto: true, scope: 'writing' },
-      { id: 'meta_desc_kw', label: 'Meta description includes focus keyphrase', auto: true, crit: true, scope: 'writing' },
+      { id: 'meta_title_kw', label: 'SEO Title must contain FK in the beginning', auto: true, crit: true, scope: 'writing' },
+      { id: 'meta_title_len', label: 'SEO Title contains between 30–60 characters', auto: true, scope: 'writing' },
+      { id: 'meta_desc_kw', label: 'Meta Description must contain Focus Keyword (FK)', auto: true, crit: true, scope: 'writing' },
       { id: 'meta_desc_len', label: 'Meta description is 140–160 characters', auto: true, scope: 'writing' },
-      { id: 'meta_slug', label: 'URL slug includes focus keyphrase', auto: true, crit: true, scope: 'writing' },
+      { id: 'meta_slug', label: 'URL must contain Focus Keyword (FK)', auto: true, crit: true, scope: 'writing' },
+      { id: 'meta_slug_len', label: 'URL should not exceed 70 characters', auto: true, scope: 'writing' },
       { id: 'meta_schema', label: 'Schema markup added (Article or LocalBusiness)', crit: true, isNew: true, note: 'Add via Yoast or RankMath', scope: 'technical' },
       { id: 'meta_faq_schema', label: 'FAQ schema present (if FAQ section exists)', isNew: true, scope: 'technical' },
     ],

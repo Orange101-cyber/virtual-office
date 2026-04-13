@@ -70,6 +70,7 @@ export default function ReportArea({
         statusText={statusText}
         breadcrumb={breadcrumb}
         saved={saved}
+        clientId={clientId}
       />
 
       {/* Score bar + Export button */}

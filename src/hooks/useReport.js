@@ -25,6 +25,9 @@ const defaultFields = () => ({
   meta_description: '',
   article_content: '',
   past_keywords: '',
+  page_type: 'blog',        // 'blog' | 'seo_page' | 'landing_page'
+  index_setting: 'index',   // 'index' | 'noindex'
+  is_refresh: false,         // true if this is a refresh of an existing article
 });
 
 export function useReport() {
@@ -63,6 +66,9 @@ export function useReport() {
       meta_description: data.meta_description || '',
       article_content: data.article_content || '',
       past_keywords: data.past_keywords || '',
+      page_type: data.page_type || 'blog',
+      index_setting: data.index_setting || 'index',
+      is_refresh: data.is_refresh || false,
     });
     setChecklistState({ ...defaultChecklist(), ...(data.checklist_state || {}) });
     setAiFindings(data.ai_findings || {});
@@ -86,6 +92,9 @@ export function useReport() {
         meta_description: fields.meta_description,
         article_content: fields.article_content,
         past_keywords: fields.past_keywords,
+        page_type: fields.page_type,
+        index_setting: fields.index_setting,
+        is_refresh: fields.is_refresh,
         checklist_state: checklistState,
         ai_findings: aiFindings,
         gsc_data: gscData,

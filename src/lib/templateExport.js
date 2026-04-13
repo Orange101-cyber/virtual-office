@@ -209,14 +209,18 @@ export async function exportToTemplate({ fields, clientName = 'Client', brief = 
   const secondaryKeywords = (fields.secondary_keywords || '').split(',').map(k => k.trim()).filter(Boolean);
   const seoTitle = fields.seo_title || title;
   const slug = url || `https://example.com/${generateSlug(title, fk)}/`;
+  const pageTypes = { blog: 'BLOG', seo_page: 'SEO PAGE', landing_page: 'LANDING PAGE' };
+  const pageLabel = pageTypes[fields.page_type] || 'BLOG';
+  const isNew = !fields.is_refresh;
 
   // ── Top SEO data table ──
   const dataTable = new Table({
     width: { size: USABLE_WIDTH, type: WidthType.DXA },
     columnWidths: DATA_COLS,
     rows: [
-      makeRow('Is this an existing blog/LLP?', 'No'),
-      makeRow('What type of content is this?', 'BLOG - NEW'),
+      makeRow('Is this an existing blog/LLP?', isNew ? 'No' : 'Yes — Refresh'),
+      makeRow('What type of content is this?', `${pageLabel} - ${isNew ? 'NEW' : 'REFRESH'}`),
+      makeRow('Index Setting', fields.index_setting === 'noindex' ? 'NO-INDEX' : 'INDEX'),
       makeRow('SEO Title', seoTitle),
       new TableRow({
         children: [
@@ -298,7 +302,7 @@ export async function exportToTemplate({ fields, clientName = 'Client', brief = 
           new Paragraph({
             heading: HeadingLevel.HEADING_1,
             children: [new TextRun({
-              text: `${clientName} - Blog - NEW: ${title}`,
+              text: `${clientName} - ${pageLabel} - ${isNew ? 'NEW' : 'REFRESH'}: ${title}`,
               bold: true,
               size: 32,
               color: '1F4E79',
