@@ -21,6 +21,7 @@ import AdCopyLibrary from './pages/AdCopyLibrary';
 import AdCreativeBrief from './pages/AdCreativeBrief';
 import BrandVoice from './pages/BrandVoice';
 import VideoLibrary from './pages/VideoLibrary';
+import OpsBoard from './pages/OpsBoard';
 import Login from './pages/Login';
 import { Toaster } from 'react-hot-toast';
 import './index.css';
@@ -73,6 +74,7 @@ function Root() {
         <Route path="/ad-creative-brief" element={<AuthRoute session={session}><AdCreativeBrief /></AuthRoute>} />
         <Route path="/brand-voice" element={<AuthRoute session={session}><BrandVoice /></AuthRoute>} />
         <Route path="/video-library" element={<AuthRoute session={session}><VideoLibrary /></AuthRoute>} />
+        <Route path="/ops-board" element={<AuthRoute session={session}><OpsBoard /></AuthRoute>} />
       </Routes>
     </BrowserRouter>
   );
