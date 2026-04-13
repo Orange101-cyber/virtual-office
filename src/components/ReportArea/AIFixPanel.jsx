@@ -333,28 +333,24 @@ export default function AIFixPanel({ fields, checklistState, clientName, onField
           Click <b>⚡ Fix</b> next to any red item below to get a proposed fix. Use the tools below for real-data validation.
         </div>
 
-        {/* Primary actions row */}
-        <div className="flex flex-wrap gap-2 mb-2">
+        {/* All tools in one row */}
+        <div className="flex flex-wrap items-center gap-2 mb-3">
           <button onClick={handleLiveAudit} disabled={auditing || !fields.url?.trim()}
-            className="bg-[#F5C518] text-[#1a1a1a] border-none rounded-[5px] px-3 py-1.5 text-[11px] font-bold cursor-pointer hover:bg-[#e6b800] disabled:opacity-40">
+            className="bg-[#F5C518] text-[#1a1a1a] border-none rounded-[5px] px-3 py-1.5 text-[10px] font-bold cursor-pointer hover:bg-[#e6b800] disabled:opacity-40">
             {auditing ? 'Auditing...' : '🔍 Audit Live URL'}
           </button>
           <button onClick={handleValidateKeyword} disabled={validating || !fields.focus_keyphrase}
-            className="bg-transparent border border-gray-300 text-gray-700 rounded-[5px] px-3 py-1.5 text-[11px] font-semibold cursor-pointer hover:border-[#F5C518] disabled:opacity-40">
+            className="bg-transparent border border-gray-300 text-gray-700 rounded-[5px] px-3 py-1.5 text-[10px] font-semibold cursor-pointer hover:border-[#F5C518] disabled:opacity-40">
             {validating ? 'Checking...' : '✓ Validate Keywords'}
           </button>
           <button onClick={handleSerpFeatures} disabled={analysingFeatures || !fields.focus_keyphrase}
-            className="bg-transparent border border-gray-300 text-gray-700 rounded-[5px] px-3 py-1.5 text-[11px] font-semibold cursor-pointer hover:border-[#F5C518] disabled:opacity-40">
+            className="bg-transparent border border-gray-300 text-gray-700 rounded-[5px] px-3 py-1.5 text-[10px] font-semibold cursor-pointer hover:border-[#F5C518] disabled:opacity-40">
             {analysingFeatures ? 'Loading...' : '🎯 SERP Features'}
           </button>
           <button onClick={handleContentGap} disabled={analysingGap || !fields.focus_keyphrase || !fields.article_content}
-            className="bg-transparent border border-gray-300 text-gray-700 rounded-[5px] px-3 py-1.5 text-[11px] font-semibold cursor-pointer hover:border-[#F5C518] disabled:opacity-40">
+            className="bg-transparent border border-gray-300 text-gray-700 rounded-[5px] px-3 py-1.5 text-[10px] font-semibold cursor-pointer hover:border-[#F5C518] disabled:opacity-40">
             {analysingGap ? 'Analysing...' : '📊 Content Gap'}
           </button>
-        </div>
-
-        {/* Secondary actions row */}
-        <div className="flex flex-wrap gap-2 mb-3">
           <button onClick={handleRankedKeywords} disabled={loadingRanked || !fields.url?.trim()}
             className="bg-transparent border border-gray-300 text-gray-700 rounded-[5px] px-3 py-1.5 text-[10px] font-semibold cursor-pointer hover:border-[#F5C518] disabled:opacity-40">
             {loadingRanked ? 'Loading...' : '📈 Ranked Keywords'}

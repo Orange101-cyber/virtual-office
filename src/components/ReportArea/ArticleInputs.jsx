@@ -229,8 +229,8 @@ export default function ArticleInputs({
         </label>
       </div>
 
-      {/* Row 0: Page Type + Index Setting */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-2.5">
+      {/* Row 1: Page Type, Index, URL, Focus KW, Secondary KW — all horizontal */}
+      <div className="grid grid-cols-2 md:grid-cols-[110px_100px_1fr_1fr_1fr] gap-2.5 mb-2.5">
         <div>
           <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">
             Page Type
@@ -247,7 +247,7 @@ export default function ArticleInputs({
         </div>
         <div>
           <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">
-            Index Setting
+            Index
           </label>
           <select
             value={fields.index_setting || 'index'}
@@ -258,10 +258,6 @@ export default function ArticleInputs({
             <option value="noindex">No-Index</option>
           </select>
         </div>
-      </div>
-
-      {/* Row 1: URL with fetch button, Focus KW, Secondary KW */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 mb-2.5">
         <div>
           <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">
             Live URL
