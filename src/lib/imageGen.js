@@ -64,6 +64,68 @@ export async function generateImage(prompt, options = {}) {
   };
 }
 
+/**
+ * Image-to-image: transform an existing image with a prompt
+ * @param {string} imageUrl - Source image (data URL or http URL)
+ * @param {string} prompt - What to turn it into
+ * @param {object} options - { width, height, strength, model }
+ * @returns {Promise<{url: string, prompt: string}>}
+ */
+export async function remixImage(imageUrl, prompt, options = {}) {
+  if (!FAL_KEY) throw new Error('Fal.ai API key not configured. Add VITE_FAL_API_KEY to .env');
+
+  const {
+    width = 1024,
+    height = 1024,
+    strength = 0.65,
+    model = 'fal-ai/flux/dev/image-to-image',
+  } = options;
+
+  const res = await fetch(`https://fal.run/${model}`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Key ${FAL_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      prompt,
+      image_url: imageUrl,
+      strength,
+      image_size: { width, height },
+      num_images: 1,
+      enable_safety_checker: true,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => '');
+    throw new Error(`Fal.ai error ${res.status}: ${err.substring(0, 200)}`);
+  }
+
+  const data = await res.json();
+  const image = data.images?.[0];
+  if (!image?.url) throw new Error('No image returned from Fal.ai');
+
+  return {
+    url: image.url,
+    prompt,
+    width: image.width || width,
+    height: image.height || height,
+  };
+}
+
+/**
+ * Convert a File to a base64 data URL for the API
+ */
+export function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 // Platform-specific dimensions
 export const PLATFORM_SPECS = {
   'Meta Feed': { width: 1080, height: 1080, label: 'Square (1:1)' },

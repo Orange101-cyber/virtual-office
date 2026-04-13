@@ -12,8 +12,9 @@ const SEO_TOOLS = [
 
 const ADS_TOOLS = [
   { path: '/ad-inspiration', label: 'Ad Inspiration', icon: '✨' },
+  { path: '/ad-remix', label: 'Ad Remix', icon: '🎨' },
   { path: '/ad-copy-library', label: 'Copy Library', icon: '📋' },
-  { path: '/ad-creative-brief', label: 'Creative Brief', icon: '🎨' },
+  { path: '/ad-creative-brief', label: 'Creative Brief', icon: '📝' },
   { path: '/video-library', label: 'Video Library', icon: '🎬' },
 ];
 
