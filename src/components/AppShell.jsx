@@ -33,6 +33,7 @@ const NAV_ITEMS = [
   { path: '/client-dashboard', label: 'Performance' },
   { path: '/seo-tools', label: 'SEO Tools', dropdown: 'seo' },
   { path: '/ads-hub', label: 'Ads Hub', dropdown: 'ads' },
+  { path: '/ops-board', label: '📋 Ops Board' },
 ];
 
 export default function AppShell({ children }) {
