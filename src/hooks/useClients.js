@@ -23,6 +23,11 @@ export function useClients() {
     fetchClients();
   }, [fetchClients]);
 
+  // Active clients (not archived)
+  const activeClients = clients.filter(c => !c.archived);
+  // Archived clients
+  const archivedClients = clients.filter(c => c.archived);
+
   const addClient = async (name) => {
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const { data, error } = await supabase
@@ -41,5 +46,34 @@ export function useClients() {
     setClients((prev) => prev.filter((c) => c.id !== id));
   };
 
-  return { clients, loading, fetchClients, addClient, deleteClient };
+  const archiveClient = async (id) => {
+    const { error } = await supabase
+      .from('clients')
+      .update({ archived: true })
+      .eq('id', id);
+    if (error) throw error;
+    setClients((prev) => prev.map(c => c.id === id ? { ...c, archived: true } : c));
+  };
+
+  const restoreClient = async (id) => {
+    const { error } = await supabase
+      .from('clients')
+      .update({ archived: false })
+      .eq('id', id);
+    if (error) throw error;
+    setClients((prev) => prev.map(c => c.id === id ? { ...c, archived: false } : c));
+  };
+
+  return {
+    clients: activeClients,  // default: only active (all pages use this)
+    allClients: clients,     // includes archived
+    activeClients,
+    archivedClients,
+    loading,
+    fetchClients,
+    addClient,
+    deleteClient,
+    archiveClient,
+    restoreClient,
+  };
 }

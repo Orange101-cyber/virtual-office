@@ -5,6 +5,7 @@ import Checklist from './Checklist';
 import AIFixPanel from './AIFixPanel';
 import IssuesTab from './IssuesTab';
 import AIFindings from './AIFindings';
+import DocumentPreview from './DocumentPreview';
 import ExportPdf from './ExportPdf';
 import CategoryProgress from '../RightColumn/CategoryProgress';
 import Cannibalization from '../RightColumn/Cannibalization';
@@ -46,6 +47,7 @@ export default function ReportArea({
     { id: 'checklist', label: 'Checklist' },
     { id: 'issues', label: 'Issues' },
     { id: 'aifindings', label: 'AI Notes' },
+    { id: 'document', label: '📄 Document' },
   ];
 
   return (
@@ -68,6 +70,7 @@ export default function ReportArea({
         statusText={statusText}
         breadcrumb={breadcrumb}
         saved={saved}
+        clientId={clientId}
       />
 
       {/* Score bar + Export button */}
@@ -126,6 +129,12 @@ export default function ReportArea({
             )}
             {activeTab === 'aifindings' && (
               <AIFindings findings={aiFindings} />
+            )}
+            {activeTab === 'document' && (
+              <DocumentPreview
+                fields={fields}
+                clientName={clients?.find(c => c.id === clientId)?.name}
+              />
             )}
           </div>
 

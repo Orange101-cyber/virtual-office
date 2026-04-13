@@ -31,8 +31,9 @@ export function mapCrawlToChecklist(crawl, focusKeyphrase = '', secondaryKeyword
 
   // ── Meta & Technical ──
   if (fk) {
-    result.meta_title_kw = titleLower.includes(fk);
-    evidence.meta_title_kw = `Title: "${meta.title || '(none)'}"`;
+    // FK must appear at the beginning of the title
+    result.meta_title_kw = titleLower.startsWith(fk) || titleLower.indexOf(fk) <= 3;
+    evidence.meta_title_kw = `Title: "${meta.title || '(none)'}" — FK ${result.meta_title_kw ? 'found near start' : 'NOT at beginning'}`;
 
     result.meta_desc_kw = descLower.includes(fk);
     evidence.meta_desc_kw = `Meta desc: "${meta.description || '(none)'}"`;
@@ -42,8 +43,14 @@ export function mapCrawlToChecklist(crawl, focusKeyphrase = '', secondaryKeyword
   }
 
   const titleLen = meta.title?.length || 0;
-  result.meta_title_len = titleLen > 0 && titleLen <= 60;
+  result.meta_title_len = titleLen >= 30 && titleLen <= 60;
   evidence.meta_title_len = `Title is ${titleLen} chars`;
+
+  // URL length check
+  const urlStr = meta.canonical || crawl.url || '';
+  const urlLen = urlStr.length;
+  result.meta_slug_len = urlLen > 0 && urlLen <= 70;
+  evidence.meta_slug_len = `URL is ${urlLen} chars`;
 
   const descLen = meta.description?.length || 0;
   result.meta_desc_len = descLen >= 140 && descLen <= 160;
