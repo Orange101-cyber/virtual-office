@@ -40,18 +40,22 @@ const NAV_ITEMS = [
 export default function AppShell({ children }) {
   const location = useLocation();
   const [openDropdown, setOpenDropdown] = useState(null);
-  const dropdownRef = useRef(null);
+  const navRef = useRef(null);
 
+  // Close dropdown when clicking outside the nav entirely.
+  // Using mousedown so the close fires before navigation on Links.
   useEffect(() => {
+    if (!openDropdown) return;
     const handler = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+      if (navRef.current && !navRef.current.contains(e.target)) {
         setOpenDropdown(null);
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, []);
+  }, [openDropdown]);
 
+  // Close dropdown after navigating to a new page
   useEffect(() => { setOpenDropdown(null); }, [location.pathname]);
 
   const handleLogout = async () => {
@@ -74,16 +78,20 @@ export default function AppShell({ children }) {
         </Link>
 
         {/* Nav links */}
-        <nav className="flex items-center gap-1 ml-4 overflow-x-visible">
+        <nav ref={navRef} className="flex items-center gap-1 ml-4 overflow-x-visible">
           {NAV_ITEMS.map((item) => {
             if (item.dropdown) {
               const tools = item.dropdown === 'seo' ? SEO_TOOLS : item.dropdown === 'ads' ? ADS_TOOLS : CLIENT_TOOLS;
               const isActive = item.dropdown === 'seo' ? isInSeoSection : item.dropdown === 'ads' ? isInAdsSection : isInClientsSection;
               const isOpen = openDropdown === item.dropdown;
               return (
-                <div key={item.path} ref={isOpen ? dropdownRef : undefined} className="relative">
+                <div key={item.path} className="relative">
                   <button
-                    onClick={() => setOpenDropdown(o => o === item.dropdown ? null : item.dropdown)}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOpenDropdown(o => o === item.dropdown ? null : item.dropdown);
+                    }}
                     className={`px-2.5 py-1 rounded text-xs transition-colors whitespace-nowrap shrink-0 flex items-center gap-1 cursor-pointer bg-transparent border-none ${
                       isActive
                         ? 'bg-white/10 text-[#F5C518] font-semibold'
@@ -102,6 +110,7 @@ export default function AppShell({ children }) {
                           <Link
                             key={tool.path}
                             to={tool.path}
+                            onClick={() => setOpenDropdown(null)}
                             className={`flex items-center gap-2 px-3 py-2 text-xs no-underline transition-colors ${
                               isToolActive
                                 ? 'bg-white/10 text-[#F5C518] font-semibold'
