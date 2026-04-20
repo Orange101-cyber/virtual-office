@@ -8,6 +8,7 @@ const SEO_TOOLS = [
   { path: '/content-planner', label: 'Content Planner', icon: '📅' },
   { path: '/article-writer', label: 'Article Writer', icon: '✍️' },
   { path: '/seo-checker', label: 'SEO Checker', icon: '🔍' },
+  { path: '/client-bucket-list', label: 'Client Bucket List', icon: '📋' },
 ];
 
 const ADS_TOOLS = [
