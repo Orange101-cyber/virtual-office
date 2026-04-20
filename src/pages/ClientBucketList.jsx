@@ -35,6 +35,40 @@ function scoreColor(score) {
   return 'bg-red-50 text-red-700 border border-red-200';
 }
 
+// ── Refresh due-date helpers ──
+const SCHEDULE_MONTHS = { quarterly: 3, half_yearly: 6, yearly: 12, '2_years': 24 };
+
+function lastRefreshDate(p) {
+  if (p.is_refreshed && p.date_refreshed) return new Date(p.date_refreshed);
+  if (p.date_published) return new Date(p.date_published);
+  return p.updated_at ? new Date(p.updated_at) : null;
+}
+
+function expectedIntervalMonths(p) {
+  // General/Service pages honour their explicit refresh_schedule
+  if (p.refresh_schedule && SCHEDULE_MONTHS[p.refresh_schedule]) {
+    return SCHEDULE_MONTHS[p.refresh_schedule];
+  }
+  // Default: blogs & landing pages are worth refreshing yearly
+  if (p.page_category === 'blog' || p.page_category === 'landing') return 12;
+  return null; // no refresh expectation
+}
+
+function daysUntilRefresh(p) {
+  const interval = expectedIntervalMonths(p);
+  if (!interval) return null;
+  const base = lastRefreshDate(p);
+  if (!base) return null;
+  const due = new Date(base);
+  due.setMonth(due.getMonth() + interval);
+  return Math.round((due - Date.now()) / 86400000);
+}
+
+function isDueForRefresh(p) {
+  const days = daysUntilRefresh(p);
+  return days !== null && days <= 0;
+}
+
 export default function ClientBucketList() {
   const { clients } = useClients();
   const [selectedClient, setSelectedClient] = useState('');
@@ -47,6 +81,8 @@ export default function ClientBucketList() {
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [showDueOnly, setShowDueOnly] = useState(false);
 
   // Resolve client id
   useEffect(() => {
@@ -91,6 +127,7 @@ export default function ClientBucketList() {
 
   const filteredPages = useMemo(() => {
     let result = pages.filter(p => p.page_category === category);
+    if (showDueOnly) result = result.filter(isDueForRefresh);
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(p =>
@@ -101,7 +138,7 @@ export default function ClientBucketList() {
       );
     }
     return result;
-  }, [pages, category, search]);
+  }, [pages, category, search, showDueOnly]);
 
   // Count per category for tab badges
   const counts = useMemo(() => {
@@ -109,6 +146,9 @@ export default function ClientBucketList() {
     CATEGORIES.forEach(cat => { c[cat.id] = pages.filter(p => p.page_category === cat.id).length; });
     return c;
   }, [pages]);
+
+  // Due-for-refresh count across all categories
+  const dueCount = useMemo(() => pages.filter(isDueForRefresh).length, [pages]);
 
   const handleSave = async (data) => {
     const payload = {
@@ -154,6 +194,66 @@ export default function ClientBucketList() {
     if (error) { toast.error(error.message); return; }
     setPages(prev => prev.filter(p => p.id !== id));
     toast.success('Deleted');
+  };
+
+  // Bulk import rows from CSV
+  const handleImportRows = async (rows) => {
+    if (!rows.length) return;
+    const payload = rows.map(r => ({
+      ...r,
+      client_name: selectedClient,
+      client_id: selectedClientId,
+      page_category: category,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }));
+    try {
+      const { data, error } = await supabase.from('client_pages').insert(payload).select();
+      if (error) throw error;
+      setPages(prev => [...(data || []), ...prev]);
+
+      // Sync all focus keywords to client's past_keywords bank
+      if (selectedClientId) {
+        const newKws = rows.map(r => r.focus_keyword).filter(Boolean);
+        if (newKws.length) {
+          const { data: client } = await supabase.from('clients').select('past_keywords').eq('id', selectedClientId).single();
+          const existing = (client?.past_keywords || '').split('\n').map(k => k.trim()).filter(Boolean);
+          const existingLower = new Set(existing.map(k => k.toLowerCase()));
+          const toAdd = newKws.filter(k => !existingLower.has(k.toLowerCase()));
+          if (toAdd.length) {
+            const updated = [...existing, ...toAdd].join('\n');
+            await supabase.from('clients').update({ past_keywords: updated }).eq('id', selectedClientId);
+          }
+        }
+      }
+      toast.success(`Imported ${rows.length} ${rows.length === 1 ? 'entry' : 'entries'}`);
+    } catch (err) {
+      toast.error('Import error: ' + err.message);
+    }
+    setShowImport(false);
+  };
+
+  // Create a content_plans entry from a page — useful when refreshing
+  const handlePlanRefresh = async (p) => {
+    if (!selectedClient) return;
+    const now = new Date();
+    const quarter = `Q${Math.floor(now.getMonth() / 3) + 1} ${now.getFullYear()}`;
+    const month = now.toLocaleDateString('en-AU', { month: 'long' });
+    try {
+      await supabase.from('content_plans').insert({
+        client_name: selectedClient,
+        quarter,
+        month,
+        content_type: p.page_category === 'blog' ? 'Blog' : 'SEO Page',
+        title: p.title || p.focus_keyword || p.url,
+        is_refresh: true,
+        focus_keyword: p.new_focus_keyword || p.focus_keyword || '',
+        status: 'Planned',
+      });
+      toast.success(`Added to Content Planner — ${quarter} ${month}`);
+    } catch (err) {
+      toast.error('Plan error: ' + err.message);
+    }
   };
 
   const handleExport = () => {
@@ -247,11 +347,25 @@ export default function ClientBucketList() {
           </div>
 
           {/* Action bar */}
-          <div className="bg-[#f8f8f6] border-b border-gray-200 px-5 py-2.5 shrink-0 flex items-center gap-2">
+          <div className="bg-[#f8f8f6] border-b border-gray-200 px-5 py-2.5 shrink-0 flex items-center gap-2 flex-wrap">
             <button onClick={() => { setShowForm(true); setEditingId(null); }}
               className="bg-[#F5C518] text-[#1a1a1a] border-none rounded px-3 py-1.5 text-[11px] font-bold cursor-pointer hover:bg-[#e6b800]">
               + Add {CATEGORIES.find(c => c.id === category)?.label.replace(/s$/, '')}
             </button>
+            <button onClick={() => setShowImport(true)}
+              className="bg-white border border-gray-300 text-gray-700 rounded px-3 py-1.5 text-[11px] font-semibold cursor-pointer hover:border-[#F5C518]">
+              📥 Import CSV
+            </button>
+            {dueCount > 0 && (
+              <button onClick={() => setShowDueOnly(!showDueOnly)}
+                className={`rounded px-3 py-1.5 text-[11px] font-bold cursor-pointer border ${
+                  showDueOnly
+                    ? 'bg-red-500 text-white border-red-500'
+                    : 'bg-red-50 text-red-700 border-red-300 hover:bg-red-100'
+                }`}>
+                ⚠ {dueCount} Due for Refresh {showDueOnly ? '(clear filter)' : ''}
+              </button>
+            )}
             <input
               type="text"
               value={search}
@@ -277,6 +391,15 @@ export default function ClientBucketList() {
             </div>
           )}
 
+          {/* CSV Import Modal */}
+          {showImport && (
+            <CsvImportModal
+              category={category}
+              onImport={handleImportRows}
+              onClose={() => setShowImport(false)}
+            />
+          )}
+
           {/* Table */}
           <div className="flex-1 overflow-auto p-5">
             {loading ? (
@@ -292,6 +415,7 @@ export default function ClientBucketList() {
                 pages={filteredPages}
                 onEdit={(id) => { setEditingId(id); setShowForm(true); }}
                 onDelete={handleDelete}
+                onPlanRefresh={handlePlanRefresh}
                 scoreForUrl={scoreForUrl}
                 reportIdForUrl={reportIdForUrl}
               />
@@ -304,7 +428,7 @@ export default function ClientBucketList() {
 }
 
 // ── Page Table (shows different columns per category) ──
-function PageTable({ category, pages, onEdit, onDelete, scoreForUrl, reportIdForUrl }) {
+function PageTable({ category, pages, onEdit, onDelete, onPlanRefresh, scoreForUrl, reportIdForUrl }) {
   return (
     <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
@@ -348,8 +472,11 @@ function PageTable({ category, pages, onEdit, onDelete, scoreForUrl, reportIdFor
             {pages.map(p => {
               const score = category !== 'video' ? scoreForUrl(p.url) : null;
               const reportId = category !== 'video' ? reportIdForUrl(p.url) : null;
+              const dueDays = category !== 'video' ? daysUntilRefresh(p) : null;
+              const isDue = dueDays !== null && dueDays <= 0;
+              const isSoon = dueDays !== null && dueDays > 0 && dueDays <= 30;
               return (
-                <tr key={p.id} className="border-b border-gray-100 hover:bg-[#f8f8f6]">
+                <tr key={p.id} className={`border-b border-gray-100 hover:bg-[#f8f8f6] ${isDue ? 'bg-red-50/40' : ''}`}>
                   {category === 'video' ? (
                     <>
                       <td className="px-3 py-2 font-semibold text-[#1a1a1a]">{p.title || '—'}</td>
@@ -375,6 +502,16 @@ function PageTable({ category, pages, onEdit, onDelete, scoreForUrl, reportIdFor
                             {p.url.replace(/^https?:\/\//, '')}
                           </a>
                         ) : <span className="text-gray-300">—</span>}
+                        {isDue && (
+                          <span className="inline-block text-[9px] font-bold uppercase bg-red-500 text-white px-1.5 py-0.5 rounded mt-1" title={`Overdue by ${Math.abs(dueDays)} days`}>
+                            ⚠ Refresh due
+                          </span>
+                        )}
+                        {isSoon && !isDue && (
+                          <span className="inline-block text-[9px] font-bold uppercase bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded mt-1" title={`Due in ${dueDays} days`}>
+                            ⏰ Due in {dueDays}d
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-2">
                         {p.bucket ? <span className="text-[10px] bg-[#F5C518]/20 text-[#1a1a1a] font-semibold px-1.5 py-0.5 rounded">{p.bucket}</span> : <span className="text-gray-300">—</span>}
@@ -424,9 +561,14 @@ function PageTable({ category, pages, onEdit, onDelete, scoreForUrl, reportIdFor
                       )}
                     </>
                   )}
-                  <td className="px-3 py-2 text-right">
-                    <button onClick={() => onEdit(p.id)} className="text-[10px] text-gray-400 hover:text-[#F5C518] bg-transparent border-none cursor-pointer mr-1">✏️</button>
-                    <button onClick={() => onDelete(p.id)} className="text-[10px] text-gray-400 hover:text-red-500 bg-transparent border-none cursor-pointer">🗑</button>
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                    {category !== 'video' && (
+                      <button onClick={() => onPlanRefresh(p)}
+                        className="text-[10px] text-gray-400 hover:text-blue-600 bg-transparent border-none cursor-pointer mr-1"
+                        title="Add to Content Planner as a refresh">📅</button>
+                    )}
+                    <button onClick={() => onEdit(p.id)} className="text-[10px] text-gray-400 hover:text-[#F5C518] bg-transparent border-none cursor-pointer mr-1" title="Edit">✏️</button>
+                    <button onClick={() => onDelete(p.id)} className="text-[10px] text-gray-400 hover:text-red-500 bg-transparent border-none cursor-pointer" title="Delete">🗑</button>
                   </td>
                 </tr>
               );
@@ -459,7 +601,15 @@ function PageForm({ category, buckets, initial, onSave, onCancel }) {
 
   const set = (key) => (e) => {
     const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
-    setForm(f => ({ ...f, [key]: value }));
+    setForm(f => {
+      const next = { ...f, [key]: value };
+      // When Refreshed is newly ticked, auto-default date_refreshed to today
+      // and pre-fill new_focus_keyword hint if empty
+      if (key === 'is_refreshed' && value === true) {
+        if (!next.date_refreshed) next.date_refreshed = new Date().toISOString().split('T')[0];
+      }
+      return next;
+    });
   };
 
   const handleSubmit = (e) => {
@@ -609,4 +759,189 @@ function PageForm({ category, buckets, initial, onSave, onCancel }) {
 
 function Label({ children }) {
   return <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">{children}</label>;
+}
+
+// ── CSV Import Modal ──
+// Very forgiving parser: splits on commas OR tabs, strips quotes, header-based column mapping.
+function parseCsvOrTsv(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return { headers: [], rows: [] };
+  const delim = lines[0].includes('\t') ? '\t' : ',';
+  const splitLine = (line) => {
+    // Handle quoted fields containing the delim
+    const out = [];
+    let cur = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') { inQuotes = !inQuotes; continue; }
+      if (ch === delim && !inQuotes) { out.push(cur); cur = ''; continue; }
+      cur += ch;
+    }
+    out.push(cur);
+    return out.map(s => s.trim());
+  };
+  const headers = splitLine(lines[0]).map(h => h.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''));
+  const rows = lines.slice(1).map(line => {
+    const values = splitLine(line);
+    const row = {};
+    headers.forEach((h, i) => { row[h] = values[i] || ''; });
+    return row;
+  });
+  return { headers, rows };
+}
+
+// Map common header variants to our field names
+const HEADER_ALIASES = {
+  url: ['url', 'url_link', 'link', 'page_url', 'page'],
+  focus_keyword: ['focus_keyword', 'focus_kw', 'fk', 'keyword', 'focus', 'used_focus_keywords', 'used_focus_keyword'],
+  bucket: ['bucket', 'buckets', 'focus_bucket', 'theme', 'category', 'focus_or_bucket'],
+  refresh_schedule: ['refresh_schedule', 'refresh'],
+  date_published: ['date_published', 'publish_date', 'published', 'date_originally_published', 'date'],
+  is_refreshed: ['refreshed', 'is_refreshed', 'refreshed_yes_or_no'],
+  date_refreshed: ['date_refreshed', 'refresh_date'],
+  new_focus_keyword: ['new_focus_keyword', 'new_fk', 'new_keyword'],
+  approved_in_airtable: ['approved_by_client_and_in_at', 'approved_in_airtable', 'in_at', 'approved', 'approved_and_in_at'],
+  is_published: ['published', 'live', 'is_published'],
+  has_video: ['video_on_page', 'has_video'],
+  video_drive_link: ['video_g_drive_link', 'video_link', 'video_drive_link', 'drive_link'],
+  notes: ['notes', 'note'],
+  title: ['title', 'page_title', 'name'],
+};
+
+function mapRowToPayload(row) {
+  const payload = {};
+  Object.entries(HEADER_ALIASES).forEach(([field, aliases]) => {
+    for (const alias of aliases) {
+      if (row[alias] !== undefined && row[alias] !== '') {
+        payload[field] = row[alias];
+        break;
+      }
+    }
+  });
+  // Coerce booleans
+  ['is_refreshed', 'approved_in_airtable', 'is_published', 'has_video'].forEach(f => {
+    if (payload[f] !== undefined) {
+      const v = payload[f].toString().trim().toLowerCase();
+      payload[f] = ['yes', 'y', 'true', '1', '✓', 'x'].includes(v);
+    }
+  });
+  // Coerce dates — leave as string, let Postgres parse
+  ['date_published', 'date_refreshed'].forEach(f => {
+    if (payload[f]) {
+      const d = new Date(payload[f]);
+      if (!isNaN(d)) payload[f] = d.toISOString().split('T')[0];
+      else delete payload[f];
+    }
+  });
+  return payload;
+}
+
+function CsvImportModal({ category, onImport, onClose }) {
+  const [text, setText] = useState('');
+  const [parsed, setParsed] = useState({ headers: [], rows: [] });
+  const [mapped, setMapped] = useState([]);
+
+  const handleParse = () => {
+    const result = parseCsvOrTsv(text);
+    setParsed(result);
+    const mappedRows = result.rows.map(mapRowToPayload).filter(r => r.url || r.title || r.focus_keyword);
+    setMapped(mappedRows);
+  };
+
+  const handleFile = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setText(reader.result);
+    reader.readAsText(file);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between shrink-0">
+          <div>
+            <div className="text-[10px] font-bold uppercase text-[#F5C518]">Import CSV / TSV</div>
+            <div className="text-sm font-semibold text-[#1a1a1a] mt-0.5">
+              Bulk import into {CATEGORIES.find(c => c.id === category)?.label}
+            </div>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-[#1a1a1a] bg-transparent border-none text-xl cursor-pointer leading-none p-1">×</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5">
+          <div className="text-[11px] text-gray-500 mb-3 leading-relaxed">
+            Paste rows from your existing Google Sheet below (or upload a CSV). The first row should be headers.
+            Common names are auto-detected: <code className="text-[10px] bg-gray-100 px-1">URL</code>, <code className="text-[10px] bg-gray-100 px-1">Focus KW</code>, <code className="text-[10px] bg-gray-100 px-1">Bucket</code>, <code className="text-[10px] bg-gray-100 px-1">Refreshed</code>, <code className="text-[10px] bg-gray-100 px-1">Date Published</code>, <code className="text-[10px] bg-gray-100 px-1">Notes</code>, etc.
+          </div>
+
+          <div className="mb-3">
+            <input type="file" accept=".csv,.tsv,.txt" onChange={handleFile}
+              className="text-[11px] mb-2" />
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              rows={8}
+              placeholder={`URL,Focus KW,Bucket,Refreshed\nhttps://example.com/page,keyword here,Business Loans,No`}
+              className="w-full border border-gray-200 rounded px-2.5 py-2 text-[11px] font-mono bg-[#f8f8f6] resize-y focus:outline-none focus:border-[#F5C518]"
+            />
+            <button onClick={handleParse} disabled={!text.trim()}
+              className="mt-2 bg-[#1a1a1a] text-white border-none rounded px-3 py-1.5 text-[11px] font-bold cursor-pointer hover:bg-[#333] disabled:opacity-40">
+              Preview {parsed.rows.length ? 'again' : ''}
+            </button>
+          </div>
+
+          {mapped.length > 0 && (
+            <div className="bg-[#f8f8f6] rounded-lg p-3 border border-gray-200">
+              <div className="text-[10px] font-bold uppercase text-gray-500 mb-2">
+                Preview — {mapped.length} {mapped.length === 1 ? 'row' : 'rows'} detected
+              </div>
+              <div className="max-h-64 overflow-y-auto bg-white rounded border border-gray-200">
+                <table className="w-full text-[10px]">
+                  <thead className="bg-[#f8f8f6] border-b border-gray-200 sticky top-0">
+                    <tr className="text-left text-gray-500">
+                      <th className="px-2 py-1.5 font-bold uppercase text-[9px]">URL / Title</th>
+                      <th className="px-2 py-1.5 font-bold uppercase text-[9px]">Focus KW</th>
+                      <th className="px-2 py-1.5 font-bold uppercase text-[9px]">Bucket</th>
+                      <th className="px-2 py-1.5 font-bold uppercase text-[9px]">Refreshed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mapped.slice(0, 50).map((r, i) => (
+                      <tr key={i} className="border-b border-gray-100">
+                        <td className="px-2 py-1 truncate max-w-xs">{r.url || r.title || '—'}</td>
+                        <td className="px-2 py-1">{r.focus_keyword || '—'}</td>
+                        <td className="px-2 py-1">{r.bucket || '—'}</td>
+                        <td className="px-2 py-1">{r.is_refreshed ? '✓' : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {mapped.length > 50 && (
+                <div className="text-[9px] text-gray-400 mt-1">Showing first 50 of {mapped.length}</div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-between shrink-0 bg-[#fafafa]">
+          <div className="text-[10px] text-gray-500">
+            {mapped.length > 0 ? `Ready to import ${mapped.length} rows into ${CATEGORIES.find(c => c.id === category)?.label}` : 'Paste data and click Preview'}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={onClose}
+              className="bg-transparent border border-gray-300 text-gray-600 rounded px-4 py-1.5 text-[11px] font-semibold cursor-pointer hover:border-gray-400">
+              Cancel
+            </button>
+            <button onClick={() => onImport(mapped)} disabled={!mapped.length}
+              className="bg-[#F5C518] text-[#1a1a1a] border-none rounded px-4 py-1.5 text-[11px] font-bold cursor-pointer hover:bg-[#e6b800] disabled:opacity-40">
+              ✓ Import {mapped.length || ''} {mapped.length === 1 ? 'Row' : 'Rows'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
