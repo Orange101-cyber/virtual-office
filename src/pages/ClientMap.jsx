@@ -161,22 +161,25 @@ export default function ClientMap() {
             {/* Map */}
             <div className="bg-white border border-gray-200 rounded-xl p-4 relative" style={{ minHeight: '600px' }}>
               <svg viewBox="0 0 800 700" className="w-full h-auto">
-                {/* Australia outline — simplified */}
-                <path d="M180,200 L200,180 L260,170 L300,175 L340,155 L380,140 L440,130 L480,120 L520,115 L560,120 L600,135 L640,155 L670,180 L690,210 L700,250 L705,300 L700,350 L690,400 L675,430 L650,460 L620,480 L580,500 L540,515 L500,525 L460,530 L420,528 L380,520 L350,505 L330,490 L315,470 L300,445 L280,430 L250,425 L230,440 L210,460 L195,490 L180,520 L170,560 L165,590 L175,620 L200,640 L240,650 L280,645 L320,630 L360,620 L400,615 L440,620 L480,630 L500,640 L505,650 L490,660 L440,665 L400,660 L350,660 L300,665 L250,670 L200,665 L160,650 L130,625 L110,590 L100,550 L95,510 L100,470 L110,430 L120,400 L125,360 L120,320 L118,280 L125,240 L140,215 L160,200 Z"
-                  fill="#f0f0ec" stroke="#d1d5db" strokeWidth="1.5" />
+                {/* Australia outline — built from real geographic waypoints */}
+                <path
+                  d="M 205,132 L 195,120 L 200,108 L 215,100 L 235,92 L 258,82 L 278,76 L 290,85 L 300,92 L 315,100 L 328,92 L 340,78 L 348,60 L 355,48 L 370,38 L 390,28 L 405,20 L 418,24 L 428,32 L 445,28 L 458,38 L 462,55 L 456,72 L 465,88 L 480,100 L 495,118 L 500,138 L 512,148 L 528,152 L 540,148 L 548,130 L 555,108 L 562,88 L 573,70 L 578,50 L 572,30 L 580,18 L 595,20 L 605,40 L 612,62 L 620,85 L 628,108 L 638,128 L 648,150 L 660,175 L 675,200 L 692,222 L 706,245 L 715,270 L 725,290 L 745,305 L 760,322 L 768,345 L 770,365 L 765,385 L 755,405 L 748,425 L 745,450 L 735,472 L 720,492 L 708,515 L 695,538 L 685,558 L 672,578 L 655,593 L 635,602 L 612,600 L 590,593 L 572,585 L 550,582 L 528,580 L 512,572 L 500,555 L 492,535 L 488,520 L 495,508 L 490,498 L 475,495 L 460,490 L 450,478 L 445,465 L 440,472 L 425,468 L 405,460 L 385,455 L 360,452 L 338,460 L 315,470 L 290,478 L 260,488 L 225,495 L 190,500 L 155,508 L 125,512 L 95,505 L 75,490 L 65,470 L 58,452 L 55,435 L 52,420 L 50,402 L 48,385 L 45,368 L 42,350 L 40,332 L 38,315 L 35,298 L 32,280 L 30,262 L 32,245 L 38,230 L 45,220 L 58,212 L 75,205 L 90,200 L 108,195 L 128,188 L 148,178 L 168,168 L 188,155 L 205,132 Z"
+                  fill="#f0f0ec" stroke="#9ca3af" strokeWidth="1.5" strokeLinejoin="round" />
+
                 {/* Tasmania */}
-                <path d="M520,610 L540,600 L570,605 L585,620 L580,640 L560,650 L535,645 L520,630 Z"
-                  fill="#f0f0ec" stroke="#d1d5db" strokeWidth="1.5" />
+                <path
+                  d="M 615,630 L 628,622 L 645,620 L 665,625 L 680,635 L 688,650 L 685,668 L 672,680 L 655,690 L 635,690 L 618,680 L 608,665 L 605,648 L 615,630 Z"
+                  fill="#f0f0ec" stroke="#9ca3af" strokeWidth="1.5" strokeLinejoin="round" />
 
                 {/* State labels */}
-                <text x="180" y="450" fill="#d1d5db" fontSize="14" fontWeight="bold" fontFamily="sans-serif">WA</text>
-                <text x="340" y="380" fill="#d1d5db" fontSize="14" fontWeight="bold" fontFamily="sans-serif">SA</text>
-                <text x="430" y="310" fill="#d1d5db" fontSize="14" fontWeight="bold" fontFamily="sans-serif">QLD</text>
-                <text x="530" y="460" fill="#d1d5db" fontSize="14" fontWeight="bold" fontFamily="sans-serif">NSW</text>
-                <text x="530" y="530" fill="#d1d5db" fontSize="14" fontWeight="bold" fontFamily="sans-serif">VIC</text>
-                <text x="540" y="620" fill="#d1d5db" fontSize="12" fontWeight="bold" fontFamily="sans-serif">TAS</text>
-                <text x="310" y="230" fill="#d1d5db" fontSize="14" fontWeight="bold" fontFamily="sans-serif">NT</text>
-                <text x="500" y="400" fill="#d1d5db" fontSize="10" fontWeight="bold" fontFamily="sans-serif">ACT</text>
+                <text x="200" y="340" fill="#c5c7cc" fontSize="14" fontWeight="bold" fontFamily="sans-serif">WA</text>
+                <text x="385" y="410" fill="#c5c7cc" fontSize="14" fontWeight="bold" fontFamily="sans-serif">SA</text>
+                <text x="580" y="260" fill="#c5c7cc" fontSize="14" fontWeight="bold" fontFamily="sans-serif">QLD</text>
+                <text x="660" y="480" fill="#c5c7cc" fontSize="14" fontWeight="bold" fontFamily="sans-serif">NSW</text>
+                <text x="615" y="555" fill="#c5c7cc" fontSize="13" fontWeight="bold" fontFamily="sans-serif">VIC</text>
+                <text x="640" y="658" fill="#c5c7cc" fontSize="11" fontWeight="bold" fontFamily="sans-serif">TAS</text>
+                <text x="430" y="180" fill="#c5c7cc" fontSize="14" fontWeight="bold" fontFamily="sans-serif">NT</text>
+                <text x="700" y="540" fill="#c5c7cc" fontSize="9" fontWeight="bold" fontFamily="sans-serif">ACT</text>
 
                 {/* Major city dots (reference) */}
                 {[
