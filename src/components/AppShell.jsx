@@ -22,6 +22,7 @@ const ADS_TOOLS = [
 const CLIENT_TOOLS = [
   { path: '/clients', label: 'All Clients', icon: '👥' },
   { path: '/brand-voice', label: 'Brand Voice', icon: '🎤' },
+  { path: '/client-map', label: 'Client Map', icon: '🗺️' },
 ];
 
 const SEO_PATHS = SEO_TOOLS.map(t => t.path);
