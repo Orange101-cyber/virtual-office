@@ -23,6 +23,7 @@ const EMPTY_FORM = {
   competitors: '', business_goals: '', compliance_notes: '',
   tone: '', key_selling_points: '', words_to_avoid: '',
   brand_colors: '', notes: '',
+  address: '', latitude: '', longitude: '',
 };
 
 export default function BrandVoice() {
@@ -62,6 +63,9 @@ export default function BrandVoice() {
         words_to_avoid: data.words_to_avoid || '',
         brand_colors: data.brand_colors || '',
         notes: data.notes || '',
+        address: data.address || '',
+        latitude: data.latitude || '',
+        longitude: data.longitude || '',
       });
       setHasRecord(true);
     } else {
@@ -208,6 +212,20 @@ Return ONLY valid JSON with this exact structure:
                 <div>
                   <Label>Website URL</Label>
                   <input value={form.website_url} onChange={e => setForm(f => ({ ...f, website_url: e.target.value }))} placeholder="https://..." className="input-field" />
+                </div>
+                <div>
+                  <Label>Business Address</Label>
+                  <input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="e.g. 123 Main St, Gold Coast QLD 4217" className="input-field" />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label>Latitude</Label>
+                    <input value={form.latitude} onChange={e => setForm(f => ({ ...f, latitude: e.target.value }))} placeholder="-27.4698" className="input-field" />
+                  </div>
+                  <div>
+                    <Label>Longitude</Label>
+                    <input value={form.longitude} onChange={e => setForm(f => ({ ...f, longitude: e.target.value }))} placeholder="153.0251" className="input-field" />
+                  </div>
                 </div>
                 <div>
                   <Label>Business Description</Label>

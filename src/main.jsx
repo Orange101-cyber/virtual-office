@@ -24,6 +24,7 @@ import VideoLibrary from './pages/VideoLibrary';
 import OpsBoard from './pages/OpsBoard';
 import AdRemix from './pages/AdRemix';
 import ClientBucketList from './pages/ClientBucketList';
+import ClientMap from './pages/ClientMap';
 import Login from './pages/Login';
 import { Toaster } from 'react-hot-toast';
 import './index.css';
@@ -79,6 +80,7 @@ function Root() {
         <Route path="/ops-board" element={<AuthRoute session={session}><OpsBoard /></AuthRoute>} />
         <Route path="/ad-remix" element={<AuthRoute session={session}><AdRemix /></AuthRoute>} />
         <Route path="/client-bucket-list" element={<AuthRoute session={session}><ClientBucketList /></AuthRoute>} />
+        <Route path="/client-map" element={<AuthRoute session={session}><ClientMap /></AuthRoute>} />
       </Routes>
     </BrowserRouter>
   );
