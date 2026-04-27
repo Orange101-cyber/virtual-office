@@ -457,7 +457,23 @@ Return ONLY valid JSON:
       const msg = await res.json();
       let text = msg.content?.[0]?.text || '';
       text = text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
-      setQuarterPlan(JSON.parse(text));
+      const plan = JSON.parse(text);
+
+      // Enrich with real SV/KD from DataForSEO
+      if (dfs.isConfigured() && plan.quarter_plan?.length) {
+        try {
+          const kws = plan.quarter_plan.map(p => p.keyword).filter(Boolean);
+          const metrics = await dfs.getKeywordMetrics(kws);
+          const metricsMap = {};
+          metrics.forEach(m => { metricsMap[m.keyword.toLowerCase()] = m; });
+          plan.quarter_plan = plan.quarter_plan.map(item => {
+            const m = metricsMap[item.keyword?.toLowerCase()];
+            return m ? { ...item, search_volume: m.search_volume, kd: m.kd, cpc: m.cpc } : item;
+          });
+        } catch { /* metrics are a bonus, don't fail the whole plan */ }
+      }
+
+      setQuarterPlan(plan);
       toast.success('Quarter plan generated');
     } catch (err) {
       toast.error('Error: ' + err.message);
@@ -904,6 +920,15 @@ Return ONLY valid JSON:
                         <div className="text-[12px] font-semibold text-[#1a1a1a]">{item.title}</div>
                         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                           <span className="text-[9px] font-bold text-[#F5C518] bg-[#F5C518]/10 px-1.5 py-0.5 rounded">{item.keyword}</span>
+                          {item.search_volume != null && (
+                            <span className="text-[9px] text-gray-500">SV: <b className="text-[#1a1a1a]">{item.search_volume.toLocaleString()}</b></span>
+                          )}
+                          {item.kd != null && (
+                            <span className="text-[9px] text-gray-500">KD: <b className={item.kd <= 20 ? 'text-green-600' : item.kd <= 50 ? 'text-orange-500' : 'text-red-500'}>{item.kd}</b></span>
+                          )}
+                          {item.cpc != null && item.cpc > 0 && (
+                            <span className="text-[9px] text-gray-400">CPC: ${Number(item.cpc).toFixed(2)}</span>
+                          )}
                           <span className="text-[9px] text-gray-500">{item.content_type}</span>
                           <span className={`text-[9px] font-bold ${item.difficulty === 'Easy' ? 'text-green-600' : item.difficulty === 'Hard' ? 'text-red-500' : 'text-orange-500'}`}>
                             {item.difficulty}
@@ -912,7 +937,7 @@ Return ONLY valid JSON:
                         <div className="text-[10px] text-gray-500 mt-1 leading-snug">{item.rationale}</div>
                       </div>
                       <button
-                        onClick={() => setAddKw({ keyword: item.keyword, suggested_title: item.title, content_type: item.content_type })}
+                        onClick={() => setAddKw({ keyword: item.keyword, suggested_title: item.title, content_type: item.content_type, search_volume: item.search_volume, kd: item.kd })}
                         className="shrink-0 text-[10px] text-[#F5C518] font-semibold bg-transparent border border-[#F5C518] rounded px-2 py-0.5 cursor-pointer hover:bg-[#F5C518] hover:text-[#1a1a1a]"
                       >
                         + Plan
