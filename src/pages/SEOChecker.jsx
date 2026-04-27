@@ -43,11 +43,12 @@ export default function SEOChecker() {
   // Auto-load report from URL param ?report=ID
   useEffect(() => {
     const reportId = searchParams.get('report');
-    if (reportId && reportId !== report?.id) {
+    if (reportId) {
       loadReport(reportId).then(() => setHasReport(true)).catch(() => {});
       setSearchParams({}, { replace: true });
     }
-  }, [searchParams]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleNewReport = () => {
     if (dirty && hasReport) {

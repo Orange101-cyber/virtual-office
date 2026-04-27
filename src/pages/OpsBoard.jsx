@@ -59,10 +59,18 @@ export default function OpsBoard() {
       .select('*')
       .order('created_at', { ascending: false })
       .then(({ data, error }) => {
-        if (error) console.error(error);
-        else setTasks(data || []);
+        if (error) {
+          if (error.code === '42P01' || error.message?.includes('does not exist')) {
+            setTasks([]);
+          } else {
+            console.error(error);
+          }
+        } else {
+          setTasks(data || []);
+        }
         setLoading(false);
-      });
+      })
+      .catch(() => setLoading(false));
   }, []);
 
   // Filtered + sorted tasks

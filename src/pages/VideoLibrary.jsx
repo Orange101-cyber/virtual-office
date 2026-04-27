@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
@@ -299,9 +300,9 @@ export default function VideoLibrary() {
               ) : (
                 <div className="text-[11px] text-gray-400 italic">
                   No Brand Voice set up for this client.
-                  <a href="/virtual-office/brand-voice" className="text-[#F5C518] ml-1 font-semibold">
+                  <Link to="/brand-voice" className="text-[#F5C518] ml-1 font-semibold">
                     Set up now
-                  </a>
+                  </Link>
                 </div>
               )}
             </div>

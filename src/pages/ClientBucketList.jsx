@@ -102,12 +102,12 @@ export default function ClientBucketList() {
         : Promise.resolve({ data: [] }),
       supabase.from('client_brand_voice').select('services').eq('client_name', selectedClient).single(),
     ]).then(([pagesRes, reportsRes, bvRes]) => {
-      setPages(pagesRes.data || []);
+      setPages(pagesRes.error ? [] : (pagesRes.data || []));
       setReports(reportsRes.data || []);
       const bvBuckets = (bvRes.data?.services || '').split('\n').map(s => s.trim()).filter(Boolean);
       setBuckets(bvBuckets);
       setLoading(false);
-    });
+    }).catch(() => setLoading(false));
   }, [selectedClient, selectedClientId]);
 
   // Match SEO score from reports by URL
