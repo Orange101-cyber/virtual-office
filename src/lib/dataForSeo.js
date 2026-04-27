@@ -449,6 +449,34 @@ export async function getRankedKeywordsForUrl(url, limit = 50) {
   return result;
 }
 
+// ── Ranked Keywords for a whole domain (competitor analysis) ──
+export async function getRankedKeywordsForDomain(domain, limit = 100) {
+  const clean = domain.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  const cacheKey = `ranked_domain:${clean}:${limit}`;
+  const cached = await getCached(cacheKey);
+  if (cached) return cached;
+
+  const data = await callEndpoint('/dataforseo_labs/google/ranked_keywords/live', {
+    target: clean,
+    location_code: LOCATION_AU,
+    language_code: LANGUAGE,
+    limit,
+    load_rank_absolute: true,
+  });
+  const items = data.tasks?.[0]?.result?.[0]?.items || [];
+  const result = items.map(item => ({
+    keyword: item.keyword_data?.keyword || '',
+    rank: item.ranked_serp_element?.serp_item?.rank_absolute || null,
+    url: item.ranked_serp_element?.serp_item?.url || '',
+    search_volume: item.keyword_data?.keyword_info?.search_volume || 0,
+    kd: item.keyword_data?.keyword_properties?.keyword_difficulty || 0,
+    cpc: item.keyword_data?.keyword_info?.cpc || 0,
+    traffic: item.ranked_serp_element?.etv || 0,
+  }));
+  await setCached(cacheKey, result);
+  return result;
+}
+
 // ── Search Intent classification ──
 export async function getSearchIntent(keywords) {
   if (!keywords?.length) return [];
