@@ -66,7 +66,8 @@ export default function ClientMap() {
   useEffect(() => {
     supabase.from('client_brand_voice')
       .select('client_name, address, latitude, longitude, locations_served, services, business_description, tone')
-      .then(({ data }) => setProfiles(data || []));
+      .then(({ data }) => setProfiles(data || []))
+      .catch(() => {});
   }, []);
 
   // Merge clients with their profile data + compute coordinates
