@@ -123,6 +123,15 @@ export default function KeywordResearch() {
   const [expanding, setExpanding] = useState(false);
   const [history, setHistory] = useState([]);
   const [addKw, setAddKw] = useState(null);
+  // New features
+  const [planningQuarter, setPlanningQuarter] = useState(false);
+  const [quarterPlan, setQuarterPlan] = useState(null);
+  const [clustering, setClustering] = useState(false);
+  const [clusters, setClusters] = useState(null);
+  const [competitorDomain, setCompetitorDomain] = useState('');
+  const [competitorKeywords, setCompetitorKeywords] = useState(null);
+  const [loadingCompetitor, setLoadingCompetitor] = useState(false);
+  const [brandVoice, setBrandVoice] = useState(null);
 
   useEffect(() => {
     const fromDb = dbClients.map(c => c.name);
@@ -144,6 +153,14 @@ export default function KeywordResearch() {
 
   useEffect(() => {
     loadHistory(form.client);
+    // Load brand voice for competitor list + context
+    if (form.client) {
+      supabase.from('client_brand_voice')
+        .select('competitors, services, target_personas, business_goals, locations_served, business_description')
+        .eq('client_name', form.client).single()
+        .then(({ data }) => setBrandVoice(data || null))
+        .catch(() => setBrandVoice(null));
+    }
   }, [form.client]);
 
   const [genStep, setGenStep] = useState('');
@@ -356,6 +373,205 @@ export default function KeywordResearch() {
     }
   };
 
+  // ── Plan Next Quarter ──
+  const handlePlanQuarter = async () => {
+    if (!form.client) return toast.error('Select a client first');
+    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+    if (!apiKey) return toast.error('Anthropic API key not set');
+
+    setPlanningQuarter(true);
+    setQuarterPlan(null);
+    try {
+      // Gather all context
+      const dbClient = dbClients.find(c => c.name === form.client);
+      let existingPages = [];
+      let pastKws = [];
+      if (dbClient?.id) {
+        const [pagesRes, kwRes] = await Promise.all([
+          supabase.from('client_pages').select('url, focus_keyword, page_category, bucket').eq('client_name', form.client),
+          supabase.from('clients').select('past_keywords').eq('id', dbClient.id).single(),
+        ]);
+        existingPages = pagesRes.data || [];
+        pastKws = (kwRes.data?.past_keywords || '').split('\n').filter(Boolean);
+      }
+      const { data: planned } = await supabase.from('content_plans')
+        .select('title, focus_keyword, status').eq('client_name', form.client);
+
+      const prompt = `You are a senior SEO content strategist for an Australian digital marketing agency.
+
+CLIENT: ${form.client}
+${brandVoice ? `SERVICES: ${brandVoice.services || 'Not set'}
+TARGET AUDIENCE: ${brandVoice.target_personas || 'Not set'}
+BUSINESS GOALS: ${brandVoice.business_goals || 'Not set'}
+LOCATIONS: ${brandVoice.locations_served || 'Not set'}
+DESCRIPTION: ${brandVoice.business_description || 'Not set'}` : ''}
+
+EXISTING PAGES (${existingPages.length}):
+${existingPages.slice(0, 40).map(p => `- [${p.page_category}] ${p.focus_keyword || p.url} (bucket: ${p.bucket || 'none'})`).join('\n')}
+
+PAST KEYWORDS TARGETED (${pastKws.length}):
+${pastKws.slice(0, 30).join(', ')}
+
+ALREADY IN CONTENT PLAN:
+${(planned || []).slice(0, 20).map(p => `- "${p.title}" (${p.focus_keyword}) [${p.status}]`).join('\n')}
+
+Based on this client's business, existing content, and gaps, recommend 8-12 articles for next quarter. For each, provide a target keyword, suggested title, content type, priority, and WHY it matters.
+
+Focus on:
+- Topics that fill gaps in their existing content
+- Keywords with commercial or transactional intent (lead generation)
+- Location-specific opportunities
+- Content that supports their services
+- Quick wins (low KD that they can realistically rank for)
+
+Return ONLY valid JSON:
+{
+  "quarter_plan": [
+    {
+      "priority": 1,
+      "keyword": "target keyword",
+      "title": "Suggested article title",
+      "content_type": "Blog | SEO Page",
+      "difficulty": "Easy | Medium | Hard",
+      "rationale": "Why this matters for the client"
+    }
+  ],
+  "strategy_notes": "2-3 sentence overall strategy recommendation",
+  "content_pillars": ["pillar 1", "pillar 2", "pillar 3"]
+}`;
+
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 3000,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      const msg = await res.json();
+      let text = msg.content?.[0]?.text || '';
+      text = text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+      setQuarterPlan(JSON.parse(text));
+      toast.success('Quarter plan generated');
+    } catch (err) {
+      toast.error('Error: ' + err.message);
+    }
+    setPlanningQuarter(false);
+  };
+
+  // ── Keyword Clustering ──
+  const handleCluster = async () => {
+    if (!results?.keywords?.length) return toast.error('Run a research first');
+    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+    if (!apiKey) return toast.error('Anthropic API key not set');
+
+    setClustering(true);
+    setClusters(null);
+    try {
+      const kwList = results.keywords.map(k =>
+        `"${k.keyword}" (SV:${k.search_volume || 0}, KD:${k.kd || 0})`
+      ).join('\n');
+
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 2000,
+          messages: [{ role: 'user', content: `Group these keywords into topic clusters. Each cluster should represent one article/page theme. Pick the best primary keyword for each cluster.
+
+KEYWORDS:
+${kwList}
+
+Return ONLY valid JSON:
+{
+  "clusters": [
+    {
+      "name": "Topic Cluster Name",
+      "primary_keyword": "best keyword for this cluster",
+      "keywords": ["kw1", "kw2", "kw3"],
+      "total_sv": 1234,
+      "avg_kd": 25,
+      "suggested_title": "Article title suggestion",
+      "intent": "Informational | Commercial | Transactional"
+    }
+  ]
+}` }],
+        }),
+      });
+      const msg = await res.json();
+      let text = msg.content?.[0]?.text || '';
+      text = text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+      const parsed = JSON.parse(text);
+      setClusters(parsed.clusters || []);
+      toast.success(`Grouped into ${(parsed.clusters || []).length} clusters`);
+    } catch (err) {
+      toast.error('Clustering error: ' + err.message);
+    }
+    setClustering(false);
+  };
+
+  // ── Competitor Gap Finder ──
+  const handleCompetitorGap = async () => {
+    if (!competitorDomain.trim()) return toast.error('Enter a competitor domain');
+    if (!dfs.isConfigured()) return toast.error('DataForSEO not configured');
+
+    setLoadingCompetitor(true);
+    setCompetitorKeywords(null);
+    try {
+      toast('Fetching competitor keywords...');
+      const compKws = await dfs.getRankedKeywordsForDomain(competitorDomain.trim(), 100);
+      if (!compKws.length) {
+        toast.error('No ranked keywords found for this domain');
+        setLoadingCompetitor(false);
+        return;
+      }
+
+      // Get client's existing keywords to find gaps
+      const dbClient = dbClients.find(c => c.name === form.client);
+      let clientKws = new Set();
+      if (dbClient?.id) {
+        const { data: pages } = await supabase.from('client_pages')
+          .select('focus_keyword').eq('client_name', form.client);
+        const { data: client } = await supabase.from('clients')
+          .select('past_keywords').eq('id', dbClient.id).single();
+        (pages || []).forEach(p => { if (p.focus_keyword) clientKws.add(p.focus_keyword.toLowerCase()); });
+        (client?.past_keywords || '').split('\n').forEach(k => { if (k.trim()) clientKws.add(k.trim().toLowerCase()); });
+      }
+
+      // Filter to gaps: keywords competitor ranks for that client doesn't target
+      const gaps = compKws
+        .filter(k => !clientKws.has(k.keyword.toLowerCase()))
+        .filter(k => k.search_volume > 0)
+        .sort((a, b) => b.search_volume - a.search_volume);
+
+      setCompetitorKeywords({
+        domain: competitorDomain.trim(),
+        total: compKws.length,
+        gaps,
+        overlap: compKws.length - gaps.length,
+      });
+      toast.success(`Found ${gaps.length} keyword gaps`);
+    } catch (err) {
+      toast.error('Error: ' + err.message);
+    }
+    setLoadingCompetitor(false);
+  };
+
+  // Competitor list from brand voice
+  const brandCompetitors = (brandVoice?.competitors || '').split('\n').map(c => c.trim()).filter(Boolean);
+
   const intentColors = {
     Informational: 'bg-blue-50 text-blue-600',
     Navigational: 'bg-purple-50 text-purple-600',
@@ -398,6 +614,48 @@ export default function KeywordResearch() {
                 </div>
                 <button onClick={handleGenerate} disabled={generating} className="btn-primary w-full py-2.5">
                   {generating ? (genStep || 'Researching...') : '🔍 Smart Research'}
+                </button>
+              </div>
+            </div>
+
+            {/* Plan Next Quarter */}
+            <div className="bg-white border border-gray-200 rounded-xl p-5">
+              <h2 className="text-sm font-semibold mb-1">📅 Plan Next Quarter</h2>
+              <p className="text-[10px] text-gray-400 mb-3">AI analyses existing content, gaps, and opportunities to recommend 8-12 articles</p>
+              <button onClick={handlePlanQuarter} disabled={planningQuarter || !form.client} className="btn-primary w-full py-2">
+                {planningQuarter ? 'Planning...' : '📅 Generate Quarter Plan'}
+              </button>
+            </div>
+
+            {/* Competitor Gap Finder */}
+            <div className="bg-white border border-gray-200 rounded-xl p-5">
+              <h2 className="text-sm font-semibold mb-1">⚔️ Competitor Gap</h2>
+              <p className="text-[10px] text-gray-400 mb-3">Find keywords competitors rank for that you don't</p>
+              <div className="space-y-2">
+                {brandCompetitors.length > 0 && (
+                  <div>
+                    <Label>From Brand Voice</Label>
+                    <select
+                      value=""
+                      onChange={(e) => { if (e.target.value) setCompetitorDomain(e.target.value); }}
+                      className="input-field"
+                    >
+                      <option value="">Select competitor...</option>
+                      {brandCompetitors.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <Label>Competitor Domain</Label>
+                  <input
+                    value={competitorDomain}
+                    onChange={e => setCompetitorDomain(e.target.value)}
+                    placeholder="e.g. competitor.com.au"
+                    className="input-field"
+                  />
+                </div>
+                <button onClick={handleCompetitorGap} disabled={loadingCompetitor || !competitorDomain.trim()} className="btn-primary w-full py-2">
+                  {loadingCompetitor ? 'Analysing...' : '⚔️ Find Gaps'}
                 </button>
               </div>
             </div>
@@ -485,6 +743,13 @@ export default function KeywordResearch() {
                   >
                     {expanding ? 'Expanding...' : '+ Add More Related'}
                   </button>
+                  <button
+                    onClick={handleCluster}
+                    disabled={clustering}
+                    className="text-[11px] bg-transparent border border-purple-400 text-purple-700 rounded px-3 py-1.5 font-semibold cursor-pointer hover:bg-purple-600 hover:text-white disabled:opacity-40"
+                  >
+                    {clustering ? 'Clustering...' : '🗂 Cluster Topics'}
+                  </button>
                   <span className="text-[10px] text-gray-400 ml-1">
                     {results.keywords?.filter(k => k.real_data).length || 0} / {results.keywords?.length || 0} with real data
                   </span>
@@ -569,11 +834,145 @@ export default function KeywordResearch() {
                   )}
                 </div>
 
+                {/* Keyword Clusters */}
+                {clusters && clusters.length > 0 && (
+                  <div className="bg-white border border-purple-200 rounded-xl p-4 mb-4">
+                    <div className="text-[10px] font-bold uppercase text-purple-600 mb-3">🗂 Topic Clusters ({clusters.length})</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {clusters.map((cl, i) => (
+                        <div key={i} className="bg-purple-50/50 border border-purple-100 rounded-lg p-3">
+                          <div className="flex items-start justify-between gap-2 mb-1.5">
+                            <div>
+                              <div className="text-[12px] font-bold text-[#1a1a1a]">{cl.name}</div>
+                              <div className="text-[10px] text-purple-600 font-semibold">Primary: {cl.primary_keyword}</div>
+                            </div>
+                            <div className="flex gap-2 text-[9px] text-gray-500 shrink-0">
+                              <span>SV: <b>{cl.total_sv?.toLocaleString()}</b></span>
+                              <span>KD: <b>{cl.avg_kd}</b></span>
+                            </div>
+                          </div>
+                          {cl.suggested_title && (
+                            <div className="text-[10px] text-gray-600 mb-1.5 italic">"{cl.suggested_title}"</div>
+                          )}
+                          <div className="flex flex-wrap gap-1">
+                            {cl.keywords.map((kw, j) => (
+                              <span key={j} className="text-[9px] bg-white border border-purple-200 text-gray-700 px-1.5 py-0.5 rounded">{kw}</span>
+                            ))}
+                          </div>
+                          <button
+                            onClick={() => setAddKw({ keyword: cl.primary_keyword, suggested_title: cl.suggested_title, content_type: 'Blog', search_volume: cl.total_sv, kd: cl.avg_kd })}
+                            className="mt-2 text-[10px] text-[#F5C518] font-semibold bg-transparent border border-[#F5C518] rounded px-2 py-0.5 cursor-pointer hover:bg-[#F5C518] hover:text-[#1a1a1a]"
+                          >
+                            + Plan this cluster
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Disclaimer */}
                 <div className="mt-4 p-3 bg-[#f8f8f6] rounded-lg text-[10px] text-gray-500 leading-relaxed">
                   These keyword ideas are AI-generated starting points. Always verify SV and KD in Wincher or Ahrefs before adding to the content plan.
                 </div>
               </>
+            )}
+
+            {/* Quarter Plan Results */}
+            {quarterPlan && (
+              <div className="bg-white border border-[#F5C518] rounded-xl p-5 mt-4">
+                <div className="text-[10px] font-bold uppercase text-[#F5C518] mb-1">📅 Quarterly Content Plan — {form.client}</div>
+                {quarterPlan.strategy_notes && (
+                  <div className="text-[11px] text-gray-600 mb-3 leading-relaxed bg-[#f8f8f6] rounded p-2.5">{quarterPlan.strategy_notes}</div>
+                )}
+                {quarterPlan.content_pillars?.length > 0 && (
+                  <div className="flex gap-1.5 mb-3 flex-wrap">
+                    {quarterPlan.content_pillars.map((p, i) => (
+                      <span key={i} className="text-[10px] bg-[#F5C518]/20 text-[#1a1a1a] font-semibold px-2 py-0.5 rounded-full">{p}</span>
+                    ))}
+                  </div>
+                )}
+                <div className="space-y-2">
+                  {(quarterPlan.quarter_plan || []).map((item, i) => (
+                    <div key={i} className="flex items-start gap-3 bg-[#f8f8f6] rounded-lg p-3 hover:bg-gray-100 transition-colors">
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                        item.difficulty === 'Easy' ? 'bg-green-100 text-green-700' :
+                        item.difficulty === 'Hard' ? 'bg-red-100 text-red-700' :
+                        'bg-orange-100 text-orange-700'
+                      }`}>{item.priority}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-semibold text-[#1a1a1a]">{item.title}</div>
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          <span className="text-[9px] font-bold text-[#F5C518] bg-[#F5C518]/10 px-1.5 py-0.5 rounded">{item.keyword}</span>
+                          <span className="text-[9px] text-gray-500">{item.content_type}</span>
+                          <span className={`text-[9px] font-bold ${item.difficulty === 'Easy' ? 'text-green-600' : item.difficulty === 'Hard' ? 'text-red-500' : 'text-orange-500'}`}>
+                            {item.difficulty}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-gray-500 mt-1 leading-snug">{item.rationale}</div>
+                      </div>
+                      <button
+                        onClick={() => setAddKw({ keyword: item.keyword, suggested_title: item.title, content_type: item.content_type })}
+                        className="shrink-0 text-[10px] text-[#F5C518] font-semibold bg-transparent border border-[#F5C518] rounded px-2 py-0.5 cursor-pointer hover:bg-[#F5C518] hover:text-[#1a1a1a]"
+                      >
+                        + Plan
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Competitor Gap Results */}
+            {competitorKeywords && (
+              <div className="bg-white border border-gray-200 rounded-xl p-5 mt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase text-red-600">⚔️ Competitor Gap — {competitorKeywords.domain}</div>
+                    <div className="text-[10px] text-gray-400">
+                      {competitorKeywords.total} keywords found · {competitorKeywords.gaps.length} gaps · {competitorKeywords.overlap} overlap
+                    </div>
+                  </div>
+                  <button onClick={() => setCompetitorKeywords(null)}
+                    className="text-[10px] text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer">✕ Close</button>
+                </div>
+                {competitorKeywords.gaps.length === 0 ? (
+                  <div className="text-[11px] text-gray-500 text-center py-4">No gaps found — you already target similar keywords</div>
+                ) : (
+                  <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                    <table className="w-full text-[11px]">
+                      <thead><tr className="bg-[#f8f8f6] border-b border-gray-200">
+                        <th className="text-left px-3 py-2 font-semibold text-gray-500">Keyword Gap</th>
+                        <th className="text-right px-2 py-2 font-semibold text-gray-500">SV</th>
+                        <th className="text-right px-2 py-2 font-semibold text-gray-500">KD</th>
+                        <th className="text-right px-2 py-2 font-semibold text-gray-500">Their Rank</th>
+                        <th className="px-3 py-2"></th>
+                      </tr></thead>
+                      <tbody>
+                        {competitorKeywords.gaps.slice(0, 30).map((kw, i) => (
+                          <tr key={i} className="border-b border-gray-100 hover:bg-[#f8f8f6]">
+                            <td className="px-3 py-2 font-medium text-[#1a1a1a]">{kw.keyword}</td>
+                            <td className="px-2 py-2 text-right text-gray-700 font-semibold">{kw.search_volume?.toLocaleString()}</td>
+                            <td className="px-2 py-2 text-right">
+                              <span className={`font-semibold ${kw.kd <= 20 ? 'text-green-600' : kw.kd <= 50 ? 'text-orange-500' : 'text-red-500'}`}>{kw.kd}</span>
+                            </td>
+                            <td className="px-2 py-2 text-right text-gray-500">#{kw.rank}</td>
+                            <td className="px-3 py-2">
+                              <button onClick={() => setAddKw({ keyword: kw.keyword, suggested_title: kw.keyword.charAt(0).toUpperCase() + kw.keyword.slice(1), content_type: 'Blog', search_volume: kw.search_volume, kd: kw.kd })}
+                                className="text-[10px] text-[#F5C518] font-semibold bg-transparent border border-[#F5C518] rounded px-2 py-0.5 cursor-pointer hover:bg-[#F5C518] hover:text-[#1a1a1a]">
+                                + Plan
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {competitorKeywords.gaps.length > 30 && (
+                      <div className="text-center py-2 text-[9px] text-gray-400">Showing top 30 of {competitorKeywords.gaps.length} gaps</div>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
