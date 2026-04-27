@@ -115,12 +115,16 @@ function PlanModal({ open, onClose, onSave, onDelete, item, clients, dbClients }
     try {
       const metrics = await dfs.getKeywordMetrics([form.focus_keyword]);
       if (metrics[0]) {
-        setForm(f => ({
-          ...f,
-          search_volume: metrics[0].search_volume || '',
-          kd: metrics[0].kd || '',
-        }));
-        toast.success(`SV: ${metrics[0].search_volume}, KD: ${metrics[0].kd}`);
+        const sv = metrics[0].search_volume ?? 0;
+        const kd = metrics[0].kd ?? 0;
+        setForm(f => ({ ...f, search_volume: sv, kd }));
+        if (sv === 0) {
+          toast('SV: 0 — keyword may be too long-tail. Try a shorter version.', { icon: '⚠️' });
+        } else {
+          toast.success(`SV: ${sv.toLocaleString()}, KD: ${kd}`);
+        }
+      } else {
+        toast.error('No data returned — check the keyword spelling');
       }
     } catch (err) {
       toast.error('DataForSEO error: ' + err.message);
