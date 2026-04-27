@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Sidebar from '../components/Sidebar/Sidebar';
 import ReportArea from '../components/ReportArea/ReportArea';
 import SEODashboard from '../components/SEODashboard';
@@ -37,6 +38,16 @@ export default function SEOChecker() {
   const [showKeywordBank, setShowKeywordBank] = useState(null);
   const [prefillSave, setPrefillSave] = useState(null);
   const [hasReport, setHasReport] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Auto-load report from URL param ?report=ID
+  useEffect(() => {
+    const reportId = searchParams.get('report');
+    if (reportId && reportId !== report?.id) {
+      loadReport(reportId).then(() => setHasReport(true)).catch(() => {});
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams]);
 
   const handleNewReport = () => {
     if (dirty && hasReport) {

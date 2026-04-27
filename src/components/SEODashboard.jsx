@@ -598,7 +598,8 @@ export default function SEODashboard({ clients, onAddClient }) {
                   {filtered.map((r, i) => {
                     const client = clients.find(c => c.id === r.client_id);
                     return (
-                      <div key={r.id} className="flex items-center gap-2">
+                      <a key={r.id} href={`/virtual-office/seo-checker?report=${r.id}`}
+                        className="flex items-center gap-2 no-underline rounded-lg px-1.5 py-1 -mx-1.5 hover:bg-[#f8f8f6] cursor-pointer transition-colors">
                         <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold"
                           style={{ backgroundColor: getScoreColor(r.score) + '20', color: getScoreColor(r.score) }}>
                           {i + 1}
@@ -610,7 +611,7 @@ export default function SEODashboard({ clients, onAddClient }) {
                         <div className="text-[11px] font-bold shrink-0" style={{ color: getScoreColor(r.score) }}>
                           {r.score}%
                         </div>
-                      </div>
+                      </a>
                     );
                   })}
                 </div>
@@ -633,7 +634,8 @@ export default function SEODashboard({ clients, onAddClient }) {
                   {filtered.map((r) => {
                     const client = clients.find(c => c.id === r.client_id);
                     return (
-                      <div key={r.id} className="flex items-center gap-2">
+                      <a key={r.id} href={`/virtual-office/seo-checker?report=${r.id}`}
+                        className="flex items-center gap-2 no-underline rounded-lg px-1.5 py-1 -mx-1.5 hover:bg-red-50/50 cursor-pointer transition-colors">
                         <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px]"
                           style={{ backgroundColor: getScoreColor(r.score) + '20', color: getScoreColor(r.score) }}>
                           !
@@ -645,7 +647,7 @@ export default function SEODashboard({ clients, onAddClient }) {
                         <div className="text-[11px] font-bold shrink-0" style={{ color: getScoreColor(r.score) }}>
                           {r.score}%
                         </div>
-                      </div>
+                      </a>
                     );
                   })}
                 </div>
