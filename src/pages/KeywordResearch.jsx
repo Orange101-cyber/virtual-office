@@ -27,6 +27,8 @@ ${keywords.slice(0, 100).map(k => `- "${k.keyword}" (SV: ${k.search_volume}, KD:
 
 Return ONLY valid JSON with this exact structure. Pick the 15-20 best keywords considering relevance to the client niche, search volume, keyword difficulty, and the preference setting (${preference}). Exclude keywords that are already planned or too similar to past keywords (unless useful as refresh candidates).
 
+CRITICAL: You MUST only pick keywords from the REAL KEYWORDS list above. Do NOT invent or suggest keywords that are not in the list — they will be filtered out. Every keyword must have real search volume > 0.
+
 {
   "keywords": [
     {
@@ -265,9 +267,10 @@ export default function KeywordResearch() {
       const parsed = JSON.parse(rawText);
 
       // Enrich the Claude results with the real metrics we already have
+      setGenStep('Validating keywords with real metrics...');
       const metricsMap = {};
       filtered.forEach(k => { metricsMap[k.keyword.toLowerCase()] = k; });
-      const enriched = (parsed.keywords || []).map(k => {
+      let enriched = (parsed.keywords || []).map(k => {
         const m = metricsMap[k.keyword.toLowerCase()];
         return m ? {
           ...k,
@@ -277,6 +280,26 @@ export default function KeywordResearch() {
           real_data: true,
         } : k;
       });
+
+      // Validate any keywords Claude invented (not in our DataForSEO pool)
+      const unverified = enriched.filter(k => !k.real_data);
+      if (unverified.length > 0 && dfs.isConfigured()) {
+        try {
+          const extraMetrics = await dfs.getKeywordMetrics(unverified.map(k => k.keyword));
+          const extraMap = {};
+          extraMetrics.forEach(m => { extraMap[m.keyword.toLowerCase()] = m; });
+          enriched = enriched.map(k => {
+            if (k.real_data) return k;
+            const m = extraMap[k.keyword.toLowerCase()];
+            return m ? { ...k, search_volume: m.search_volume, kd: m.kd, cpc: m.cpc, real_data: true } : k;
+          });
+        } catch { /* non-critical */ }
+      }
+
+      // Filter out 0 SV keywords — these won't rank
+      const beforeCount = enriched.length;
+      enriched = enriched.filter(k => !k.real_data || k.search_volume > 0);
+      const droppedCount = beforeCount - enriched.length;
 
       const finalResults = {
         ...parsed,
@@ -298,7 +321,8 @@ export default function KeywordResearch() {
         seed_topic: form.seedTopic, results_json: finalResults,
       });
       loadHistory(form.client);
-      toast.success(`Analysed ${filtered.length} keywords, picked ${enriched.length} best`);
+      const summary = `Analysed ${filtered.length} keywords, picked ${enriched.length} best`;
+      toast.success(droppedCount > 0 ? `${summary} (dropped ${droppedCount} with 0 SV)` : summary);
     } catch (err) {
       toast.error('Error: ' + err.message);
       console.error(err);
@@ -469,7 +493,7 @@ Return ONLY valid JSON:
           plan.quarter_plan = plan.quarter_plan.map(item => {
             const m = metricsMap[item.keyword?.toLowerCase()];
             return m ? { ...item, search_volume: m.search_volume, kd: m.kd, cpc: m.cpc } : item;
-          });
+          }).filter(item => item.search_volume == null || item.search_volume > 0);
         } catch { /* metrics are a bonus, don't fail the whole plan */ }
       }
 
