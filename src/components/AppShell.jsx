@@ -16,7 +16,11 @@ const ADS_TOOLS = [
   { path: '/ad-remix', label: 'Ad Remix', icon: '🎨' },
   { path: '/ad-copy-library', label: 'Copy Library', icon: '📋' },
   { path: '/ad-creative-brief', label: 'Creative Brief', icon: '📝' },
+];
+
+const VIDEO_TOOLS = [
   { path: '/video-library', label: 'Video Library', icon: '🎬' },
+  { path: '/video-timesheet', label: 'Timesheet', icon: '⏱️' },
 ];
 
 const CLIENT_TOOLS = [
@@ -28,6 +32,7 @@ const CLIENT_TOOLS = [
 const SEO_PATHS = SEO_TOOLS.map(t => t.path);
 const ADS_PATHS = ADS_TOOLS.map(t => t.path);
 const CLIENT_PATHS = CLIENT_TOOLS.map(t => t.path);
+const VIDEO_PATHS = VIDEO_TOOLS.map(t => t.path);
 
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard' },
@@ -36,6 +41,7 @@ const NAV_ITEMS = [
   { path: '/client-dashboard', label: 'Performance' },
   { path: '/seo-tools', label: 'SEO Tools', dropdown: 'seo' },
   { path: '/ads-hub', label: 'Ads Hub', dropdown: 'ads' },
+  { path: '/video-hub', label: 'Video Hub', dropdown: 'video' },
   { path: '/ops-board', label: '📋 Ops Board' },
 ];
 
@@ -67,6 +73,7 @@ export default function AppShell({ children }) {
   const isInSeoSection = SEO_PATHS.some(p => location.pathname.startsWith(p)) || location.pathname === '/seo-tools';
   const isInAdsSection = ADS_PATHS.some(p => location.pathname.startsWith(p)) || location.pathname === '/ads-hub';
   const isInClientsSection = CLIENT_PATHS.some(p => location.pathname.startsWith(p)) || location.pathname.startsWith('/client/');
+  const isInVideoSection = VIDEO_PATHS.some(p => location.pathname.startsWith(p)) || location.pathname === '/video-hub';
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-[#f8f8f6] text-[#1a1a1a] text-[13px] leading-relaxed">
@@ -83,8 +90,10 @@ export default function AppShell({ children }) {
         <nav ref={navRef} className="flex items-center gap-1 ml-4 overflow-x-visible">
           {NAV_ITEMS.map((item) => {
             if (item.dropdown) {
-              const tools = item.dropdown === 'seo' ? SEO_TOOLS : item.dropdown === 'ads' ? ADS_TOOLS : CLIENT_TOOLS;
-              const isActive = item.dropdown === 'seo' ? isInSeoSection : item.dropdown === 'ads' ? isInAdsSection : isInClientsSection;
+              const toolsMap = { seo: SEO_TOOLS, ads: ADS_TOOLS, clients: CLIENT_TOOLS, video: VIDEO_TOOLS };
+              const activeMap = { seo: isInSeoSection, ads: isInAdsSection, clients: isInClientsSection, video: isInVideoSection };
+              const tools = toolsMap[item.dropdown] || [];
+              const isActive = activeMap[item.dropdown] || false;
               const isOpen = openDropdown === item.dropdown;
               return (
                 <div key={item.path} className="relative">
