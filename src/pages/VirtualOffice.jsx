@@ -82,26 +82,25 @@ function OnboardingModal({ onSave }) {
 // ── Game Card ──
 function GameCard({ game, personalBest, dailyLeader, todayPlays, gameTopScores, onPlay }) {
   const cappedToday = todayPlays >= game.dailyCap;
-  const [showScores, setShowScores] = useState(false);
 
   return (
     <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl p-5 hover:border-[#F5C518] hover:-translate-y-1 transition-all group">
       <div className="flex items-start justify-between mb-2">
         <div className="text-3xl">{game.icon}</div>
-        {gameTopScores?.length > 0 && (
-          <button onClick={(e) => { e.stopPropagation(); setShowScores(!showScores); }}
-            className="text-[9px] text-[#888882] hover:text-[#F5C518] bg-transparent border border-[#2A2A2A] rounded-full px-2 py-0.5 cursor-pointer font-dm">
-            {showScores ? 'Hide' : 'Top Scores'}
-          </button>
+        {personalBest != null && (
+          <div className="text-right">
+            <div className="text-[9px] text-[#888882] font-dm uppercase">Your Best</div>
+            <div className="text-[#F5C518] font-syne font-bold text-sm">{personalBest}</div>
+          </div>
         )}
       </div>
       <h3 className="font-syne font-bold text-[#F0EDE6] text-base mb-1">{game.name}</h3>
       <p className="text-[#888882] text-xs font-dm mb-3">{game.desc}</p>
 
-      {/* Per-game top scores */}
-      {showScores && gameTopScores?.length > 0 && (
+      {/* Per-game top scores — always visible */}
+      {gameTopScores?.length > 0 && (
         <div className="mb-3 bg-[#0E0E0E] rounded-lg p-2.5 border border-[#2A2A2A]">
-          <div className="text-[9px] font-bold uppercase tracking-wider text-[#888882] mb-1.5">All-Time Top 5</div>
+          <div className="text-[9px] font-bold uppercase tracking-wider text-[#888882] mb-1.5">🏆 Leaderboard</div>
           {gameTopScores.slice(0, 5).map((s, i) => (
             <div key={i} className="flex items-center gap-2 py-0.5 text-[10px]">
               <span className="w-4 text-center font-syne font-bold" style={{ color: i === 0 ? '#FFD700' : i === 1 ? '#C0C0C0' : i === 2 ? '#CD7F32' : '#888882' }}>
@@ -115,7 +114,6 @@ function GameCard({ game, personalBest, dailyLeader, todayPlays, gameTopScores, 
       )}
 
       <div className="text-xs font-dm space-y-1 mb-4">
-        <div className="text-[#888882]">Your best: <span className="text-[#F0EDE6] font-semibold">{personalBest ?? 'No score yet'}</span></div>
         <div className="text-[#888882]">Today's leader: <span className="text-[#F0EDE6] font-semibold">{dailyLeader ? `${dailyLeader.display_name} (${dailyLeader.raw_score})` : '—'}</span></div>
       </div>
       {cappedToday && <div className="text-[#4ADE80] text-[10px] font-dm mb-2">✓ Points earned today</div>}
@@ -166,6 +164,7 @@ export default function VirtualOffice() {
   const [dailyLeaders, setDailyLeaders] = useState({});
   const [todayPlays, setTodayPlays] = useState({});
   const [gameTopScores, setGameTopScores] = useState({});
+  const [recentActivity, setRecentActivity] = useState([]);
 
   // Check if profile exists
   useEffect(() => {
@@ -223,6 +222,26 @@ export default function VirtualOffice() {
         setGameTopScores(prev => ({ ...prev, [game.slug]: scored }));
       }
     });
+    // Load recent scores across all games
+    supabase.from('game_scores')
+      .select('game_slug, raw_score, points, created_at, user_id')
+      .order('created_at', { ascending: false })
+      .limit(15)
+      .then(async ({ data }) => {
+        if (!data?.length) return;
+        const uids = [...new Set(data.map(d => d.user_id))];
+        const { data: profiles } = await supabase.from('player_profiles')
+          .select('user_id, display_name, avatar_emoji').in('user_id', uids);
+        const nameMap = {};
+        (profiles || []).forEach(p => { nameMap[p.user_id] = p; });
+        setRecentActivity(data.map(d => ({
+          ...d,
+          display_name: nameMap[d.user_id]?.display_name || 'Unknown',
+          avatar: nameMap[d.user_id]?.avatar_emoji || '😊',
+          game_name: GAMES.find(g => g.slug === d.game_slug)?.name || d.game_slug,
+          game_icon: GAMES.find(g => g.slug === d.game_slug)?.icon || '🎮',
+        })));
+      }).catch(() => {});
   }, [userId, gameResult]);
 
   const handleOnboardingSave = async (name, emoji) => {
@@ -343,6 +362,88 @@ export default function VirtualOffice() {
           ))}
         </div>
       </div>
+
+      {/* Per-Game Breakdown Table */}
+      {Object.keys(gameTopScores).length > 0 && leaderboard.length > 0 && (
+        <div className="px-8 mb-8">
+          <h2 className="font-syne text-lg font-bold text-[#F0EDE6] mb-4">📊 Per-Game Breakdown</h2>
+          <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl overflow-x-auto">
+            <table className="w-full text-[11px] font-dm">
+              <thead>
+                <tr className="border-b border-[#2A2A2A]">
+                  <th className="text-left px-4 py-3 text-[#888882] font-semibold uppercase text-[9px] tracking-wider">Player</th>
+                  {GAMES.map(g => (
+                    <th key={g.slug} className="text-center px-3 py-3 text-[#888882] font-semibold uppercase text-[9px] tracking-wider">
+                      <span className="text-sm block mb-0.5">{g.icon}</span>
+                      {g.name.split(/\s/).slice(0, 2).join(' ')}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {leaderboard.map((player, idx) => (
+                  <tr key={player.user_id} className="border-b border-[#2A2A2A]/50 hover:bg-[#222222]">
+                    <td className="px-4 py-2.5 text-[#F0EDE6] font-syne font-semibold whitespace-nowrap">
+                      <span className="mr-1.5">{player.avatar_emoji || '😊'}</span>
+                      {player.display_name}
+                    </td>
+                    {GAMES.map(g => {
+                      const scores = gameTopScores[g.slug] || [];
+                      const playerScore = scores.find(s => s.user_id === player.user_id);
+                      const isTop = scores[0]?.user_id === player.user_id;
+                      return (
+                        <td key={g.slug} className="text-center px-3 py-2.5">
+                          {playerScore ? (
+                            <span className={`font-syne font-bold ${isTop ? 'text-[#FFD700]' : 'text-[#F0EDE6]'}`}>
+                              {playerScore.best_score}
+                              {isTop && <span className="text-[8px] ml-0.5">👑</span>}
+                            </span>
+                          ) : (
+                            <span className="text-[#444440]">—</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Recent Activity Feed */}
+      {recentActivity.length > 0 && (
+        <div className="px-8 mb-8">
+          <h2 className="font-syne text-lg font-bold text-[#F0EDE6] mb-4">⚡ Recent Activity</h2>
+          <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl p-4">
+            <div className="space-y-2">
+              {recentActivity.map((a, i) => {
+                const timeAgo = (() => {
+                  const mins = Math.floor((Date.now() - new Date(a.created_at)) / 60000);
+                  if (mins < 1) return 'Just now';
+                  if (mins < 60) return `${mins}m ago`;
+                  const hrs = Math.floor(mins / 60);
+                  if (hrs < 24) return `${hrs}h ago`;
+                  return `${Math.floor(hrs / 24)}d ago`;
+                })();
+                return (
+                  <div key={i} className="flex items-center gap-3 py-1.5 text-[11px] font-dm">
+                    <span className="text-lg">{a.avatar}</span>
+                    <span className="text-[#F0EDE6] font-semibold w-24">{a.display_name}</span>
+                    <span className="text-[#888882]">scored</span>
+                    <span className="text-[#F5C518] font-syne font-bold">{a.raw_score}</span>
+                    <span className="text-[#888882]">in</span>
+                    <span className="text-[#F0EDE6]">{a.game_icon} {a.game_name}</span>
+                    {a.points > 0 && <span className="text-[#4ADE80] text-[10px]">+{a.points}pts</span>}
+                    <span className="text-[#444440] ml-auto">{timeAgo}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Hall of Fame */}
       {hallOfFame.length > 0 && (
