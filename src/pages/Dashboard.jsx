@@ -46,6 +46,18 @@ const TOOLS = [
     path: '/ads-hub',
     icon: '📣',
   },
+  {
+    name: 'Video Hub',
+    description: 'Video library organised by client and target service, plus timesheet tracking for the video team.',
+    path: '/video-library',
+    icon: '🎬',
+  },
+  {
+    name: 'Ops Board',
+    description: 'Priority tasks for the operations manager — outside normal Trello workflow.',
+    path: '/ops-board',
+    icon: '📋',
+  },
 ];
 
 export default function Dashboard() {
