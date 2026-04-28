@@ -43,7 +43,7 @@ CRITICAL: You MUST only pick keywords from the REAL KEYWORDS list above. Do NOT 
   "quick_wins": ["keyword - specific reason (e.g. low KD + decent SV)", "keyword - reason", "keyword - reason"]
 }`;
 
-function AddToPlanModal({ open, onClose, keyword, clients }) {
+function AddToPlanModal({ open, onClose, keyword, clients, selectedClient }) {
   const CURRENT_YEAR = new Date().getFullYear();
   const QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4'];
   const MONTHS_MAP = { Q1: ['January', 'February', 'March'], Q2: ['April', 'May', 'June'], Q3: ['July', 'August', 'September'], Q4: ['October', 'November', 'December'] };
@@ -61,7 +61,7 @@ function AddToPlanModal({ open, onClose, keyword, clients }) {
         content_type: keyword.content_type || 'Blog',
         title: keyword.suggested_title || '',
         focus_keyword: keyword.keyword || '',
-        client_name: clients[0] || '',
+        client_name: selectedClient || clients[0] || '',
       }));
     }
   }, [open, keyword, clients]);
@@ -1027,7 +1027,7 @@ Return ONLY valid JSON:
         </div>
       </div>
 
-      <AddToPlanModal open={!!addKw} onClose={() => setAddKw(null)} keyword={addKw} clients={clients.length ? clients : ['Client 1']} />
+      <AddToPlanModal open={!!addKw} onClose={() => setAddKw(null)} keyword={addKw} clients={clients.length ? clients : ['Client 1']} selectedClient={form.client} />
 
       <style>{`
         .input-field { width: 100%; border: 1px solid #e5e7eb; border-radius: 5px; padding: 6px 8px; font-size: 12px; background: #f8f8f6; outline: none; }

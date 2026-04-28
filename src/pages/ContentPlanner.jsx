@@ -392,6 +392,9 @@ function PlanCard({ item, onClick, onDelete }) {
         </span>
         <span className="text-[8px] text-gray-400 mr-3">{item.content_type}</span>
       </div>
+      {item.client_name && (
+        <div className="text-[9px] font-bold text-[#F5C518] mb-0.5 truncate">{item.client_name}</div>
+      )}
       <div className="text-[11px] font-medium text-[#1a1a1a] leading-snug mb-1.5 line-clamp-2">{item.title}</div>
       {item.focus_keyword && (
         <div className="text-[10px] text-gray-400 truncate mb-1">FK: {item.focus_keyword}</div>
