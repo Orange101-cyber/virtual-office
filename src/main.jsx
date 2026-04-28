@@ -22,6 +22,7 @@ import AdCreativeBrief from './pages/AdCreativeBrief';
 import BrandVoice from './pages/BrandVoice';
 import VideoLibrary from './pages/VideoLibrary';
 import VideoTimesheet from './pages/VideoTimesheet';
+import ShootPlanner from './pages/ShootPlanner';
 import OpsBoard from './pages/OpsBoard';
 import AdRemix from './pages/AdRemix';
 import ClientBucketList from './pages/ClientBucketList';
@@ -79,6 +80,7 @@ function Root() {
         <Route path="/brand-voice" element={<AuthRoute session={session}><BrandVoice /></AuthRoute>} />
         <Route path="/video-library" element={<AuthRoute session={session}><VideoLibrary /></AuthRoute>} />
         <Route path="/video-timesheet" element={<AuthRoute session={session}><VideoTimesheet /></AuthRoute>} />
+        <Route path="/shoot-planner" element={<AuthRoute session={session}><ShootPlanner /></AuthRoute>} />
         <Route path="/ops-board" element={<AuthRoute session={session}><OpsBoard /></AuthRoute>} />
         <Route path="/ad-remix" element={<AuthRoute session={session}><AdRemix /></AuthRoute>} />
         <Route path="/client-bucket-list" element={<AuthRoute session={session}><ClientBucketList /></AuthRoute>} />

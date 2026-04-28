@@ -20,6 +20,7 @@ const ADS_TOOLS = [
 
 const VIDEO_TOOLS = [
   { path: '/video-library', label: 'Video Library', icon: '🎬' },
+  { path: '/shoot-planner', label: 'Shoot Planner', icon: '📋' },
   { path: '/video-timesheet', label: 'Timesheet', icon: '⏱️' },
 ];
 
