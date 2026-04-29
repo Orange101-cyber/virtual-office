@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { useAdmin } from '../hooks/useAdmin';
 
 const SEO_TOOLS = [
   { path: '/keyword-research', label: 'Keyword Research', icon: '🔑' },
@@ -50,6 +51,7 @@ export default function AppShell({ children }) {
   const location = useLocation();
   const [openDropdown, setOpenDropdown] = useState(null);
   const navRef = useRef(null);
+  const { isAdmin } = useAdmin();
 
   // Close dropdown when clicking outside the nav entirely.
   // Using mousedown so the close fires before navigation on Links.
@@ -159,7 +161,17 @@ export default function AppShell({ children }) {
           })}
         </nav>
 
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          {isAdmin && (
+            <Link to="/admin"
+              className={`text-xs no-underline px-2 py-1 rounded ${
+                location.pathname === '/admin'
+                  ? 'bg-white/10 text-[#F5C518] font-semibold'
+                  : 'text-white/40 hover:text-white/70'
+              }`}>
+              🔐 Admin
+            </Link>
+          )}
           <button
             onClick={handleLogout}
             className="text-white/40 hover:text-white/70 text-xs border border-white/20 rounded px-2 py-1 cursor-pointer bg-transparent"
