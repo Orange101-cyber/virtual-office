@@ -6,19 +6,25 @@ export function useAdmin() {
   const [loading, setLoading] = useState(true);
 
   const loadCurrentUser = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) { setLoading(false); return; }
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) { setLoading(false); return; }
 
-    const { data } = await supabase.from('app_users')
-      .select('*')
-      .eq('user_id', session.user.id)
-      .single();
+      const { data, error } = await supabase.from('app_users')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .maybeSingle();
 
-    if (data) {
-      setCurrentUser({ ...data, email: session.user.email });
-    } else {
-      // User exists in auth but not in app_users — they're a regular member
-      setCurrentUser({ user_id: session.user.id, email: session.user.email, role: 'member', name: session.user.email.split('@')[0] });
+      if (error) {
+        console.error('useAdmin query error:', error);
+        setCurrentUser({ user_id: session.user.id, email: session.user.email, role: 'member', name: session.user.email?.split('@')[0] || 'User' });
+      } else if (data) {
+        setCurrentUser({ ...data, email: data.email || session.user.email });
+      } else {
+        setCurrentUser({ user_id: session.user.id, email: session.user.email, role: 'member', name: session.user.email?.split('@')[0] || 'User' });
+      }
+    } catch (err) {
+      console.error('useAdmin error:', err);
     }
     setLoading(false);
   }, []);
