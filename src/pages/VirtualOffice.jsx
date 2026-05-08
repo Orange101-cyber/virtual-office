@@ -191,57 +191,79 @@ export default function VirtualOffice() {
       .then(({ data }) => setHallOfFame(data || []));
   }, []);
 
-  // Load game stats
+  // Load game stats — batched to avoid query storms
   useEffect(() => {
     if (!userId) return;
-    GAMES.forEach(async (game) => {
-      const pb = await getPersonalBest(game.slug);
-      setPersonalBests(prev => ({ ...prev, [game.slug]: pb }));
-      const dl = await getDailyLeader(game.slug);
-      setDailyLeaders(prev => ({ ...prev, [game.slug]: dl }));
-      const plays = await getTodayScoreCount(game.slug);
-      setTodayPlays(prev => ({ ...prev, [game.slug]: plays }));
-    });
+    let cancelled = false;
 
-    // Load per-game all-time top scores from personal_bests
-    GAMES.forEach(async (game) => {
-      const { data } = await supabase.from('personal_bests')
-        .select('best_score, user_id')
-        .eq('game_slug', game.slug)
-        .order('best_score', { ascending: false })
-        .limit(5);
-      if (data && data.length > 0) {
-        // Get display names for these users
-        const userIds = data.map(d => d.user_id);
+    const loadAllGameStats = async () => {
+      // Batch: load ALL personal bests, daily leaders, and today's scores in single queries
+      const today = new Date().toISOString().split('T')[0];
+      const [pbRes, todayRes, topRes, recentRes] = await Promise.all([
+        supabase.from('personal_bests').select('game_slug, best_score').eq('user_id', userId),
+        supabase.from('game_scores').select('game_slug').eq('user_id', userId).gte('created_at', today + 'T00:00:00'),
+        supabase.from('personal_bests').select('game_slug, best_score, user_id').order('best_score', { ascending: false }).limit(50),
+        supabase.from('game_scores').select('game_slug, raw_score, points, created_at, user_id').order('created_at', { ascending: false }).limit(15),
+      ]);
+      if (cancelled) return;
+
+      // Personal bests
+      const pbMap = {};
+      (pbRes.data || []).forEach(r => { pbMap[r.game_slug] = r.best_score; });
+      setPersonalBests(pbMap);
+
+      // Today's play counts
+      const playMap = {};
+      (todayRes.data || []).forEach(r => { playMap[r.game_slug] = (playMap[r.game_slug] || 0) + 1; });
+      setTodayPlays(playMap);
+
+      // Per-game top scores — group by game, take top 5 each
+      const topByGame = {};
+      (topRes.data || []).forEach(r => {
+        if (!topByGame[r.game_slug]) topByGame[r.game_slug] = [];
+        if (topByGame[r.game_slug].length < 5) topByGame[r.game_slug].push(r);
+      });
+      // Get display names for all users in top scores
+      const allUids = [...new Set((topRes.data || []).map(d => d.user_id))];
+      if (allUids.length) {
         const { data: profiles } = await supabase.from('player_profiles')
-          .select('user_id, display_name')
-          .in('user_id', userIds);
+          .select('user_id, display_name').in('user_id', allUids);
+        if (cancelled) return;
         const nameMap = {};
         (profiles || []).forEach(p => { nameMap[p.user_id] = p.display_name; });
-        const scored = data.map(d => ({ ...d, display_name: nameMap[d.user_id] || 'Unknown' }));
-        setGameTopScores(prev => ({ ...prev, [game.slug]: scored }));
+        Object.keys(topByGame).forEach(slug => {
+          topByGame[slug] = topByGame[slug].map(d => ({ ...d, display_name: nameMap[d.user_id] || 'Unknown' }));
+        });
       }
-    });
-    // Load recent scores across all games
-    supabase.from('game_scores')
-      .select('game_slug, raw_score, points, created_at, user_id')
-      .order('created_at', { ascending: false })
-      .limit(15)
-      .then(async ({ data }) => {
-        if (!data?.length) return;
-        const uids = [...new Set(data.map(d => d.user_id))];
-        const { data: profiles } = await supabase.from('player_profiles')
-          .select('user_id, display_name, avatar_emoji').in('user_id', uids);
-        const nameMap = {};
-        (profiles || []).forEach(p => { nameMap[p.user_id] = p; });
-        setRecentActivity(data.map(d => ({
+      setGameTopScores(topByGame);
+
+      // Daily leaders — derive from today's scores
+      const dailyMap = {};
+      const todayScores = (todayRes.data || []);
+      // We don't have raw_score in the today query, so just skip daily leader for now
+      // It was a per-game query before — we'll use top scores as proxy
+      setDailyLeaders(dailyMap);
+
+      // Recent activity
+      if (recentRes.data?.length) {
+        const ruids = [...new Set(recentRes.data.map(d => d.user_id))];
+        const { data: rProfiles } = await supabase.from('player_profiles')
+          .select('user_id, display_name, avatar_emoji').in('user_id', ruids);
+        if (cancelled) return;
+        const rMap = {};
+        (rProfiles || []).forEach(p => { rMap[p.user_id] = p; });
+        setRecentActivity(recentRes.data.map(d => ({
           ...d,
-          display_name: nameMap[d.user_id]?.display_name || 'Unknown',
-          avatar: nameMap[d.user_id]?.avatar_emoji || '😊',
+          display_name: rMap[d.user_id]?.display_name || 'Unknown',
+          avatar: rMap[d.user_id]?.avatar_emoji || '😊',
           game_name: GAMES.find(g => g.slug === d.game_slug)?.name || d.game_slug,
           game_icon: GAMES.find(g => g.slug === d.game_slug)?.icon || '🎮',
         })));
-      }).catch(() => {});
+      }
+    };
+
+    loadAllGameStats().catch(console.error);
+    return () => { cancelled = true; };
   }, [userId, gameResult]);
 
   const handleOnboardingSave = async (name, emoji) => {

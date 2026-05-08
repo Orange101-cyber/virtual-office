@@ -65,6 +65,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     supabase.from('client_pages').select('id, client_name, page_category, url, focus_keyword, refresh_schedule, date_published, date_refreshed, is_refreshed, updated_at')
+      .limit(500)
       .then(({ data }) => {
         if (!data) return;
         setOverduePages(data.filter(isOverdue));

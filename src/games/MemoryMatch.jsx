@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 
 const EMOJI_SETS = [
   ['🐶','🐱','🐸','🦊','🐼','🐨','🦁','🐯'],
@@ -25,6 +25,7 @@ export default function MemoryMatch({ onComplete }) {
   const [startTime, setStartTime] = useState(null);
   const [finished, setFinished] = useState(false);
   const lockRef = useRef(false);
+  const flipTimerRef = useRef(null);
 
   useEffect(() => {
     const dayIdx = Math.floor(Date.now() / 86400000) % EMOJI_SETS.length;
@@ -57,7 +58,8 @@ export default function MemoryMatch({ onComplete }) {
           onComplete(totalMoves, pts, { moves: totalMoves, time: Math.round((Date.now() - startTime) / 1000) });
         }
       } else {
-        setTimeout(() => { setFlipped([]); lockRef.current = false; }, 800);
+        const t = setTimeout(() => { if (!finished) { setFlipped([]); lockRef.current = false; } }, 800);
+        flipTimerRef.current = t;
       }
     }
   };
