@@ -12,26 +12,36 @@ export default function ClientsIndex() {
   useEffect(() => {
     const all = [...activeClients, ...archivedClients];
     if (!all.length) return;
-    all.forEach(async (client) => {
-      const { count: reportCount } = await supabase.from('reports')
-        .select('id', { count: 'exact' }).eq('client_id', client.id);
-      const { count: planCount } = await supabase.from('content_plans')
-        .select('id', { count: 'exact' }).eq('client_name', client.name);
-      const { count: adCopyCount } = await supabase.from('ad_copy')
-        .select('id', { count: 'exact' }).eq('client_name', client.name);
-      const { data: profile } = await supabase.from('client_brand_voice')
-        .select('tone, business_description').eq('client_name', client.name).single();
+    let cancelled = false;
 
-      setClientStats(prev => ({
-        ...prev,
-        [client.name]: {
-          articles: reportCount || 0,
-          plans: planCount || 0,
-          adCopy: adCopyCount || 0,
+    const loadStats = async () => {
+      // Batch: load all counts in parallel (one query per table, not per client)
+      const [reportsRes, plansRes, adCopyRes, profilesRes] = await Promise.all([
+        supabase.from('reports').select('client_id'),
+        supabase.from('content_plans').select('client_name'),
+        supabase.from('ad_copy').select('client_name'),
+        supabase.from('client_brand_voice').select('client_name, tone, business_description'),
+      ]);
+      if (cancelled) return;
+
+      const stats = {};
+      all.forEach(client => {
+        const articles = (reportsRes.data || []).filter(r => r.client_id === client.id).length;
+        const plans = (plansRes.data || []).filter(r => r.client_name === client.name).length;
+        const adCopy = (adCopyRes.data || []).filter(r => r.client_name === client.name).length;
+        const profile = (profilesRes.data || []).find(r => r.client_name === client.name);
+        stats[client.name] = {
+          articles,
+          plans,
+          adCopy,
           hasProfile: !!(profile?.tone || profile?.business_description),
-        },
-      }));
-    });
+        };
+      });
+      setClientStats(stats);
+    };
+
+    loadStats().catch(console.error);
+    return () => { cancelled = true; };
   }, [activeClients, archivedClients]);
 
   const handleArchive = async (e, client) => {

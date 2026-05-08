@@ -17,9 +17,10 @@ export default function WhackAMole({ onComplete }) {
     if (finished) return;
     const idx = Math.floor(Math.random() * 16);
     setMoles(prev => { const n = [...prev]; n[idx] = true; return n; });
-    setTimeout(() => {
+    const t = setTimeout(() => {
       setMoles(prev => { const n = [...prev]; n[idx] = false; return n; });
     }, speedRef.current);
+    moleTimerRef.current = t;
   }, [finished]);
 
   useEffect(() => {
