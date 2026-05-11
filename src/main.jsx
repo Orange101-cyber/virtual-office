@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
 import AppShell from './components/AppShell';
@@ -32,9 +32,9 @@ import Login from './pages/Login';
 import { Toaster } from 'react-hot-toast';
 import './index.css';
 
-function AuthShell({ session, children }) {
+function AuthLayout({ session }) {
   if (!session) return <Navigate to="/login" replace />;
-  return <AppShell>{children}</AppShell>;
+  return <AppShell><Outlet /></AppShell>;
 }
 
 function Root() {
@@ -64,7 +64,7 @@ function Root() {
     <BrowserRouter basename="/virtual-office">
       <Routes>
         <Route path="/login" element={session ? <Navigate to="/" replace /> : <Login />} />
-        <Route element={<AuthShell session={session}><Routes>
+        <Route element={<AuthLayout session={session} />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/client-dashboard" element={<ClientDashboard />} />
           <Route path="/seo-checker" element={<SEOChecker />} />
@@ -89,7 +89,7 @@ function Root() {
           <Route path="/ad-remix" element={<AdRemix />} />
           <Route path="/client-bucket-list" element={<ClientBucketList />} />
           <Route path="/client-map" element={<ClientMap />} />
-        </Routes></AuthShell>} path="/*" />
+        </Route>
       </Routes>
     </BrowserRouter>
   );
