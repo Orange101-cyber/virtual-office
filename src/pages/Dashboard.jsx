@@ -47,6 +47,12 @@ const TOOLS = [
     icon: '📣',
   },
   {
+    name: 'Client Ad Dashboard',
+    description: 'Live view of all client campaigns — running status, daily/monthly spend, and notes.',
+    path: '/client-ad-dashboard',
+    icon: '📊',
+  },
+  {
     name: 'Video Hub',
     description: 'Video library organised by client and target service, plus timesheet tracking for the video team.',
     path: '/video-library',

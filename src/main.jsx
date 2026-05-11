@@ -28,6 +28,7 @@ import OpsBoard from './pages/OpsBoard';
 import AdRemix from './pages/AdRemix';
 import ClientBucketList from './pages/ClientBucketList';
 import ClientMap from './pages/ClientMap';
+import ClientAdDashboard from './pages/ClientAdDashboard';
 import Login from './pages/Login';
 import { Toaster } from 'react-hot-toast';
 import './index.css';
@@ -89,6 +90,7 @@ function Root() {
           <Route path="/ad-remix" element={<AdRemix />} />
           <Route path="/client-bucket-list" element={<ClientBucketList />} />
           <Route path="/client-map" element={<ClientMap />} />
+          <Route path="/client-ad-dashboard" element={<ClientAdDashboard />} />
         </Route>
       </Routes>
     </BrowserRouter>
