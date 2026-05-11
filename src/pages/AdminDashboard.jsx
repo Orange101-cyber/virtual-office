@@ -78,7 +78,7 @@ export default function AdminDashboard() {
     if (!confirm(`Send password reset email to ${email}?`)) return;
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin + '/virtual-office/login',
+        redirectTo: window.location.origin + (window.location.pathname.includes('/virtual-office') ? '/virtual-office/login' : '/login'),
       });
       if (error) throw error;
       toast.success(`Reset email sent to ${email}`);
