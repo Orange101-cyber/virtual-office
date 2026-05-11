@@ -13,6 +13,7 @@ const SEO_TOOLS = [
 ];
 
 const ADS_TOOLS = [
+  { path: '/client-ad-dashboard', label: 'Client Ad Dashboard', icon: '📊' },
   { path: '/ad-inspiration', label: 'Ad Inspiration', icon: '✨' },
   { path: '/ad-remix', label: 'Ad Remix', icon: '🎨' },
   { path: '/ad-copy-library', label: 'Copy Library', icon: '📋' },
