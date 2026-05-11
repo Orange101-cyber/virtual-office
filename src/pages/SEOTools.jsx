@@ -30,7 +30,7 @@ const TOOLS = [
     order: 4,
   },
   {
-    name: 'SEO Blog Checker',
+    name: 'SEO Checker',
     description: 'Run AI-powered SEO audits on blog posts. 55-item checklist, keyword density, schema generator, export report.',
     path: '/seo-checker',
     icon: '🔍',

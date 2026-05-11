@@ -153,7 +153,7 @@ export default function SEOChecker() {
       {/* SEO Checker tool bar */}
       <div className="flex flex-col h-full w-full">
         <div className="bg-[#1a1a1a] text-white px-4 h-9 flex items-center gap-3 shrink-0 border-t border-[#333]">
-          <div className="text-xs font-semibold text-white/70">SEO Blog Checker</div>
+          <div className="text-xs font-semibold text-white/70">SEO Checker</div>
           <div className="ml-auto flex items-center gap-2.5">
             <div className="text-[11px] text-white/50">
               {client ? (
