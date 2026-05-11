@@ -82,7 +82,7 @@ ${failedItems || '  All items complete!'}
 ${aiSection}${gscSection}
 
 ${'─'.repeat(40)}
-Report by CYL SEO Blog Checker
+Report by CYL SEO Checker
 Campaigns You Love · cylglobal.com
 `.trim();
 
