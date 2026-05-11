@@ -92,6 +92,7 @@ function Root() {
           <Route path="/client-map" element={<ClientMap />} />
           <Route path="/client-ad-dashboard" element={<ClientAdDashboard />} />
         </Route>
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   );
