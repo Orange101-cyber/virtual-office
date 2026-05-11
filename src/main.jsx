@@ -32,8 +32,9 @@ import Login from './pages/Login';
 import { Toaster } from 'react-hot-toast';
 import './index.css';
 
-function AuthRoute({ session, children }) {
-  return session ? <AppShell>{children}</AppShell> : <Navigate to="/login" replace />;
+function AuthShell({ session, children }) {
+  if (!session) return <Navigate to="/login" replace />;
+  return <AppShell>{children}</AppShell>;
 }
 
 function Root() {
@@ -63,30 +64,32 @@ function Root() {
     <BrowserRouter basename="/virtual-office">
       <Routes>
         <Route path="/login" element={session ? <Navigate to="/" replace /> : <Login />} />
-        <Route path="/" element={<AuthRoute session={session}><Dashboard /></AuthRoute>} />
-        <Route path="/client-dashboard" element={<AuthRoute session={session}><ClientDashboard /></AuthRoute>} />
-        <Route path="/seo-checker" element={<AuthRoute session={session}><SEOChecker /></AuthRoute>} />
-        <Route path="/content-planner" element={<AuthRoute session={session}><ContentPlanner /></AuthRoute>} />
-        <Route path="/brief-generator" element={<AuthRoute session={session}><BriefGenerator /></AuthRoute>} />
-        <Route path="/keyword-research" element={<AuthRoute session={session}><KeywordResearch /></AuthRoute>} />
-        <Route path="/article-writer" element={<AuthRoute session={session}><ArticleWriter /></AuthRoute>} />
-        <Route path="/virtual-office-games" element={<AuthRoute session={session}><VirtualOffice /></AuthRoute>} />
-        <Route path="/seo-tools" element={<AuthRoute session={session}><SEOTools /></AuthRoute>} />
-        <Route path="/ads-hub" element={<AuthRoute session={session}><AdsHub /></AuthRoute>} />
-        <Route path="/clients" element={<AuthRoute session={session}><ClientsIndex /></AuthRoute>} />
-        <Route path="/client/:clientName" element={<AuthRoute session={session}><ClientHub /></AuthRoute>} />
-        <Route path="/ad-inspiration" element={<AuthRoute session={session}><AdInspiration /></AuthRoute>} />
-        <Route path="/ad-copy-library" element={<AuthRoute session={session}><AdCopyLibrary /></AuthRoute>} />
-        <Route path="/ad-creative-brief" element={<AuthRoute session={session}><AdCreativeBrief /></AuthRoute>} />
-        <Route path="/brand-voice" element={<AuthRoute session={session}><BrandVoice /></AuthRoute>} />
-        <Route path="/video-library" element={<AuthRoute session={session}><VideoLibrary /></AuthRoute>} />
-        <Route path="/video-timesheet" element={<AuthRoute session={session}><VideoTimesheet /></AuthRoute>} />
-        <Route path="/shoot-planner" element={<AuthRoute session={session}><ShootPlanner /></AuthRoute>} />
-        <Route path="/admin" element={<AuthRoute session={session}><AdminDashboard /></AuthRoute>} />
-        <Route path="/ops-board" element={<AuthRoute session={session}><OpsBoard /></AuthRoute>} />
-        <Route path="/ad-remix" element={<AuthRoute session={session}><AdRemix /></AuthRoute>} />
-        <Route path="/client-bucket-list" element={<AuthRoute session={session}><ClientBucketList /></AuthRoute>} />
-        <Route path="/client-map" element={<AuthRoute session={session}><ClientMap /></AuthRoute>} />
+        <Route element={<AuthShell session={session}><Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/client-dashboard" element={<ClientDashboard />} />
+          <Route path="/seo-checker" element={<SEOChecker />} />
+          <Route path="/content-planner" element={<ContentPlanner />} />
+          <Route path="/brief-generator" element={<BriefGenerator />} />
+          <Route path="/keyword-research" element={<KeywordResearch />} />
+          <Route path="/article-writer" element={<ArticleWriter />} />
+          <Route path="/virtual-office-games" element={<VirtualOffice />} />
+          <Route path="/seo-tools" element={<SEOTools />} />
+          <Route path="/ads-hub" element={<AdsHub />} />
+          <Route path="/clients" element={<ClientsIndex />} />
+          <Route path="/client/:clientName" element={<ClientHub />} />
+          <Route path="/ad-inspiration" element={<AdInspiration />} />
+          <Route path="/ad-copy-library" element={<AdCopyLibrary />} />
+          <Route path="/ad-creative-brief" element={<AdCreativeBrief />} />
+          <Route path="/brand-voice" element={<BrandVoice />} />
+          <Route path="/video-library" element={<VideoLibrary />} />
+          <Route path="/video-timesheet" element={<VideoTimesheet />} />
+          <Route path="/shoot-planner" element={<ShootPlanner />} />
+          <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/ops-board" element={<OpsBoard />} />
+          <Route path="/ad-remix" element={<AdRemix />} />
+          <Route path="/client-bucket-list" element={<ClientBucketList />} />
+          <Route path="/client-map" element={<ClientMap />} />
+        </Routes></AuthShell>} path="/*" />
       </Routes>
     </BrowserRouter>
   );
