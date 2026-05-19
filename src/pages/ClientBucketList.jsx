@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useClients } from '../hooks/useClients';
+import * as dfs from '../lib/dataForSeo';
 import toast from 'react-hot-toast';
 
 const CATEGORIES = [
@@ -83,6 +84,7 @@ export default function ClientBucketList() {
   const [loading, setLoading] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showDueOnly, setShowDueOnly] = useState(false);
+  const [showScan, setShowScan] = useState(false);
 
   // Resolve client id
   useEffect(() => {
@@ -361,6 +363,10 @@ export default function ClientBucketList() {
               className="bg-white border border-gray-300 text-gray-700 rounded px-3 py-1.5 text-[11px] font-semibold cursor-pointer hover:border-[#F5C518]">
               📥 Import CSV
             </button>
+            <button onClick={() => setShowScan(true)}
+              className="bg-white border border-gray-300 text-gray-700 rounded px-3 py-1.5 text-[11px] font-semibold cursor-pointer hover:border-[#F5C518]">
+              🔍 Scan Website
+            </button>
             {dueCount > 0 && (
               <button onClick={() => setShowDueOnly(!showDueOnly)}
                 className={`rounded px-3 py-1.5 text-[11px] font-bold cursor-pointer border ${
@@ -402,6 +408,17 @@ export default function ClientBucketList() {
               category={category}
               onImport={handleImportRows}
               onClose={() => setShowImport(false)}
+            />
+          )}
+
+          {/* Website Scan Modal */}
+          {showScan && (
+            <WebsiteScanModal
+              clientName={selectedClient}
+              clientId={selectedClientId}
+              existingPages={pages}
+              onImport={handleImportRows}
+              onClose={() => setShowScan(false)}
             />
           )}
 
@@ -943,6 +960,233 @@ function CsvImportModal({ category, onImport, onClose }) {
             <button onClick={() => onImport(mapped)} disabled={!mapped.length}
               className="bg-[#F5C518] text-[#1a1a1a] border-none rounded px-4 py-1.5 text-[11px] font-bold cursor-pointer hover:bg-[#e6b800] disabled:opacity-40">
               ✓ Import {mapped.length || ''} {mapped.length === 1 ? 'Row' : 'Rows'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Website Scan Modal ──
+function WebsiteScanModal({ clientName, clientId, existingPages, onImport, onClose }) {
+  const [domain, setDomain] = useState('');
+  const [scanning, setScanning] = useState(false);
+  const [scanStep, setScanStep] = useState('');
+  const [discovered, setDiscovered] = useState([]);
+  const [selections, setSelections] = useState({});
+
+  useEffect(() => {
+    if (!clientName) return;
+    supabase.from('client_brand_voice')
+      .select('website_url')
+      .eq('client_name', clientName)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.website_url) {
+          try {
+            const url = new URL(data.website_url.startsWith('http') ? data.website_url : 'https://' + data.website_url);
+            setDomain(url.hostname);
+          } catch { setDomain(data.website_url); }
+        }
+      });
+  }, [clientName]);
+
+  const existingUrls = new Set((existingPages || []).map(p => (p.url || '').toLowerCase().trim().replace(/\/$/, '')));
+  const existingKws = new Set((existingPages || []).map(p => (p.focus_keyword || '').toLowerCase().trim()).filter(Boolean));
+
+  const guessCategory = (url, title) => {
+    const u = (url || '').toLowerCase();
+    const t = (title || '').toLowerCase();
+    if (u.includes('/blog/') || u.includes('/news/') || u.includes('/article')) return 'blog';
+    if (u.includes('/landing') || u.includes('/lp/') || u.includes('/offer')) return 'landing';
+    if (u.includes('/service') || u.includes('/what-we-do') || u.includes('/our-')) return 'service';
+    if (t.includes('blog') || t.includes('tips') || t.includes('guide') || t.includes('how to') || t.includes('reasons')) return 'blog';
+    if (t.includes('service') || t.includes('solution')) return 'service';
+    return 'general';
+  };
+
+  const handleScan = async () => {
+    if (!domain.trim()) return toast.error('Enter a domain');
+    if (!dfs.isConfigured()) return toast.error('DataForSEO not configured');
+
+    setScanning(true);
+    setDiscovered([]);
+    setSelections({});
+
+    try {
+      setScanStep('Fetching ranked pages from DataForSEO...');
+      const ranked = await dfs.getRankedKeywordsForDomain(domain.trim(), 100);
+
+      setScanStep(`Processing ${ranked.length} keywords...`);
+      const pageMap = {};
+      ranked.forEach(kw => {
+        const url = (kw.url || '').replace(/\/$/, '');
+        if (!url) return;
+        if (!pageMap[url]) pageMap[url] = { url, keywords: [], bestKeyword: null, bestSv: 0, bestRank: 999 };
+        pageMap[url].keywords.push(kw);
+        if ((kw.search_volume || 0) > pageMap[url].bestSv) {
+          pageMap[url].bestSv = kw.search_volume;
+          pageMap[url].bestKeyword = kw.keyword;
+        }
+        if ((kw.rank || 999) < pageMap[url].bestRank) pageMap[url].bestRank = kw.rank;
+      });
+
+      const pages = Object.values(pageMap);
+      setScanStep(`Found ${pages.length} pages — fetching titles...`);
+
+      const titleData = await Promise.all(pages.slice(0, 30).map(async (p) => {
+        try {
+          const crawl = await dfs.crawlPage(p.url);
+          return { url: p.url, title: crawl?.meta?.title || '', h1: (crawl?.meta?.htags?.h1 || [])[0] || '', wordCount: crawl?.meta?.content?.plain_text_word_count || 0 };
+        } catch { return { url: p.url, title: '', h1: '', wordCount: 0 }; }
+      }));
+      const titleMap = {};
+      titleData.forEach(t => { titleMap[t.url] = t; });
+
+      const results = pages.map(p => {
+        const td = titleMap[p.url] || {};
+        const urlClean = p.url.toLowerCase().trim().replace(/\/$/, '');
+        return {
+          url: p.url, title: td.title || '', wordCount: td.wordCount || 0,
+          focus_keyword: p.bestKeyword || (td.title || '').split(/[|–:—]/)[0].trim().substring(0, 60),
+          category: guessCategory(p.url, td.title || td.h1),
+          rank: p.bestRank, sv: p.bestSv, keywordCount: p.keywords.length,
+          isDuplicate: existingUrls.has(urlClean),
+          kwDuplicate: p.bestKeyword ? existingKws.has(p.bestKeyword.toLowerCase()) : false,
+        };
+      }).sort((a, b) => (a.isDuplicate ? 1 : 0) - (b.isDuplicate ? 1 : 0) || b.sv - a.sv);
+
+      setDiscovered(results);
+      const sel = {};
+      results.forEach((r, i) => { sel[i] = !r.isDuplicate; });
+      setSelections(sel);
+
+      const newCount = results.filter(r => !r.isDuplicate).length;
+      toast.success(`Found ${results.length} pages · ${newCount} new · ${results.length - newCount} already in bucket list`);
+    } catch (err) {
+      toast.error('Scan error: ' + err.message);
+    }
+    setScanning(false);
+    setScanStep('');
+  };
+
+  const handleImportSelected = () => {
+    const selected = discovered.filter((_, i) => selections[i]).map(d => ({
+      url: d.url, focus_keyword: d.focus_keyword, page_category: d.category,
+    }));
+    if (!selected.length) return toast.error('Select at least one page');
+    onImport(selected);
+    onClose();
+  };
+
+  const selectedCount = Object.values(selections).filter(Boolean).length;
+  const newCount = discovered.filter(r => !r.isDuplicate).length;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between shrink-0">
+          <div>
+            <div className="text-[10px] font-bold uppercase text-[#F5C518]">🔍 Scan Website</div>
+            <div className="text-sm font-semibold text-[#1a1a1a] mt-0.5">Discover pages for {clientName}</div>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-[#1a1a1a] bg-transparent border-none text-xl cursor-pointer">×</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5">
+          <div className="flex gap-2 mb-4">
+            <input value={domain} onChange={e => setDomain(e.target.value)} placeholder="e.g. professionallendingsolutions.com.au"
+              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-xs bg-[#f8f8f6] focus:outline-none focus:border-[#F5C518]" />
+            <button onClick={handleScan} disabled={scanning || !domain.trim()}
+              className="bg-[#F5C518] text-[#1a1a1a] border-none rounded-lg px-5 py-2 text-[11px] font-bold cursor-pointer hover:bg-[#e6b800] disabled:opacity-40 shrink-0">
+              {scanning ? (scanStep || 'Scanning...') : '🔍 Scan'}
+            </button>
+          </div>
+
+          {discovered.length > 0 && (
+            <div className="bg-[#f8f8f6] rounded-lg p-3 mb-4 flex items-center justify-between flex-wrap gap-2">
+              <div className="text-[11px] text-gray-600">
+                Found <b>{discovered.length}</b> pages · <b className="text-green-600">{newCount}</b> new · <b className="text-gray-400">{discovered.length - newCount}</b> already added · <b className="text-[#F5C518]">{selectedCount}</b> selected
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => { const s = {}; discovered.forEach((r, i) => { s[i] = !r.isDuplicate; }); setSelections(s); }}
+                  className="text-[10px] text-gray-500 bg-white border border-gray-200 rounded px-2 py-1 cursor-pointer hover:border-[#F5C518]">New only</button>
+                <button onClick={() => { const s = {}; discovered.forEach((_, i) => { s[i] = true; }); setSelections(s); }}
+                  className="text-[10px] text-gray-500 bg-white border border-gray-200 rounded px-2 py-1 cursor-pointer hover:border-[#F5C518]">All</button>
+                <button onClick={() => setSelections({})}
+                  className="text-[10px] text-gray-500 bg-white border border-gray-200 rounded px-2 py-1 cursor-pointer hover:border-gray-400">Clear</button>
+              </div>
+            </div>
+          )}
+
+          {discovered.length > 0 && (
+            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+              <table className="w-full text-[11px]">
+                <thead className="bg-[#f8f8f6] border-b border-gray-200 sticky top-0">
+                  <tr className="text-left text-gray-500">
+                    <th className="px-3 py-2 w-8"></th>
+                    <th className="px-3 py-2 font-bold uppercase text-[9px]">Page</th>
+                    <th className="px-3 py-2 font-bold uppercase text-[9px]">Focus Keyword</th>
+                    <th className="px-3 py-2 font-bold uppercase text-[9px]">Category</th>
+                    <th className="px-3 py-2 font-bold uppercase text-[9px] text-right">SV</th>
+                    <th className="px-3 py-2 font-bold uppercase text-[9px] text-right">Rank</th>
+                    <th className="px-3 py-2 font-bold uppercase text-[9px] text-right">Words</th>
+                    <th className="px-3 py-2 font-bold uppercase text-[9px]">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {discovered.map((page, i) => (
+                    <tr key={i} className={`border-b border-gray-100 ${page.isDuplicate ? 'opacity-40 bg-gray-50' : selections[i] ? 'bg-green-50/30' : ''}`}>
+                      <td className="px-3 py-2">
+                        <input type="checkbox" checked={selections[i] || false} onChange={e => setSelections(s => ({ ...s, [i]: e.target.checked }))} className="accent-[#F5C518]" />
+                      </td>
+                      <td className="px-3 py-2 max-w-[220px]">
+                        <div className="text-[11px] font-semibold text-[#1a1a1a] truncate" title={page.title}>{page.title || page.url}</div>
+                        <div className="text-[9px] text-gray-400 truncate">{page.url.replace(/^https?:\/\//, '')}</div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <input value={page.focus_keyword} onChange={e => setDiscovered(prev => prev.map((d, j) => j === i ? { ...d, focus_keyword: e.target.value } : d))}
+                          className="border border-gray-200 rounded px-1.5 py-1 text-[10px] bg-[#f8f8f6] w-full max-w-[160px]" />
+                      </td>
+                      <td className="px-3 py-2">
+                        <select value={page.category} onChange={e => setDiscovered(prev => prev.map((d, j) => j === i ? { ...d, category: e.target.value } : d))}
+                          className="border border-gray-200 rounded px-1.5 py-1 text-[10px] bg-[#f8f8f6]">
+                          {CATEGORIES.filter(c => c.id !== 'video').map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-3 py-2 text-right font-semibold">{page.sv > 0 ? page.sv.toLocaleString() : '—'}</td>
+                      <td className="px-3 py-2 text-right">
+                        {page.rank < 999 ? <span className={`font-semibold ${page.rank <= 3 ? 'text-green-600' : page.rank <= 10 ? 'text-orange-500' : 'text-gray-500'}`}>#{page.rank}</span> : '—'}
+                      </td>
+                      <td className="px-3 py-2 text-right text-gray-500">{page.wordCount > 0 ? page.wordCount.toLocaleString() : '—'}</td>
+                      <td className="px-3 py-2">
+                        {page.isDuplicate ? <span className="text-[9px] font-bold bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded">Already added</span> :
+                         page.kwDuplicate ? <span className="text-[9px] font-bold bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded">KW overlap</span> :
+                         <span className="text-[9px] font-bold bg-green-50 text-green-600 px-1.5 py-0.5 rounded">New</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {scanning && (
+            <div className="text-center py-10">
+              <div className="w-6 h-6 border-2 border-gray-200 border-t-[#F5C518] rounded-full animate-spin mx-auto mb-3"></div>
+              <div className="text-[11px] text-gray-500">{scanStep}</div>
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-between shrink-0 bg-[#fafafa]">
+          <div className="text-[10px] text-gray-500">{selectedCount > 0 ? `${selectedCount} pages selected` : 'Scan a domain to discover pages'}</div>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="bg-transparent border border-gray-300 text-gray-600 rounded px-4 py-1.5 text-[11px] cursor-pointer">Cancel</button>
+            <button onClick={handleImportSelected} disabled={selectedCount === 0}
+              className="bg-[#F5C518] text-[#1a1a1a] border-none rounded px-4 py-1.5 text-[11px] font-bold cursor-pointer hover:bg-[#e6b800] disabled:opacity-30">
+              ✓ Import {selectedCount} Page{selectedCount !== 1 ? 's' : ''}
             </button>
           </div>
         </div>
