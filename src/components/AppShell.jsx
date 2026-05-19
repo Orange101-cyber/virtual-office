@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAdmin } from '../hooks/useAdmin';
 
 const SEO_TOOLS = [
+  { path: '/seo-chat', label: 'SEO Assistant', icon: '🤖' },
   { path: '/keyword-research', label: 'Keyword Research', icon: '🔑' },
   { path: '/brief-generator', label: 'Brief Generator', icon: '📝' },
   { path: '/content-planner', label: 'Content Planner', icon: '📅' },
