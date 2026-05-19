@@ -151,8 +151,13 @@ export default function ClientBucketList() {
   const dueCount = useMemo(() => pages.filter(isDueForRefresh).length, [pages]);
 
   const handleSave = async (data) => {
+    // Convert empty strings to null for date columns (Postgres rejects "")
+    const cleaned = { ...data };
+    ['date_published', 'date_refreshed'].forEach(key => {
+      if (cleaned[key] === '') cleaned[key] = null;
+    });
     const payload = {
-      ...data,
+      ...cleaned,
       client_name: selectedClient,
       client_id: selectedClientId,
       page_category: category,
