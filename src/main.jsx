@@ -23,6 +23,7 @@ import BrandVoice from './pages/BrandVoice';
 import VideoLibrary from './pages/VideoLibrary';
 import VideoTimesheet from './pages/VideoTimesheet';
 import ShootPlanner from './pages/ShootPlanner';
+import EditWorkflow from './pages/EditWorkflow';
 import AdminDashboard from './pages/AdminDashboard';
 import OpsBoard from './pages/OpsBoard';
 import AdRemix from './pages/AdRemix';
@@ -86,6 +87,7 @@ function Root() {
           <Route path="/video-library" element={<VideoLibrary />} />
           <Route path="/video-timesheet" element={<VideoTimesheet />} />
           <Route path="/shoot-planner" element={<ShootPlanner />} />
+          <Route path="/edit-workflow" element={<EditWorkflow />} />
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/ops-board" element={<OpsBoard />} />
           <Route path="/ad-remix" element={<AdRemix />} />
