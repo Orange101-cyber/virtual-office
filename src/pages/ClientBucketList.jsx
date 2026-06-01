@@ -614,6 +614,7 @@ function PageForm({ category, buckets, initial, onSave, onCancel }) {
     is_refreshed: initial?.is_refreshed || false,
     date_refreshed: initial?.date_refreshed || '',
     new_focus_keyword: initial?.new_focus_keyword || '',
+    index_setting: initial?.index_setting || (category === 'landing' ? 'noindex' : 'index'),
     approved_in_airtable: initial?.approved_in_airtable || false,
     is_published: initial?.is_published || false,
     has_video: initial?.has_video || false,
@@ -685,6 +686,13 @@ function PageForm({ category, buckets, initial, onSave, onCancel }) {
               <Label>Focus Keyword</Label>
               <input value={form.focus_keyword} onChange={set('focus_keyword')} placeholder="main focus keyphrase"
                 className="input-f" />
+            </div>
+            <div>
+              <Label>Index Setting</Label>
+              <select value={form.index_setting} onChange={set('index_setting')} className="input-f">
+                <option value="index">Index</option>
+                <option value="noindex">No-Index</option>
+              </select>
             </div>
           </>
         )}
