@@ -77,6 +77,7 @@ export default function ClientBucketList() {
   const [category, setCategory] = useState('general');
   const [pages, setPages] = useState([]);
   const [reports, setReports] = useState([]);
+  const [healthScores, setHealthScores] = useState([]);
   const [buckets, setBuckets] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -95,7 +96,7 @@ export default function ClientBucketList() {
 
   // Load pages + reports + brand voice buckets for this client
   useEffect(() => {
-    if (!selectedClient) { setPages([]); setReports([]); setBuckets([]); return; }
+    if (!selectedClient) { setPages([]); setReports([]); setHealthScores([]); setBuckets([]); return; }
     setLoading(true);
     Promise.all([
       supabase.from('client_pages').select('*').eq('client_name', selectedClient).order('updated_at', { ascending: false }),
@@ -103,9 +104,11 @@ export default function ClientBucketList() {
         ? supabase.from('reports').select('id, url, focus_keyphrase, checklist_state').eq('client_id', selectedClientId)
         : Promise.resolve({ data: [] }),
       supabase.from('client_brand_voice').select('services').eq('client_name', selectedClient).single(),
-    ]).then(([pagesRes, reportsRes, bvRes]) => {
+      supabase.from('site_health').select('url, mobile_performance, mobile_accessibility, mobile_seo').eq('client_name', selectedClient),
+    ]).then(([pagesRes, reportsRes, bvRes, healthRes]) => {
       setPages(pagesRes.error ? [] : (pagesRes.data || []));
       setReports(reportsRes.data || []);
+      setHealthScores(healthRes.data || []);
       const bvBuckets = (bvRes.data?.services || '').split('\n').map(s => s.trim()).filter(Boolean);
       setBuckets(bvBuckets);
       setLoading(false);
@@ -125,6 +128,12 @@ export default function ClientBucketList() {
     const clean = url.toLowerCase().trim().replace(/\/$/, '');
     const match = reports.find(r => (r.url || '').toLowerCase().trim().replace(/\/$/, '') === clean);
     return match?.id || null;
+  };
+
+  const healthForUrl = (url) => {
+    if (!url) return null;
+    const clean = url.toLowerCase().trim().replace(/\/$/, '');
+    return healthScores.find(h => (h.url || '').toLowerCase().trim().replace(/\/$/, '') === clean) || null;
   };
 
   const filteredPages = useMemo(() => {
@@ -440,6 +449,7 @@ export default function ClientBucketList() {
                 onPlanRefresh={handlePlanRefresh}
                 scoreForUrl={scoreForUrl}
                 reportIdForUrl={reportIdForUrl}
+                healthForUrl={healthForUrl}
               />
             )}
           </div>
@@ -450,7 +460,7 @@ export default function ClientBucketList() {
 }
 
 // ── Page Table (shows different columns per category) ──
-function PageTable({ category, pages, onEdit, onDelete, onPlanRefresh, scoreForUrl, reportIdForUrl }) {
+function PageTable({ category, pages, onEdit, onDelete, onPlanRefresh, scoreForUrl, reportIdForUrl, healthForUrl }) {
   return (
     <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
@@ -468,7 +478,8 @@ function PageTable({ category, pages, onEdit, onDelete, onPlanRefresh, scoreForU
                   <th className="px-3 py-2 font-bold uppercase text-[9px]">Focus Keyword</th>
                   <th className="px-3 py-2 font-bold uppercase text-[9px]">URL</th>
                   <th className="px-3 py-2 font-bold uppercase text-[9px]">Bucket</th>
-                  <th className="px-3 py-2 font-bold uppercase text-[9px]">Score</th>
+                  <th className="px-3 py-2 font-bold uppercase text-[9px]" title="SEO Checker checklist score">SEO Score</th>
+                  <th className="px-3 py-2 font-bold uppercase text-[9px] text-center" title="PageSpeed Insights — Performance / Accessibility / SEO">PSI</th>
                   {(category === 'general' || category === 'service') && (
                     <th className="px-3 py-2 font-bold uppercase text-[9px]">Refresh</th>
                   )}
@@ -492,9 +503,10 @@ function PageTable({ category, pages, onEdit, onDelete, onPlanRefresh, scoreForU
           </thead>
           <tbody>
             {pages.map(p => {
-              const score = category !== 'video' ? scoreForUrl(p.url) : null;
-              const reportId = category !== 'video' ? reportIdForUrl(p.url) : null;
-              const dueDays = category !== 'video' ? daysUntilRefresh(p) : null;
+              const score = scoreForUrl(p.url);
+              const reportId = reportIdForUrl(p.url);
+              const health = healthForUrl(p.url);
+              const dueDays = daysUntilRefresh(p);
               const isDue = dueDays !== null && dueDays <= 0;
               const isSoon = dueDays !== null && dueDays > 0 && dueDays <= 30;
               return (
@@ -549,6 +561,17 @@ function PageTable({ category, pages, onEdit, onDelete, onPlanRefresh, scoreForU
                             className="text-[9px] text-gray-400 hover:text-[#F5C518] no-underline">
                             Audit →
                           </Link>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {health ? (
+                          <Link to="/site-health" className="no-underline flex items-center justify-center gap-1" title={`Perf: ${health.mobile_performance} · Acc: ${health.mobile_accessibility} · SEO: ${health.mobile_seo}`}>
+                            <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${health.mobile_performance >= 90 ? 'bg-green-50 text-green-700' : health.mobile_performance >= 50 ? 'bg-orange-50 text-orange-600' : 'bg-red-50 text-red-600'}`}>{health.mobile_performance}</span>
+                            <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${health.mobile_accessibility >= 90 ? 'bg-green-50 text-green-700' : health.mobile_accessibility >= 50 ? 'bg-orange-50 text-orange-600' : 'bg-red-50 text-red-600'}`}>{health.mobile_accessibility}</span>
+                            <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${health.mobile_seo >= 90 ? 'bg-green-50 text-green-700' : health.mobile_seo >= 50 ? 'bg-orange-50 text-orange-600' : 'bg-red-50 text-red-600'}`}>{health.mobile_seo}</span>
+                          </Link>
+                        ) : (
+                          <span className="text-[9px] text-gray-300">—</span>
                         )}
                       </td>
                       {(category === 'general' || category === 'service') && (
