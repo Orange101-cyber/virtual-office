@@ -113,19 +113,25 @@ export default function SiteHealth() {
 
         // Auto-import any Bucket List URLs not already in site_health
         try {
-          const { data: allPages } = await supabase.from('client_pages').select('client_name, url').not('url', 'is', null);
-          if (allPages?.length) {
-            const existingUrls = new Set(existingScans.map(s => s.url.toLowerCase().replace(/\/$/, '')));
-            const newUrls = allPages.filter(p => p.url && !existingUrls.has(p.url.toLowerCase().replace(/\/$/, '')));
+          const { data: allPages, error: pagesErr } = await supabase.from('client_pages').select('client_name, url');
+          if (pagesErr) console.error('Bucket list load error:', pagesErr);
+          const validPages = (allPages || []).filter(p => p.url && p.url.trim() && p.client_name);
+          if (validPages.length) {
+            const existingUrls = new Set(existingScans.map(s => (s.url || '').toLowerCase().replace(/\/$/, '')));
+            const newUrls = validPages.filter(p => !existingUrls.has(p.url.toLowerCase().replace(/\/$/, '')));
             if (newUrls.length > 0) {
-              const rows = newUrls.map(p => ({ client_name: p.client_name, url: p.url, created_at: new Date().toISOString() }));
-              const { data: inserted } = await supabase.from('site_health').insert(rows).select();
-              if (inserted?.length) {
-                setScans(prev => [...prev, ...inserted]);
+              // Insert in batches of 20 to avoid payload limits
+              for (let i = 0; i < newUrls.length; i += 20) {
+                const batch = newUrls.slice(i, i + 20).map(p => ({ client_name: p.client_name, url: p.url, created_at: new Date().toISOString() }));
+                const { data: inserted, error: insertErr } = await supabase.from('site_health').insert(batch).select();
+                if (insertErr) console.error('Site health insert error:', insertErr);
+                if (inserted?.length) {
+                  setScans(prev => [...prev, ...inserted]);
+                }
               }
             }
           }
-        } catch {}
+        } catch (err) { console.error('Auto-import error:', err); }
 
         setLoading(false);
       })
