@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useClients } from '../hooks/useClients';
-import { startBackgroundScan, onScanProgress, isScanning as isBgScanning } from '../lib/backgroundScanner';
+import { startBackgroundScan, onScanProgress, isScanning as isBgScanning, resumeScan } from '../lib/backgroundScanner';
 import toast from 'react-hot-toast';
 
 const PSI_API = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed';
@@ -81,8 +81,9 @@ export default function SiteHealth() {
       .then(({ data }) => { if (data) setScans(data); });
   }, []);
 
-  // Listen for background scan progress
+  // Resume any interrupted scan + listen for progress
   useEffect(() => {
+    resumeScan();
     const unsub = onScanProgress((progress) => {
       setBgProgress(progress);
       if (progress.done) {

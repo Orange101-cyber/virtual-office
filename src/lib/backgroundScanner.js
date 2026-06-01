@@ -1,18 +1,28 @@
-// Background scanner that persists across page navigation.
-// Runs as a singleton — only one scan loop at a time.
+// Background scanner — saves a scan queue to Supabase so it survives
+// page navigation and even full page reloads.
 import { supabase } from './supabase';
 
 const PSI_API = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed';
+const QUEUE_KEY = 'cyl_scan_queue';
 
-let _scanning = false;
-let _progress = { current: 0, total: 0, url: '', done: false };
+let _running = false;
 let _listeners = new Set();
-
-export function getScanProgress() { return _progress; }
-export function isScanning() { return _scanning; }
+let _progress = { current: 0, total: 0, url: '', done: false };
 
 function notify() { _listeners.forEach(fn => fn({ ..._progress })); }
 export function onScanProgress(fn) { _listeners.add(fn); return () => _listeners.delete(fn); }
+export function getScanProgress() { return _progress; }
+export function isScanning() { return _running; }
+
+function saveQueue(queue) {
+  try { localStorage.setItem(QUEUE_KEY, JSON.stringify(queue)); } catch {}
+}
+function loadQueue() {
+  try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || 'null'); } catch { return null; }
+}
+function clearQueue() {
+  try { localStorage.removeItem(QUEUE_KEY); } catch {}
+}
 
 async function runOne(url, strategy, apiKey) {
   const keyParam = apiKey ? `&key=${apiKey}` : '';
@@ -34,20 +44,30 @@ async function runOne(url, strategy, apiKey) {
   };
 }
 
-export async function startBackgroundScan(scanIds, apiKey) {
-  if (_scanning) return;
-  _scanning = true;
+async function processQueue(apiKey) {
+  if (_running) return;
+  _running = true;
 
-  // Load the scan rows we need
-  const { data: rows } = await supabase.from('site_health').select('id, url').in('id', scanIds);
-  if (!rows?.length) { _scanning = false; return; }
+  const queue = loadQueue();
+  if (!queue || !queue.ids?.length) {
+    _running = false;
+    _progress = { current: 0, total: 0, url: '', done: true };
+    clearQueue();
+    notify();
+    return;
+  }
 
-  _progress = { current: 0, total: rows.length, url: '', done: false };
-  notify();
+  const remaining = queue.ids.filter(id => !queue.completed?.includes(id));
+  const total = queue.ids.length;
+  const doneCount = total - remaining.length;
 
-  for (let i = 0; i < rows.length; i++) {
-    const scan = rows[i];
-    _progress = { current: i + 1, total: rows.length, url: scan.url, done: false };
+  for (let i = 0; i < remaining.length; i++) {
+    const id = remaining[i];
+    // Get URL for this scan
+    const { data: scan } = await supabase.from('site_health').select('url').eq('id', id).maybeSingle();
+    if (!scan) continue;
+
+    _progress = { current: doneCount + i + 1, total, url: scan.url, done: false };
     notify();
 
     try {
@@ -62,16 +82,39 @@ export async function startBackgroundScan(scanIds, apiKey) {
         desktop_best_practices: desktop.bestPractices, desktop_seo: desktop.seo,
         desktop_lcp: desktop.lcp, desktop_cls: desktop.cls,
         last_scanned: new Date().toISOString(),
-      }).eq('id', scan.id);
+      }).eq('id', id);
     } catch {
-      // Skip failed URLs, continue scanning
+      // Skip failed, continue
     }
 
-    // Rate limit: 2s between URLs
-    if (i < rows.length - 1) await new Promise(r => setTimeout(r, 2000));
+    // Mark completed in queue
+    const q = loadQueue();
+    if (q) {
+      q.completed = [...(q.completed || []), id];
+      saveQueue(q);
+    }
+
+    if (i < remaining.length - 1) await new Promise(r => setTimeout(r, 2000));
   }
 
-  _progress = { current: rows.length, total: rows.length, url: '', done: true };
-  _scanning = false;
+  _progress = { current: total, total, url: '', done: true };
+  _running = false;
+  clearQueue();
   notify();
+}
+
+export function startBackgroundScan(scanIds, apiKey) {
+  if (_running) return;
+  const queue = { ids: scanIds, completed: [], apiKey, startedAt: Date.now() };
+  saveQueue(queue);
+  processQueue(apiKey);
+}
+
+// Resume any interrupted scan on module load
+export function resumeScan() {
+  const queue = loadQueue();
+  if (!queue || !queue.ids?.length) return;
+  const remaining = queue.ids.filter(id => !queue.completed?.includes(id));
+  if (remaining.length === 0) { clearQueue(); return; }
+  processQueue(queue.apiKey || '');
 }
