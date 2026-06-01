@@ -166,16 +166,14 @@ export default function AppShell({ children }) {
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
-          {isAdmin && (
-            <Link to="/admin"
-              className={`text-xs no-underline px-2 py-1 rounded ${
-                location.pathname === '/admin'
-                  ? 'bg-white/10 text-[#F5C518] font-semibold'
-                  : 'text-white/40 hover:text-white/70'
-              }`}>
-              🔐 Admin
-            </Link>
-          )}
+          <Link to="/admin"
+            className={`text-xs no-underline px-2 py-1 rounded ${
+              location.pathname === '/admin'
+                ? 'bg-white/10 text-[#F5C518] font-semibold'
+                : 'text-white/40 hover:text-white/70'
+            }`}>
+            🔐 Admin
+          </Link>
           <button
             onClick={handleLogout}
             className="text-white/40 hover:text-white/70 text-xs border border-white/20 rounded px-2 py-1 cursor-pointer bg-transparent"

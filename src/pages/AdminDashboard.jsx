@@ -126,13 +126,27 @@ export default function AdminDashboard() {
     toast.success(`${user.name} removed`);
   };
 
-  // Not admin — access denied
+  // Not admin — show debug info to help fix setup
   if (!isAdmin) {
     return (
       <div className="h-full flex items-center justify-center">
-        <div className="text-center">
+        <div className="text-center max-w-md">
           <div className="text-4xl mb-3">🔒</div>
-          <div className="text-sm text-gray-500">Admin access required</div>
+          <div className="text-sm font-semibold text-[#1a1a1a] mb-2">Admin access required</div>
+          <div className="text-[11px] text-gray-500 mb-4">
+            Your account wasn't found in the <code className="bg-gray-100 px-1 rounded">app_users</code> table, or the table doesn't exist yet.
+          </div>
+          <div className="bg-[#f8f8f6] rounded-lg p-4 text-left text-[11px] text-gray-600 space-y-1">
+            <div><b>Your auth ID:</b> <code className="bg-gray-100 px-1 rounded text-[10px]">{currentUser?.user_id || 'loading...'}</code></div>
+            <div><b>Your email:</b> {currentUser?.email || 'loading...'}</div>
+            <div><b>Current role:</b> {currentUser?.role || 'none'}</div>
+            <div className="pt-2 text-[10px] text-gray-400">
+              Run this SQL in Supabase to grant yourself super admin access:<br/>
+              <code className="block bg-gray-100 p-2 rounded mt-1 text-[9px] break-all">
+                INSERT INTO app_users (user_id, email, name, role, active) VALUES ('{currentUser?.user_id}', '{currentUser?.email}', 'Cameron', 'super_admin', true) ON CONFLICT DO NOTHING;
+              </code>
+            </div>
+          </div>
         </div>
       </div>
     );
