@@ -31,6 +31,7 @@ import ClientBucketList from './pages/ClientBucketList';
 import ClientMap from './pages/ClientMap';
 import ClientAdDashboard from './pages/ClientAdDashboard';
 import SEOChat from './pages/SEOChat';
+import SiteHealth from './pages/SiteHealth';
 import Login from './pages/Login';
 import { Toaster } from 'react-hot-toast';
 import './index.css';
@@ -95,6 +96,7 @@ function Root() {
           <Route path="/client-map" element={<ClientMap />} />
           <Route path="/client-ad-dashboard" element={<ClientAdDashboard />} />
           <Route path="/seo-chat" element={<SEOChat />} />
+          <Route path="/site-health" element={<SiteHealth />} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>

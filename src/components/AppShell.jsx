@@ -11,6 +11,7 @@ const SEO_TOOLS = [
   { path: '/article-writer', label: 'Article Writer', icon: '✍️' },
   { path: '/seo-checker', label: 'SEO Checker', icon: '🔍' },
   { path: '/client-bucket-list', label: 'Client Bucket List', icon: '📋' },
+  { path: '/site-health', label: 'Site Health', icon: '🏥' },
 ];
 
 const ADS_TOOLS = [
