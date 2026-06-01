@@ -81,14 +81,13 @@ export default function SiteHealth() {
       .then(({ data }) => { if (data) setScans(data); });
   }, []);
 
-  // Resume any interrupted scan + reload after each URL completes
+  // Resume any interrupted scan + reload when each URL finishes
   useEffect(() => {
     resumeScan();
-    let lastCurrent = 0;
     const unsub = onScanProgress((progress) => {
       setBgProgress(progress);
-      if (progress.current > lastCurrent || progress.done) {
-        lastCurrent = progress.current;
+      // Reload when a URL just finished (url becomes empty after save)
+      if (!progress.url || progress.done) {
         reloadScans();
       }
       if (progress.done) {
