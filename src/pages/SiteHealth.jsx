@@ -165,7 +165,7 @@ export default function SiteHealth() {
 
   const handleScanUrl = (id) => {
     if (scanning) return;
-    startBackgroundScan([id], psiKey);
+    startBackgroundScan([id]);
     toast('Scanning in background — you can leave this page');
   };
 
@@ -173,7 +173,7 @@ export default function SiteHealth() {
     if (scanning) return;
     const toScan = filterClient !== 'all' ? scans.filter(s => s.client_name === filterClient) : scans;
     if (!toScan.length) return;
-    startBackgroundScan(toScan.map(s => s.id), psiKey);
+    startBackgroundScan(toScan.map(s => s.id));
     toast(`Scanning ${toScan.length} URLs in background — you can leave this page`);
   };
 

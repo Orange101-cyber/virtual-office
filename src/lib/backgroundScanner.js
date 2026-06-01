@@ -9,6 +9,17 @@ let _running = false;
 let _listeners = new Set();
 let _progress = { current: 0, total: 0, url: '', done: false };
 
+async function loadApiKey() {
+  // Try env first
+  const envKey = typeof import.meta !== 'undefined' ? import.meta.env?.VITE_GOOGLE_PSI_KEY : '';
+  if (envKey) return envKey;
+  // Fall back to app_settings in Supabase
+  try {
+    const { data } = await supabase.from('app_settings').select('value').eq('key', 'google_psi_key').maybeSingle();
+    return data?.value || '';
+  } catch { return ''; }
+}
+
 function notify() { _listeners.forEach(fn => fn({ ..._progress })); }
 export function onScanProgress(fn) { _listeners.add(fn); return () => _listeners.delete(fn); }
 export function getScanProgress() { return _progress; }
@@ -44,7 +55,7 @@ async function runOne(url, strategy, apiKey) {
   };
 }
 
-async function processQueue(apiKey) {
+async function processQueue() {
   if (_running) return;
   _running = true;
 
@@ -56,6 +67,9 @@ async function processQueue(apiKey) {
     notify();
     return;
   }
+
+  // Always load the key fresh from DB
+  const apiKey = await loadApiKey();
 
   const remaining = queue.ids.filter(id => !queue.completed?.includes(id));
   const total = queue.ids.length;
@@ -94,7 +108,7 @@ async function processQueue(apiKey) {
       saveQueue(q);
     }
 
-    if (i < remaining.length - 1) await new Promise(r => setTimeout(r, 2000));
+    if (i < remaining.length - 1) await new Promise(r => setTimeout(r, 3000));
   }
 
   _progress = { current: total, total, url: '', done: true };
@@ -103,18 +117,17 @@ async function processQueue(apiKey) {
   notify();
 }
 
-export function startBackgroundScan(scanIds, apiKey) {
+export function startBackgroundScan(scanIds) {
   if (_running) return;
-  const queue = { ids: scanIds, completed: [], apiKey, startedAt: Date.now() };
+  const queue = { ids: scanIds, completed: [], startedAt: Date.now() };
   saveQueue(queue);
-  processQueue(apiKey);
+  processQueue();
 }
 
-// Resume any interrupted scan on module load
 export function resumeScan() {
   const queue = loadQueue();
   if (!queue || !queue.ids?.length) return;
   const remaining = queue.ids.filter(id => !queue.completed?.includes(id));
   if (remaining.length === 0) { clearQueue(); return; }
-  processQueue(queue.apiKey || '');
+  processQueue();
 }
