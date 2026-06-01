@@ -194,30 +194,36 @@ export default function SiteHealth() {
     const scan = scans.find(s => s.id === id);
     if (!scan) return;
     setSingleScanning(id);
-    toast(`Scanning ${scan.url}...`, { icon: '🔄' });
+    toast(`Scanning mobile — this takes 30-60s...`, { icon: '🔄', duration: 10000 });
     try {
       let key = psiKey || '';
       if (!key) {
         const { data: keyData } = await supabase.from('app_settings').select('value').eq('key', 'google_psi_key').maybeSingle();
         if (keyData?.value) { key = keyData.value; setPsiKey(key); }
       }
-      if (!key) toast('No API key found — using free tier (may be slow)', { icon: '⚠️' });
+
+      // Mobile scan — save immediately so results aren't lost on refresh
       const mobile = await runPageSpeed(scan.url, 'mobile', key);
-      toast(`Mobile done — scanning desktop...`, { icon: '🔄' });
-      const desktop = await runPageSpeed(scan.url, 'desktop', key);
-      const payload = {
+      const mobilePayload = {
         mobile_performance: mobile.performance, mobile_accessibility: mobile.accessibility,
         mobile_best_practices: mobile.bestPractices, mobile_seo: mobile.seo,
         mobile_lcp: mobile.lcp, mobile_cls: mobile.cls, mobile_fcp: mobile.fcp, mobile_tbt: mobile.tbt,
+        last_scanned: new Date().toISOString(),
+      };
+      await supabase.from('site_health').update(mobilePayload).eq('id', id);
+      setScans(prev => prev.map(s => s.id === id ? { ...s, ...mobilePayload } : s));
+      toast(`Mobile done — now scanning desktop...`, { icon: '✓', duration: 10000 });
+
+      // Desktop scan — save on top of mobile
+      const desktop = await runPageSpeed(scan.url, 'desktop', key);
+      const desktopPayload = {
         desktop_performance: desktop.performance, desktop_accessibility: desktop.accessibility,
         desktop_best_practices: desktop.bestPractices, desktop_seo: desktop.seo,
         desktop_lcp: desktop.lcp, desktop_cls: desktop.cls,
-        last_scanned: new Date().toISOString(),
       };
-      const { error } = await supabase.from('site_health').update(payload).eq('id', id);
-      if (error) throw error;
-      setScans(prev => prev.map(s => s.id === id ? { ...s, ...payload } : s));
-      toast.success(`Scanned ${scan.url}`);
+      await supabase.from('site_health').update(desktopPayload).eq('id', id);
+      setScans(prev => prev.map(s => s.id === id ? { ...s, ...desktopPayload } : s));
+      toast.success('Scan complete');
     } catch (err) {
       toast.error(`Scan failed: ${err.message}`);
     }
