@@ -283,15 +283,15 @@ export default function SiteHealth() {
                 </tr>
                 <tr className="bg-[#f8f8f6] border-b border-gray-200 text-[8px] text-gray-400 uppercase">
                   <th colSpan={2}></th>
-                  <th className="px-1 py-1 text-center">Perf</th>
-                  <th className="px-1 py-1 text-center">A11y</th>
-                  <th className="px-1 py-1 text-center">BP</th>
-                  <th className="px-1 py-1 text-center">SEO</th>
-                  <th className="px-1 py-1 text-center">Perf</th>
-                  <th className="px-1 py-1 text-center">A11y</th>
-                  <th className="px-1 py-1 text-center">BP</th>
-                  <th className="px-1 py-1 text-center">SEO</th>
-                  <th className="px-1 py-1 text-center">Mobile</th>
+                  <th className="px-1 py-1 text-center" title="Performance — page speed and load efficiency">Perf</th>
+                  <th className="px-1 py-1 text-center" title="Accessibility — how usable the site is for all users">Acc</th>
+                  <th className="px-1 py-1 text-center" title="Best Practices — security, modern standards, no errors">BP</th>
+                  <th className="px-1 py-1 text-center" title="SEO — search engine optimisation fundamentals">SEO</th>
+                  <th className="px-1 py-1 text-center" title="Performance — page speed and load efficiency">Perf</th>
+                  <th className="px-1 py-1 text-center" title="Accessibility — how usable the site is for all users">Acc</th>
+                  <th className="px-1 py-1 text-center" title="Best Practices — security, modern standards, no errors">BP</th>
+                  <th className="px-1 py-1 text-center" title="SEO — search engine optimisation fundamentals">SEO</th>
+                  <th className="px-1 py-1 text-center" title="Largest Contentful Paint — how long until the main content loads">Mobile</th>
                   <th colSpan={2}></th>
                 </tr>
               </thead>
