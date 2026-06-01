@@ -47,21 +47,28 @@ function clearQueue() {
 async function runOne(url, strategy, apiKey) {
   const keyParam = apiKey ? `&key=${apiKey}` : '';
   const apiUrl = `${PSI_API}?url=${encodeURIComponent(url)}&strategy=${strategy}&category=performance&category=accessibility&category=best-practices&category=seo${keyParam}`;
-  const res = await fetch(apiUrl);
-  if (!res.ok) throw new Error(`PSI ${res.status}`);
-  const data = await res.json();
-  const cats = data.lighthouseResult?.categories || {};
-  const audits = data.lighthouseResult?.audits || {};
-  return {
-    performance: Math.round((cats.performance?.score || 0) * 100),
-    accessibility: Math.round((cats.accessibility?.score || 0) * 100),
-    bestPractices: Math.round((cats['best-practices']?.score || 0) * 100),
-    seo: Math.round((cats.seo?.score || 0) * 100),
-    lcp: audits['largest-contentful-paint']?.numericValue ? (audits['largest-contentful-paint'].numericValue / 1000).toFixed(1) : null,
-    cls: audits['cumulative-layout-shift']?.numericValue?.toFixed(3) || null,
-    fcp: audits['first-contentful-paint']?.numericValue ? (audits['first-contentful-paint'].numericValue / 1000).toFixed(1) : null,
-    tbt: audits['total-blocking-time']?.numericValue ? Math.round(audits['total-blocking-time'].numericValue) : null,
-  };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60000);
+  try {
+    const res = await fetch(apiUrl, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) throw new Error(`PSI ${res.status}`);
+    const data = await res.json();
+    const cats = data.lighthouseResult?.categories || {};
+    const audits = data.lighthouseResult?.audits || {};
+    return {
+      performance: Math.round((cats.performance?.score || 0) * 100),
+      accessibility: Math.round((cats.accessibility?.score || 0) * 100),
+      bestPractices: Math.round((cats['best-practices']?.score || 0) * 100),
+      seo: Math.round((cats.seo?.score || 0) * 100),
+      lcp: audits['largest-contentful-paint']?.numericValue ? (audits['largest-contentful-paint'].numericValue / 1000).toFixed(1) : null,
+      cls: audits['cumulative-layout-shift']?.numericValue?.toFixed(3) || null,
+      fcp: audits['first-contentful-paint']?.numericValue ? (audits['first-contentful-paint'].numericValue / 1000).toFixed(1) : null,
+      tbt: audits['total-blocking-time']?.numericValue ? Math.round(audits['total-blocking-time'].numericValue) : null,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function processQueue() {
