@@ -191,10 +191,16 @@ export default function SiteHealth() {
 
   const handleScanAll = () => {
     if (scanning) return;
-    const toScan = filterClient !== 'all' ? scans.filter(s => s.client_name === filterClient) : scans;
-    if (!toScan.length) return;
+    const staleMs = 7 * 86400000;
+    const pool = filterClient !== 'all' ? scans.filter(s => s.client_name === filterClient) : scans;
+    const toScan = pool.filter(s => {
+      const isStale = !s.last_scanned || (Date.now() - new Date(s.last_scanned).getTime()) > staleMs;
+      const belowThreshold = s.mobile_performance < THRESHOLD || s.mobile_accessibility < THRESHOLD || s.mobile_best_practices < THRESHOLD || s.mobile_seo < THRESHOLD;
+      return isStale || belowThreshold;
+    });
+    if (!toScan.length) return toast('All pages are healthy and recently scanned — nothing to do');
     startBackgroundScan(toScan.map(s => s.id));
-    toast(`Scanning ${toScan.length} URLs in background — you can leave this page`);
+    toast(`Scanning ${toScan.length} URLs (stale or below ${THRESHOLD}) — you can leave this page`);
   };
 
   const handleDelete = async (id) => {
