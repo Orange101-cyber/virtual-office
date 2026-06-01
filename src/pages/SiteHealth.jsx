@@ -81,25 +81,22 @@ export default function SiteHealth() {
       .then(({ data }) => { if (data) setScans(data); });
   }, []);
 
-  // Resume any interrupted scan + listen for progress
+  // Resume any interrupted scan + reload after each URL completes
   useEffect(() => {
     resumeScan();
+    let lastCurrent = 0;
     const unsub = onScanProgress((progress) => {
       setBgProgress(progress);
-      if (progress.done) {
+      if (progress.current > lastCurrent || progress.done) {
+        lastCurrent = progress.current;
         reloadScans();
+      }
+      if (progress.done) {
         toast.success('All scans complete');
       }
     });
     return unsub;
   }, [reloadScans]);
-
-  // Also reload periodically while a scan is running (catches results from bg)
-  useEffect(() => {
-    if (!scanning) return;
-    const interval = setInterval(reloadScans, 5000);
-    return () => clearInterval(interval);
-  }, [scanning, reloadScans]);
 
   useEffect(() => {
     supabase.from('site_health')

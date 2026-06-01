@@ -101,12 +101,14 @@ async function processQueue() {
       // Skip failed, continue
     }
 
-    // Mark completed in queue
+    // Mark completed in queue + notify so UI updates immediately
     const q = loadQueue();
     if (q) {
       q.completed = [...(q.completed || []), id];
       saveQueue(q);
     }
+    _progress = { current: doneCount + i + 1, total, url: '', done: false };
+    notify();
 
     if (i < remaining.length - 1) await new Promise(r => setTimeout(r, 3000));
   }
