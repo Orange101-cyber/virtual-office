@@ -162,7 +162,7 @@ export default function ClientBucketList() {
       ...cleaned,
       client_name: selectedClient,
       client_id: selectedClientId,
-      page_category: category,
+      page_category: cleaned.page_category || category,
       updated_at: new Date().toISOString(),
     };
     try {
@@ -391,7 +391,7 @@ export default function ClientBucketList() {
 
           {/* Form */}
           {showForm && (
-            <div className="bg-white border-b border-gray-200 px-5 py-4 shrink-0">
+            <div id="bucket-form" className="bg-white border-b border-gray-200 px-5 py-4 shrink-0">
               <PageForm
                 category={category}
                 buckets={buckets}
@@ -435,7 +435,7 @@ export default function ClientBucketList() {
               <PageTable
                 category={category}
                 pages={filteredPages}
-                onEdit={(id) => { setEditingId(id); setShowForm(true); }}
+                onEdit={(id) => { setEditingId(id); setShowForm(true); setTimeout(() => document.getElementById('bucket-form')?.scrollIntoView({ behavior: 'smooth' }), 100); }}
                 onDelete={handleDelete}
                 onPlanRefresh={handlePlanRefresh}
                 scoreForUrl={scoreForUrl}
@@ -605,6 +605,7 @@ function PageTable({ category, pages, onEdit, onDelete, onPlanRefresh, scoreForU
 // ── Add / Edit Form ──
 function PageForm({ category, buckets, initial, onSave, onCancel }) {
   const [form, setForm] = useState({
+    page_category: initial?.page_category || category,
     title: initial?.title || '',
     url: initial?.url || '',
     focus_keyword: initial?.focus_keyword || '',
@@ -640,15 +641,25 @@ function PageForm({ category, buckets, initial, onSave, onCancel }) {
     onSave(form);
   };
 
-  const isVideo = category === 'video';
-  const isGeneralOrService = category === 'general' || category === 'service';
-  const isLandingOrBlog = category === 'landing' || category === 'blog';
-  const isBlog = category === 'blog';
+  const activeCat = form.page_category || category;
+  const isVideo = activeCat === 'video';
+  const isGeneralOrService = activeCat === 'general' || activeCat === 'service';
+  const isLandingOrBlog = activeCat === 'landing' || activeCat === 'blog';
+  const isBlog = activeCat === 'blog';
 
   return (
     <form onSubmit={handleSubmit}>
-      <div className="text-[11px] font-bold uppercase text-[#F5C518] mb-3">
-        {initial?.id ? 'Edit' : 'Add'} {CATEGORIES.find(c => c.id === category)?.label.replace(/s$/, '')}
+      <div className="flex items-center gap-3 mb-3">
+        <div className="text-[11px] font-bold uppercase text-[#F5C518]">
+          {initial?.id ? 'Edit' : 'Add'} Page
+        </div>
+        <div>
+          <select value={form.page_category} onChange={set('page_category')} className="input-f text-[11px] font-semibold">
+            {CATEGORIES.filter(c => c.id !== 'video').map(c => (
+              <option key={c.id} value={c.id}>{c.icon} {c.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
