@@ -8,9 +8,9 @@ import toast from 'react-hot-toast';
 const CATEGORIES = [
   { id: 'general', label: 'General Pages', icon: '🏠' },
   { id: 'service', label: 'Service Pages', icon: '💼' },
+  { id: 'location', label: 'Location Pages', icon: '📍' },
   { id: 'landing', label: 'Landing Pages', icon: '🎯' },
   { id: 'blog', label: 'Blogs', icon: '📝' },
-  { id: 'video', label: 'Videos', icon: '🎬' },
 ];
 
 const REFRESH_SCHEDULES = [
@@ -655,7 +655,7 @@ function PageForm({ category, buckets, initial, onSave, onCancel }) {
         </div>
         <div>
           <select value={form.page_category} onChange={set('page_category')} className="input-f text-[11px] font-semibold">
-            {CATEGORIES.filter(c => c.id !== 'video').map(c => (
+            {CATEGORIES.map(c => (
               <option key={c.id} value={c.id}>{c.icon} {c.label}</option>
             ))}
           </select>
@@ -1171,7 +1171,7 @@ function WebsiteScanModal({ clientName, clientId, existingPages, onImport, onClo
                       <td className="px-3 py-2">
                         <select value={page.category} onChange={e => setDiscovered(prev => prev.map((d, j) => j === i ? { ...d, category: e.target.value } : d))}
                           className="border border-gray-200 rounded px-1.5 py-1 text-[10px] bg-[#f8f8f6]">
-                          {CATEGORIES.filter(c => c.id !== 'video').map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                          {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                         </select>
                       </td>
                       <td className="px-3 py-2 text-right font-semibold">{page.sv > 0 ? page.sv.toLocaleString() : '—'}</td>
