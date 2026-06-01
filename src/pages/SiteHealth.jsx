@@ -238,18 +238,28 @@ export default function SiteHealth() {
     setSingleScanning(null);
   };
 
-  const handleScanAll = () => {
-    if (scanning) return;
+  // Only scan pages that haven't been scanned or are older than 7 days
+  const getSmartScanList = () => {
     const staleMs = 7 * 86400000;
     const pool = filterClient !== 'all' ? scans.filter(s => s.client_name === filterClient) : scans;
-    const toScan = pool.filter(s => {
-      const isStale = !s.last_scanned || (Date.now() - new Date(s.last_scanned).getTime()) > staleMs;
-      const belowThreshold = s.mobile_performance < THRESHOLD || s.mobile_accessibility < THRESHOLD || s.mobile_best_practices < THRESHOLD || s.mobile_seo < THRESHOLD;
-      return isStale || belowThreshold;
-    });
-    if (!toScan.length) return toast('All pages are healthy and recently scanned — nothing to do');
+    return pool.filter(s => !s.last_scanned || (Date.now() - new Date(s.last_scanned).getTime()) > staleMs);
+  };
+
+  const handleSmartScan = () => {
+    if (scanning) return;
+    const toScan = getSmartScanList();
+    if (!toScan.length) return toast('All pages scanned within the last 7 days — nothing to do');
     startBackgroundScan(toScan.map(s => s.id));
-    toast(`Scanning ${toScan.length} URLs (stale or below ${THRESHOLD}) — you can leave this page`);
+    toast(`Scanning ${toScan.length} URLs (never scanned or 7+ days old) — you can leave this page`);
+  };
+
+  const handleForceAll = () => {
+    if (scanning) return;
+    const pool = filterClient !== 'all' ? scans.filter(s => s.client_name === filterClient) : scans;
+    if (!pool.length) return;
+    if (!confirm(`This will scan all ${pool.length} URLs and use ${pool.length * 2} API calls. Continue?`)) return;
+    startBackgroundScan(pool.map(s => s.id));
+    toast(`Force scanning all ${pool.length} URLs — you can leave this page`);
   };
 
   const handleDelete = async (id) => {
@@ -272,9 +282,15 @@ export default function SiteHealth() {
               className="bg-[#F5C518] text-[#1a1a1a] border-none rounded px-3 py-1.5 text-[11px] font-bold cursor-pointer hover:bg-[#e6b800]">
               + Add URL
             </button>
-            <button onClick={handleScanAll} disabled={!!scanning || !scans.length}
-              className="bg-[#1a1a1a] text-white border-none rounded px-3 py-1.5 text-[11px] font-bold cursor-pointer hover:bg-[#333] disabled:opacity-40">
-              {scanning ? `Scanning ${bgProgress.current}/${bgProgress.total}...` : '🔄 Scan All'}
+            <button onClick={handleSmartScan} disabled={!!scanning || !scans.length}
+              className="bg-[#1a1a1a] text-white border-none rounded px-3 py-1.5 text-[11px] font-bold cursor-pointer hover:bg-[#333] disabled:opacity-40"
+              title="Only scans pages never scanned or older than 7 days">
+              {scanning ? `Scanning ${bgProgress.current}/${bgProgress.total}...` : `🔄 Scan Due (${getSmartScanList().length})`}
+            </button>
+            <button onClick={handleForceAll} disabled={!!scanning || !scans.length}
+              className="bg-transparent border border-gray-300 text-gray-600 rounded px-3 py-1.5 text-[11px] font-semibold cursor-pointer hover:border-gray-400 disabled:opacity-40"
+              title="Rescan ALL URLs regardless of when they were last scanned">
+              Force Scan All
             </button>
           </div>
         </div>
