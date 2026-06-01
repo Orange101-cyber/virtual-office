@@ -44,7 +44,7 @@ export default function Cannibalization({
     const found = [];
     current.forEach((kw) => {
       past.forEach((p) => {
-        if (p && kw && (p.includes(kw) || kw.includes(p))) {
+        if (p && kw && p === kw) {
           if (!found.find((h) => h.kw === kw && h.p === p)) {
             found.push({ kw, p, id: `${kw}::${p}` });
           }

@@ -20,24 +20,26 @@ export default function ArticleInputs({
 
   // ── Cannibalization auto-check ──
   const [pastKeywords, setPastKeywords] = useState([]);
+  const [pastPages, setPastPages] = useState([]);
   const [cannibHits, setCannibHits] = useState([]);
 
-  // Load client's keyword bank once
+  // Load client's keyword bank + pages with URLs
   useEffect(() => {
     if (!clientId) return;
-    supabase
-      .from('clients')
-      .select('past_keywords')
-      .eq('id', clientId)
-      .single()
-      .then(({ data }) => {
-        const kws = (data?.past_keywords || '')
-          .split('\n')
-          .map(k => k.trim().toLowerCase())
-          .filter(Boolean);
-        setPastKeywords(kws);
-      })
-      .catch(() => {});
+    Promise.all([
+      supabase.from('clients').select('past_keywords').eq('id', clientId).single(),
+      supabase.from('client_pages').select('focus_keyword, url').eq('client_id', clientId),
+    ]).then(([kwRes, pagesRes]) => {
+      const kws = (kwRes.data?.past_keywords || '')
+        .split('\n')
+        .map(k => k.trim().toLowerCase())
+        .filter(Boolean);
+      setPastKeywords(kws);
+      setPastPages((pagesRes.data || []).map(p => ({
+        keyword: (p.focus_keyword || '').trim().toLowerCase(),
+        url: p.url || '',
+      })).filter(p => p.keyword));
+    }).catch(() => {});
   }, [clientId]);
 
   // Check for overlaps whenever focus keyphrase or secondary keywords change
@@ -56,16 +58,22 @@ export default function ArticleInputs({
 
     const hits = [];
     current.forEach(kw => {
-      pastKeywords.forEach(p => {
-        if (p && kw && (p.includes(kw) || kw.includes(p))) {
-          if (!hits.find(h => h.kw === kw && h.past === p)) {
-            hits.push({ kw, past: p });
-          }
+      // Check exact match in keyword bank
+      if (pastKeywords.includes(kw)) {
+        const page = pastPages.find(p => p.keyword === kw);
+        if (!hits.find(h => h.kw === kw)) {
+          hits.push({ kw, past: kw, url: page?.url || '' });
+        }
+      }
+      // Check exact match in bucket list pages
+      pastPages.forEach(p => {
+        if (p.keyword === kw && !hits.find(h => h.kw === kw)) {
+          hits.push({ kw, past: kw, url: p.url });
         }
       });
     });
     setCannibHits(hits);
-  }, [fields.focus_keyphrase, fields.secondary_keywords, pastKeywords]);
+  }, [fields.focus_keyphrase, fields.secondary_keywords, pastKeywords, pastPages]);
 
   const metaLen = fields.meta_description?.length || 0;
   const metaHintClass = useMemo(() => {
@@ -157,18 +165,22 @@ export default function ArticleInputs({
               </div>
               <div className="text-[10px] text-red-600 mb-2">
                 {cannibHits.length === 1
-                  ? `"${cannibHits[0].kw}" has already been used for this client.`
-                  : `${cannibHits.length} keywords overlap with existing articles for this client:`}
+                  ? `"${cannibHits[0].kw}" is already targeted for this client.`
+                  : `${cannibHits.length} keywords are already targeted for this client:`}
               </div>
-              {cannibHits.length > 1 && (
-                <div className="flex flex-wrap gap-1 mb-2">
-                  {cannibHits.slice(0, 6).map((h, i) => (
-                    <span key={i} className="text-[9px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded">
-                      {h.kw} ↔ {h.past}
-                    </span>
-                  ))}
-                </div>
-              )}
+              <div className="space-y-1 mb-2">
+                {cannibHits.slice(0, 6).map((h, i) => (
+                  <div key={i} className="flex items-center gap-2 text-[10px]">
+                    <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-semibold">{h.kw}</span>
+                    {h.url && (
+                      <a href={h.url} target="_blank" rel="noopener noreferrer"
+                        className="text-blue-500 hover:underline truncate max-w-[300px]">
+                        {h.url.replace(/^https?:\/\//, '')}
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
