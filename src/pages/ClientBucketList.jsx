@@ -188,6 +188,16 @@ export default function ClientBucketList() {
         toast.success('Page added');
       }
 
+      // Auto-add URL to Site Health if it has a URL and isn't already there
+      if (data.url && selectedClient) {
+        supabase.from('site_health').select('id').eq('url', data.url).maybeSingle()
+          .then(({ data: existing }) => {
+            if (!existing) {
+              supabase.from('site_health').insert({ client_name: selectedClient, url: data.url, created_at: new Date().toISOString() }).then(() => {});
+            }
+          }).catch(() => {});
+      }
+
       // Sync focus keyword to client's past_keywords bank for cannibalization
       if (data.focus_keyword && selectedClientId) {
         const { data: client } = await supabase.from('clients').select('past_keywords').eq('id', selectedClientId).single();

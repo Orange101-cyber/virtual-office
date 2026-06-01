@@ -106,9 +106,27 @@ export default function SiteHealth() {
       .select('*')
       .order('client_name')
       .order('url')
-      .then(({ data, error }) => {
+      .then(async ({ data, error }) => {
         if (error && error.code !== '42P01') console.error(error);
-        setScans(data || []);
+        const existingScans = data || [];
+        setScans(existingScans);
+
+        // Auto-import any Bucket List URLs not already in site_health
+        try {
+          const { data: allPages } = await supabase.from('client_pages').select('client_name, url').not('url', 'is', null);
+          if (allPages?.length) {
+            const existingUrls = new Set(existingScans.map(s => s.url.toLowerCase().replace(/\/$/, '')));
+            const newUrls = allPages.filter(p => p.url && !existingUrls.has(p.url.toLowerCase().replace(/\/$/, '')));
+            if (newUrls.length > 0) {
+              const rows = newUrls.map(p => ({ client_name: p.client_name, url: p.url, created_at: new Date().toISOString() }));
+              const { data: inserted } = await supabase.from('site_health').insert(rows).select();
+              if (inserted?.length) {
+                setScans(prev => [...prev, ...inserted]);
+              }
+            }
+          }
+        } catch {}
+
         setLoading(false);
       })
       .catch(() => setLoading(false));
