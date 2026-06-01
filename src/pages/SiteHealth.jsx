@@ -37,7 +37,10 @@ function ScoreCircle({ score, size = 40 }) {
 async function runPageSpeed(url, strategy = 'mobile', apiKey = '') {
   const keyParam = apiKey ? `&key=${apiKey}` : '';
   const apiUrl = `${PSI_API}?url=${encodeURIComponent(url)}&strategy=${strategy}&category=performance&category=accessibility&category=best-practices&category=seo${keyParam}`;
-  const res = await fetch(apiUrl);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60000);
+  const res = await fetch(apiUrl, { signal: controller.signal });
+  clearTimeout(timeout);
   if (!res.ok) throw new Error(`PageSpeed API error ${res.status}`);
   const data = await res.json();
   const cats = data.lighthouseResult?.categories || {};
@@ -193,7 +196,12 @@ export default function SiteHealth() {
     if (!scan) return;
     setSingleScanning(id);
     try {
-      const key = psiKey || '';
+      // Always load key fresh from DB to avoid stale/empty key
+      let key = psiKey || '';
+      if (!key) {
+        const { data: keyData } = await supabase.from('app_settings').select('value').eq('key', 'google_psi_key').maybeSingle();
+        if (keyData?.value) { key = keyData.value; setPsiKey(key); }
+      }
       const mobile = await runPageSpeed(scan.url, 'mobile', key);
       const desktop = await runPageSpeed(scan.url, 'desktop', key);
       const payload = {
