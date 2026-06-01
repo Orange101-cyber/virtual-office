@@ -66,6 +66,7 @@ export default function SiteHealth() {
   const [addForm, setAddForm] = useState({ client_name: '', url: '' });
   const [filterClient, setFilterClient] = useState('all');
   const [filterIssues, setFilterIssues] = useState(false);
+  const [filterTypes, setFilterTypes] = useState(new Set());
 
   // Load saved scans
   // Load PSI key from app_settings if not in env
@@ -119,14 +120,39 @@ export default function SiteHealth() {
 
   const hasIssues = (s) => s.mobile_performance < THRESHOLD || s.mobile_accessibility < THRESHOLD || s.mobile_best_practices < THRESHOLD || s.mobile_seo < THRESHOLD;
 
+  const PAGE_TYPES = [
+    { id: 'general', label: 'General Pages', icon: '🏠' },
+    { id: 'service', label: 'Service Pages', icon: '💼' },
+    { id: 'landing', label: 'Landing Pages', icon: '🎯' },
+    { id: 'blog', label: 'Blogs', icon: '📝' },
+  ];
+
+  const guessPageType = (url) => {
+    const u = (url || '').toLowerCase();
+    if (u.includes('/blog/') || u.includes('/news/') || u.includes('/article') || u.includes('-guide') || u.includes('-tips')) return 'blog';
+    if (u.includes('/landing') || u.includes('/lp/') || u.includes('/offer')) return 'landing';
+    if (u.includes('/service') || u.includes('/what-we-do') || u.includes('/our-') || u.match(/\/(mortgage|loan|broker|property|real-estate)/)) return 'service';
+    return 'general';
+  };
+
+  const toggleType = (typeId) => {
+    setFilterTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(typeId)) next.delete(typeId);
+      else next.add(typeId);
+      return next;
+    });
+  };
+
   const issueCount = scans.filter(hasIssues).length;
 
   const filteredScans = useMemo(() => {
     let result = scans;
     if (filterClient !== 'all') result = result.filter(s => s.client_name === filterClient);
     if (filterIssues) result = result.filter(hasIssues);
+    if (filterTypes.size > 0) result = result.filter(s => filterTypes.has(guessPageType(s.url)));
     return result;
-  }, [scans, filterClient, filterIssues]);
+  }, [scans, filterClient, filterIssues, filterTypes]);
 
   // Unique clients in scans
   const scanClients = [...new Set(scans.map(s => s.client_name))].sort();
@@ -257,6 +283,24 @@ export default function SiteHealth() {
             <option value="all">All Clients</option>
             {scanClients.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
+
+          {/* Page type multi-select */}
+          <div className="flex gap-1">
+            {PAGE_TYPES.map(pt => (
+              <button key={pt.id} onClick={() => toggleType(pt.id)}
+                className={`text-[10px] font-semibold rounded px-2 py-1 cursor-pointer border transition-colors ${
+                  filterTypes.has(pt.id)
+                    ? 'bg-[#F5C518] text-[#1a1a1a] border-[#F5C518]'
+                    : 'bg-white text-gray-500 border-gray-200 hover:border-[#F5C518]'
+                }`}>
+                {pt.icon} {pt.label}
+              </button>
+            ))}
+            {filterTypes.size > 0 && (
+              <button onClick={() => setFilterTypes(new Set())}
+                className="text-[9px] text-gray-400 bg-transparent border-none cursor-pointer hover:text-gray-600">✕</button>
+            )}
+          </div>
 
           {issueCount > 0 && (
             <button onClick={() => setFilterIssues(!filterIssues)}
