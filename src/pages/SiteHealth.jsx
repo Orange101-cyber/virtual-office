@@ -5,6 +5,7 @@ import { useClients } from '../hooks/useClients';
 import toast from 'react-hot-toast';
 
 const PSI_API = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed';
+const PSI_KEY = import.meta.env.VITE_GOOGLE_PSI_KEY;
 const THRESHOLD = 85;
 
 function scoreColor(score) {
@@ -35,7 +36,8 @@ function ScoreCircle({ score, size = 40 }) {
 async function runPageSpeed(url, strategy = 'mobile') {
   const params = new URLSearchParams({ url, strategy, category: ['performance', 'accessibility', 'best-practices', 'seo'].join('&category=') });
   // PageSpeed API needs categories as separate params
-  const apiUrl = `${PSI_API}?url=${encodeURIComponent(url)}&strategy=${strategy}&category=performance&category=accessibility&category=best-practices&category=seo`;
+  const keyParam = PSI_KEY ? `&key=${PSI_KEY}` : '';
+  const apiUrl = `${PSI_API}?url=${encodeURIComponent(url)}&strategy=${strategy}&category=performance&category=accessibility&category=best-practices&category=seo${keyParam}`;
   const res = await fetch(apiUrl);
   if (!res.ok) throw new Error(`PageSpeed API error ${res.status}`);
   const data = await res.json();
