@@ -397,8 +397,11 @@ export default function SiteHealth() {
                   const needsAttention = hasIssues(scan);
                   const isStale = !scan.last_scanned || (Date.now() - new Date(scan.last_scanned).getTime()) > staleDays * 86400000;
                   return (
-                    <tr key={scan.id} className={`border-b border-gray-100 hover:bg-[#f8f8f6] ${needsAttention ? 'bg-red-50/30' : ''}`}>
-                      <td className="px-3 py-2 font-semibold text-[#1a1a1a] whitespace-nowrap">{scan.client_name}</td>
+                    <tr key={scan.id} className={`border-b border-gray-100 hover:bg-[#f8f8f6] ${needsAttention ? 'bg-red-50/30' : ''} ${isUrlScanning ? 'bg-blue-50/50' : ''}`}>
+                      <td className="px-3 py-2 font-semibold text-[#1a1a1a] whitespace-nowrap">
+                        {isUrlScanning && <span className="inline-block w-3 h-3 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin mr-1.5 align-middle"></span>}
+                        {scan.client_name}
+                      </td>
                       <td className="px-3 py-2 max-w-[200px]">
                         <a href={scan.url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline text-[10px] truncate block">
                           {scan.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
