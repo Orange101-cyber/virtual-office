@@ -5,7 +5,7 @@ import { useClients } from '../hooks/useClients';
 import toast from 'react-hot-toast';
 
 const PSI_API = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed';
-const PSI_KEY = import.meta.env.VITE_GOOGLE_PSI_KEY;
+const ENV_PSI_KEY = import.meta.env.VITE_GOOGLE_PSI_KEY;
 const THRESHOLD = 85;
 
 function scoreColor(score) {
@@ -33,10 +33,8 @@ function ScoreCircle({ score, size = 40 }) {
   );
 }
 
-async function runPageSpeed(url, strategy = 'mobile') {
-  const params = new URLSearchParams({ url, strategy, category: ['performance', 'accessibility', 'best-practices', 'seo'].join('&category=') });
-  // PageSpeed API needs categories as separate params
-  const keyParam = PSI_KEY ? `&key=${PSI_KEY}` : '';
+async function runPageSpeed(url, strategy = 'mobile', apiKey = '') {
+  const keyParam = apiKey ? `&key=${apiKey}` : '';
   const apiUrl = `${PSI_API}?url=${encodeURIComponent(url)}&strategy=${strategy}&category=performance&category=accessibility&category=best-practices&category=seo${keyParam}`;
   const res = await fetch(apiUrl);
   if (!res.ok) throw new Error(`PageSpeed API error ${res.status}`);
@@ -60,6 +58,7 @@ export default function SiteHealth() {
   const { clients } = useClients();
   const [scans, setScans] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [psiKey, setPsiKey] = useState(ENV_PSI_KEY || '');
   const [scanning, setScanning] = useState(null);
   const [scanProgress, setScanProgress] = useState('');
   const [showAddUrl, setShowAddUrl] = useState(false);
@@ -68,6 +67,14 @@ export default function SiteHealth() {
   const [filterIssues, setFilterIssues] = useState(false);
 
   // Load saved scans
+  // Load PSI key from app_settings if not in env
+  useEffect(() => {
+    if (ENV_PSI_KEY) return;
+    supabase.from('app_settings').select('value').eq('key', 'google_psi_key').maybeSingle()
+      .then(({ data }) => { if (data?.value) setPsiKey(data.value); })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     supabase.from('site_health')
       .select('*')
@@ -136,9 +143,9 @@ export default function SiteHealth() {
     setScanning(id);
     setScanProgress('Running mobile audit...');
     try {
-      const mobile = await runPageSpeed(scan.url, 'mobile');
+      const mobile = await runPageSpeed(scan.url, 'mobile', psiKey);
       setScanProgress('Running desktop audit...');
-      const desktop = await runPageSpeed(scan.url, 'desktop');
+      const desktop = await runPageSpeed(scan.url, 'desktop', psiKey);
 
       const payload = {
         mobile_performance: mobile.performance, mobile_accessibility: mobile.accessibility,

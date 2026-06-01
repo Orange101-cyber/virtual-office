@@ -292,6 +292,9 @@ export default function AdminDashboard() {
               ))}
             </div>
           </div>
+
+          {/* API Keys */}
+          {isSuperAdmin && <ApiKeysSection />}
         </div>
       </div>
 
@@ -305,4 +308,84 @@ export default function AdminDashboard() {
 
 function Label({ children }) {
   return <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">{children}</label>;
+}
+
+const API_KEY_FIELDS = [
+  { key: 'google_psi_key', label: 'Google PageSpeed Insights API Key', placeholder: 'AIza...', desc: 'Used by Site Health dashboard. Get from console.cloud.google.com' },
+  { key: 'dataforseo_login', label: 'DataForSEO Login', placeholder: 'your@email.com', desc: 'Used by SEO tools for keyword data' },
+  { key: 'dataforseo_password', label: 'DataForSEO Password', placeholder: 'API password', desc: 'DataForSEO API password (not your account password)' },
+  { key: 'anthropic_api_key', label: 'Anthropic API Key', placeholder: 'sk-ant-...', desc: 'Used by AI features (SEO Assistant, fixes, briefs, etc.)' },
+  { key: 'fal_api_key', label: 'Fal.ai API Key', placeholder: 'Key ...', desc: 'Used by Ad Remix image generation' },
+];
+
+function ApiKeysSection() {
+  const [keys, setKeys] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [showValues, setShowValues] = useState({});
+
+  useEffect(() => {
+    supabase.from('app_settings')
+      .select('key, value')
+      .then(({ data, error }) => {
+        if (error && error.code !== '42P01') console.error(error);
+        const map = {};
+        (data || []).forEach(d => { map[d.key] = d.value; });
+        setKeys(map);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const handleSave = async (key, value) => {
+    setSaving(true);
+    try {
+      const { data: existing } = await supabase.from('app_settings').select('id').eq('key', key).maybeSingle();
+      if (existing) {
+        await supabase.from('app_settings').update({ value, updated_at: new Date().toISOString() }).eq('key', key);
+      } else {
+        await supabase.from('app_settings').insert({ key, value });
+      }
+      toast.success(`${key} saved`);
+    } catch (err) {
+      toast.error('Save error: ' + err.message);
+    }
+    setSaving(false);
+  };
+
+  if (loading) return null;
+
+  return (
+    <div className="mt-5 bg-white border border-gray-200 rounded-xl p-5">
+      <div className="text-[10px] font-bold uppercase text-gray-400 mb-1">🔑 API Keys</div>
+      <div className="text-[10px] text-gray-400 mb-4">Only visible to Super Admins. Stored securely in Supabase.</div>
+      <div className="space-y-3">
+        {API_KEY_FIELDS.map(field => (
+          <div key={field.key} className="flex items-end gap-2">
+            <div className="flex-1">
+              <Label>{field.label}</Label>
+              <div className="flex gap-1">
+                <input
+                  type={showValues[field.key] ? 'text' : 'password'}
+                  value={keys[field.key] || ''}
+                  onChange={e => setKeys(prev => ({ ...prev, [field.key]: e.target.value }))}
+                  placeholder={field.placeholder}
+                  className="sf flex-1"
+                />
+                <button onClick={() => setShowValues(prev => ({ ...prev, [field.key]: !prev[field.key] }))}
+                  className="text-[10px] text-gray-400 bg-transparent border border-gray-200 rounded px-2 cursor-pointer hover:text-gray-600 shrink-0">
+                  {showValues[field.key] ? '🙈' : '👁'}
+                </button>
+              </div>
+              <div className="text-[9px] text-gray-400 mt-0.5">{field.desc}</div>
+            </div>
+            <button onClick={() => handleSave(field.key, keys[field.key] || '')} disabled={saving}
+              className="bg-[#F5C518] text-[#1a1a1a] border-none rounded px-3 py-1.5 text-[10px] font-bold cursor-pointer hover:bg-[#e6b800] disabled:opacity-40 shrink-0 mb-4">
+              Save
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
