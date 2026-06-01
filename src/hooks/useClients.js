@@ -23,10 +23,10 @@ export function useClients() {
     fetchClients();
   }, [fetchClients]);
 
-  // Active clients (not archived)
-  const activeClients = clients.filter(c => !c.archived);
+  // Active clients (not archived) — treat undefined/null/false as active
+  const activeClients = clients.filter(c => c.archived !== true);
   // Archived clients
-  const archivedClients = clients.filter(c => c.archived);
+  const archivedClients = clients.filter(c => c.archived === true);
 
   const addClient = async (name) => {
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');

@@ -31,6 +31,7 @@ import ClientBucketList from './pages/ClientBucketList';
 import ClientMap from './pages/ClientMap';
 import ClientAdDashboard from './pages/ClientAdDashboard';
 import SEOChat from './pages/SEOChat';
+import SEOPerformance from './pages/SEOPerformance';
 import SiteHealth from './pages/SiteHealth';
 import Login from './pages/Login';
 import { Toaster } from 'react-hot-toast';
@@ -72,6 +73,7 @@ function Root() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/client-dashboard" element={<ClientDashboard />} />
           <Route path="/seo-checker" element={<SEOChecker />} />
+          <Route path="/seo-performance" element={<SEOPerformance />} />
           <Route path="/content-planner" element={<ContentPlanner />} />
           <Route path="/brief-generator" element={<BriefGenerator />} />
           <Route path="/keyword-research" element={<KeywordResearch />} />

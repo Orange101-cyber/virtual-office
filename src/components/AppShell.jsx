@@ -4,12 +4,14 @@ import { supabase } from '../lib/supabase';
 import { useAdmin } from '../hooks/useAdmin';
 
 const SEO_TOOLS = [
+  { path: '/seo-tools', label: 'SEO Dashboard', icon: '📊' },
   { path: '/seo-chat', label: 'SEO Assistant', icon: '🤖' },
   { path: '/keyword-research', label: 'Keyword Research', icon: '🔑' },
   { path: '/brief-generator', label: 'Brief Generator', icon: '📝' },
   { path: '/content-planner', label: 'Content Planner', icon: '📅' },
   { path: '/article-writer', label: 'Article Writer', icon: '✍️' },
   { path: '/seo-checker', label: 'SEO Checker', icon: '🔍' },
+  { path: '/seo-performance', label: 'SEO Performance', icon: '📈' },
   { path: '/client-bucket-list', label: 'Client Bucket List', icon: '📋' },
   { path: '/site-health', label: 'Site Health', icon: '🏥' },
 ];

@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Sidebar from '../components/Sidebar/Sidebar';
 import ReportArea from '../components/ReportArea/ReportArea';
-import SEODashboard from '../components/SEODashboard';
 import AddClientModal from '../components/Modals/AddClientModal';
 import SaveReportModal from '../components/Modals/SaveReportModal';
 import KeywordBankModal from '../components/Modals/KeywordBankModal';
@@ -37,7 +36,7 @@ export default function SEOChecker() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showKeywordBank, setShowKeywordBank] = useState(null);
   const [prefillSave, setPrefillSave] = useState(null);
-  const [hasReport, setHasReport] = useState(false);
+  const [hasReport, setHasReport] = useState(true);
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Auto-load report from URL param ?report=ID
@@ -191,32 +190,25 @@ export default function SEOChecker() {
             hasReport={hasReport}
           />
 
-          {hasReport ? (
-            <ReportArea
-              fields={fields}
-              onFieldChange={updateField}
-              checklistState={checklistState}
-              onToggle={toggleCheck}
-              aiFindings={aiFindings}
-              gscData={gscData}
-              onGscChange={updateGsc}
-              onAnalyze={handleAnalyze}
-              analyzing={analyzing}
-              statusText={statusText}
-              breadcrumb={breadcrumb}
-              saved={!!report && !dirty}
-              reportId={report?.id}
-              clientId={report?.client_id}
-              clients={clients}
-              onManageKeywords={(id) => setShowKeywordBank(id)}
-              onBackToDashboard={() => { if (!dirty || confirm('You have unsaved changes. Go back anyway?')) { newReport(); setHasReport(false); } }}
-            />
-          ) : (
-            <SEODashboard
-              clients={clients}
-              onAddClient={() => setShowAddClient(true)}
-            />
-          )}
+          <ReportArea
+            fields={fields}
+            onFieldChange={updateField}
+            checklistState={checklistState}
+            onToggle={toggleCheck}
+            aiFindings={aiFindings}
+            gscData={gscData}
+            onGscChange={updateGsc}
+            onAnalyze={handleAnalyze}
+            analyzing={analyzing}
+            statusText={statusText}
+            breadcrumb={breadcrumb}
+            saved={!!report && !dirty}
+            reportId={report?.id}
+            clientId={report?.client_id}
+            clients={clients}
+            onManageKeywords={(id) => setShowKeywordBank(id)}
+            onBackToDashboard={() => { if (!dirty || confirm('You have unsaved changes. Go back anyway?')) { newReport(); setHasReport(false); } }}
+          />
         </div>
       </div>
 
