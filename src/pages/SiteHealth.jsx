@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useClients } from '../hooks/useClients';
+import { startBackgroundScan, onScanProgress, isScanning as isBgScanning } from '../lib/backgroundScanner';
 import toast from 'react-hot-toast';
 
 const PSI_API = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed';
@@ -59,8 +60,8 @@ export default function SiteHealth() {
   const [scans, setScans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [psiKey, setPsiKey] = useState(ENV_PSI_KEY || '');
-  const [scanning, setScanning] = useState(null);
-  const [scanProgress, setScanProgress] = useState('');
+  const [bgProgress, setBgProgress] = useState({ current: 0, total: 0, url: '', done: false });
+  const scanning = isBgScanning();
   const [showAddUrl, setShowAddUrl] = useState(false);
   const [addForm, setAddForm] = useState({ client_name: '', url: '' });
   const [filterClient, setFilterClient] = useState('all');
@@ -74,6 +75,30 @@ export default function SiteHealth() {
       .then(({ data }) => { if (data?.value) setPsiKey(data.value); })
       .catch(() => {});
   }, []);
+
+  const reloadScans = useCallback(() => {
+    supabase.from('site_health').select('*').order('client_name').order('url')
+      .then(({ data }) => { if (data) setScans(data); });
+  }, []);
+
+  // Listen for background scan progress
+  useEffect(() => {
+    const unsub = onScanProgress((progress) => {
+      setBgProgress(progress);
+      if (progress.done) {
+        reloadScans();
+        toast.success('All scans complete');
+      }
+    });
+    return unsub;
+  }, [reloadScans]);
+
+  // Also reload periodically while a scan is running (catches results from bg)
+  useEffect(() => {
+    if (!scanning) return;
+    const interval = setInterval(reloadScans, 5000);
+    return () => clearInterval(interval);
+  }, [scanning, reloadScans]);
 
   useEffect(() => {
     supabase.from('site_health')
@@ -137,47 +162,18 @@ export default function SiteHealth() {
     toast.success(`Added ${rows.length} URLs from bucket list`);
   };
 
-  const handleScanUrl = async (id) => {
-    const scan = scans.find(s => s.id === id);
-    if (!scan) return;
-    setScanning(id);
-    setScanProgress('Running mobile audit...');
-    try {
-      const mobile = await runPageSpeed(scan.url, 'mobile', psiKey);
-      setScanProgress('Running desktop audit...');
-      const desktop = await runPageSpeed(scan.url, 'desktop', psiKey);
-
-      const payload = {
-        mobile_performance: mobile.performance, mobile_accessibility: mobile.accessibility,
-        mobile_best_practices: mobile.bestPractices, mobile_seo: mobile.seo,
-        mobile_lcp: mobile.lcp, mobile_cls: mobile.cls, mobile_fcp: mobile.fcp, mobile_tbt: mobile.tbt,
-        desktop_performance: desktop.performance, desktop_accessibility: desktop.accessibility,
-        desktop_best_practices: desktop.bestPractices, desktop_seo: desktop.seo,
-        desktop_lcp: desktop.lcp, desktop_cls: desktop.cls,
-        last_scanned: new Date().toISOString(),
-      };
-
-      const { error } = await supabase.from('site_health').update(payload).eq('id', id);
-      if (error) throw error;
-      setScans(prev => prev.map(s => s.id === id ? { ...s, ...payload } : s));
-      toast.success(`Scanned ${scan.url}`);
-    } catch (err) {
-      toast.error(`Scan failed: ${err.message}`);
-    }
-    setScanning(null);
-    setScanProgress('');
+  const handleScanUrl = (id) => {
+    if (scanning) return;
+    startBackgroundScan([id], psiKey);
+    toast('Scanning in background — you can leave this page');
   };
 
-  const handleScanAll = async () => {
+  const handleScanAll = () => {
+    if (scanning) return;
     const toScan = filterClient !== 'all' ? scans.filter(s => s.client_name === filterClient) : scans;
     if (!toScan.length) return;
-    for (let i = 0; i < toScan.length; i++) {
-      setScanProgress(`Scanning ${i + 1}/${toScan.length}: ${toScan[i].url}`);
-      await handleScanUrl(toScan[i].id);
-      if (i < toScan.length - 1) await new Promise(r => setTimeout(r, 2000));
-    }
-    setScanProgress('');
-    toast.success('All scans complete');
+    startBackgroundScan(toScan.map(s => s.id), psiKey);
+    toast(`Scanning ${toScan.length} URLs in background — you can leave this page`);
   };
 
   const handleDelete = async (id) => {
@@ -202,10 +198,26 @@ export default function SiteHealth() {
             </button>
             <button onClick={handleScanAll} disabled={!!scanning || !scans.length}
               className="bg-[#1a1a1a] text-white border-none rounded px-3 py-1.5 text-[11px] font-bold cursor-pointer hover:bg-[#333] disabled:opacity-40">
-              {scanning ? (scanProgress || 'Scanning...') : '🔄 Scan All'}
+              {scanning ? `Scanning ${bgProgress.current}/${bgProgress.total}...` : '🔄 Scan All'}
             </button>
           </div>
         </div>
+
+        {/* Background scan progress */}
+        {scanning && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 mt-3 flex items-center gap-3">
+            <div className="w-4 h-4 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin shrink-0"></div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[11px] font-semibold text-blue-700">
+                Scanning {bgProgress.current}/{bgProgress.total} — you can leave this page
+              </div>
+              <div className="text-[10px] text-blue-500 truncate">{bgProgress.url}</div>
+            </div>
+            <div className="w-32 h-1.5 bg-blue-100 rounded-full overflow-hidden shrink-0">
+              <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${bgProgress.total > 0 ? (bgProgress.current / bgProgress.total) * 100 : 0}%` }}></div>
+            </div>
+          </div>
+        )}
 
         {/* Stats + filters */}
         <div className="flex items-center gap-4 mt-3 flex-wrap">
@@ -297,7 +309,7 @@ export default function SiteHealth() {
               </thead>
               <tbody>
                 {filteredScans.map(scan => {
-                  const isScanning = scanning === scan.id;
+                  const isUrlScanning = scanning && bgProgress.url === scan.url;
                   const needsAttention = hasIssues(scan);
                   const isStale = !scan.last_scanned || (Date.now() - new Date(scan.last_scanned).getTime()) > staleDays * 86400000;
                   return (
@@ -337,7 +349,7 @@ export default function SiteHealth() {
                       <td className="px-3 py-2 text-right whitespace-nowrap">
                         <button onClick={() => handleScanUrl(scan.id)} disabled={!!scanning}
                           className="text-[10px] text-blue-500 hover:text-blue-700 bg-transparent border-none cursor-pointer mr-1 disabled:opacity-30">
-                          {isScanning ? '...' : '🔄'}
+                          {isUrlScanning ? '...' : '🔄'}
                         </button>
                         <button onClick={() => handleDelete(scan.id)}
                           className="text-[10px] text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer">🗑</button>
