@@ -191,18 +191,20 @@ export default function SiteHealth() {
   const [singleScanning, setSingleScanning] = useState(null);
 
   const handleScanUrl = async (id) => {
-    if (singleScanning === id) return;
+    if (singleScanning) return;
     const scan = scans.find(s => s.id === id);
     if (!scan) return;
     setSingleScanning(id);
+    toast(`Scanning ${scan.url}...`, { icon: '🔄' });
     try {
-      // Always load key fresh from DB to avoid stale/empty key
       let key = psiKey || '';
       if (!key) {
         const { data: keyData } = await supabase.from('app_settings').select('value').eq('key', 'google_psi_key').maybeSingle();
         if (keyData?.value) { key = keyData.value; setPsiKey(key); }
       }
+      if (!key) toast('No API key found — using free tier (may be slow)', { icon: '⚠️' });
       const mobile = await runPageSpeed(scan.url, 'mobile', key);
+      toast(`Mobile done — scanning desktop...`, { icon: '🔄' });
       const desktop = await runPageSpeed(scan.url, 'desktop', key);
       const payload = {
         mobile_performance: mobile.performance, mobile_accessibility: mobile.accessibility,
