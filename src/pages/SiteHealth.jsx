@@ -162,7 +162,7 @@ export default function SiteHealth() {
   const [singleScanning, setSingleScanning] = useState(null);
 
   const handleScanUrl = async (id) => {
-    if (scanning || singleScanning) return;
+    if (singleScanning === id) return;
     const scan = scans.find(s => s.id === id);
     if (!scan) return;
     setSingleScanning(id);
@@ -372,7 +372,7 @@ export default function SiteHealth() {
                         ) : <span className="text-gray-300">Never</span>}
                       </td>
                       <td className="px-3 py-2 text-right whitespace-nowrap">
-                        <button onClick={() => handleScanUrl(scan.id)} disabled={!!scanning || !!singleScanning}
+                        <button onClick={() => handleScanUrl(scan.id)} disabled={singleScanning === scan.id}
                           className="text-[10px] text-blue-500 hover:text-blue-700 bg-transparent border-none cursor-pointer mr-1 disabled:opacity-30">
                           {isUrlScanning ? '...' : '🔄'}
                         </button>
