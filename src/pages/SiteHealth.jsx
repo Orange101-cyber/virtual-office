@@ -159,10 +159,34 @@ export default function SiteHealth() {
     toast.success(`Added ${rows.length} URLs from bucket list`);
   };
 
-  const handleScanUrl = (id) => {
-    if (scanning) return;
-    startBackgroundScan([id]);
-    toast('Scanning in background — you can leave this page');
+  const [singleScanning, setSingleScanning] = useState(null);
+
+  const handleScanUrl = async (id) => {
+    if (scanning || singleScanning) return;
+    const scan = scans.find(s => s.id === id);
+    if (!scan) return;
+    setSingleScanning(id);
+    try {
+      const key = psiKey || '';
+      const mobile = await runPageSpeed(scan.url, 'mobile', key);
+      const desktop = await runPageSpeed(scan.url, 'desktop', key);
+      const payload = {
+        mobile_performance: mobile.performance, mobile_accessibility: mobile.accessibility,
+        mobile_best_practices: mobile.bestPractices, mobile_seo: mobile.seo,
+        mobile_lcp: mobile.lcp, mobile_cls: mobile.cls, mobile_fcp: mobile.fcp, mobile_tbt: mobile.tbt,
+        desktop_performance: desktop.performance, desktop_accessibility: desktop.accessibility,
+        desktop_best_practices: desktop.bestPractices, desktop_seo: desktop.seo,
+        desktop_lcp: desktop.lcp, desktop_cls: desktop.cls,
+        last_scanned: new Date().toISOString(),
+      };
+      const { error } = await supabase.from('site_health').update(payload).eq('id', id);
+      if (error) throw error;
+      setScans(prev => prev.map(s => s.id === id ? { ...s, ...payload } : s));
+      toast.success(`Scanned ${scan.url}`);
+    } catch (err) {
+      toast.error(`Scan failed: ${err.message}`);
+    }
+    setSingleScanning(null);
   };
 
   const handleScanAll = () => {
@@ -306,7 +330,7 @@ export default function SiteHealth() {
               </thead>
               <tbody>
                 {filteredScans.map(scan => {
-                  const isUrlScanning = scanning && bgProgress.url === scan.url;
+                  const isUrlScanning = singleScanning === scan.id || (scanning && bgProgress.url === scan.url);
                   const needsAttention = hasIssues(scan);
                   const isStale = !scan.last_scanned || (Date.now() - new Date(scan.last_scanned).getTime()) > staleDays * 86400000;
                   return (
@@ -344,7 +368,7 @@ export default function SiteHealth() {
                         ) : <span className="text-gray-300">Never</span>}
                       </td>
                       <td className="px-3 py-2 text-right whitespace-nowrap">
-                        <button onClick={() => handleScanUrl(scan.id)} disabled={!!scanning}
+                        <button onClick={() => handleScanUrl(scan.id)} disabled={!!scanning || !!singleScanning}
                           className="text-[10px] text-blue-500 hover:text-blue-700 bg-transparent border-none cursor-pointer mr-1 disabled:opacity-30">
                           {isUrlScanning ? '...' : '🔄'}
                         </button>
