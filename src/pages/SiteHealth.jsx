@@ -176,7 +176,7 @@ export default function SiteHealth() {
   }, [scans, filterClient, filterIssues, filterTypes]);
 
   // Unique clients in scans
-  const scanClients = [...new Set(scans.map(s => s.client_name))].sort();
+  const allClientNames = [...new Set([...clients.map(c => c.name), ...scans.map(s => s.client_name)])].sort();
 
   const handleAddUrl = async () => {
     if (!addForm.client_name || !addForm.url) return toast.error('Select client and enter URL');
@@ -338,7 +338,7 @@ export default function SiteHealth() {
           <select value={filterClient} onChange={e => setFilterClient(e.target.value)}
             className="border border-gray-200 rounded px-2 py-1 text-[11px] bg-[#f8f8f6]">
             <option value="all">All Clients</option>
-            {scanClients.map(c => <option key={c} value={c}>{c}</option>)}
+            {allClientNames.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
 
           {/* Page type multi-select */}
