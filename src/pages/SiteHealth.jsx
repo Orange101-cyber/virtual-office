@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useClients } from '../hooks/useClients';
-import { startBackgroundScan, onScanProgress, isScanning as isBgScanning, resumeScan } from '../lib/backgroundScanner';
+import { startBackgroundScan, onScanProgress, isScanning as isBgScanning, resumeScan, cancelScan } from '../lib/backgroundScanner';
 import toast from 'react-hot-toast';
 
 const PSI_API = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed';
@@ -237,6 +237,10 @@ export default function SiteHealth() {
             <div className="w-32 h-1.5 bg-blue-100 rounded-full overflow-hidden shrink-0">
               <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${bgProgress.total > 0 ? (bgProgress.current / bgProgress.total) * 100 : 0}%` }}></div>
             </div>
+            <button onClick={() => { cancelScan(); toast('Scan cancelled'); }}
+              className="text-[10px] text-red-500 font-bold bg-transparent border border-red-300 rounded px-2 py-1 cursor-pointer hover:bg-red-50 shrink-0">
+              ✕ Cancel
+            </button>
           </div>
         )}
 

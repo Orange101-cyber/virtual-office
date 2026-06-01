@@ -6,6 +6,7 @@ const PSI_API = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed';
 const QUEUE_KEY = 'cyl_scan_queue';
 
 let _running = false;
+let _cancelled = false;
 let _listeners = new Set();
 let _progress = { current: 0, total: 0, url: '', done: false };
 
@@ -23,6 +24,14 @@ async function loadApiKey() {
 function notify() { _listeners.forEach(fn => fn({ ..._progress })); }
 export function onScanProgress(fn) { _listeners.add(fn); return () => _listeners.delete(fn); }
 export function getScanProgress() { return _progress; }
+
+export function cancelScan() {
+  _cancelled = true;
+  _running = false;
+  _progress = { current: 0, total: 0, url: '', done: true };
+  clearQueue();
+  notify();
+}
 export function isScanning() { return _running; }
 
 function saveQueue(queue) {
@@ -76,8 +85,8 @@ async function processQueue() {
   const doneCount = total - remaining.length;
 
   for (let i = 0; i < remaining.length; i++) {
+    if (_cancelled) break;
     const id = remaining[i];
-    // Get URL for this scan
     const { data: scan } = await supabase.from('site_health').select('url').eq('id', id).maybeSingle();
     if (!scan) continue;
 
@@ -127,6 +136,7 @@ async function processQueue() {
 
 export function startBackgroundScan(scanIds) {
   if (_running) return;
+  _cancelled = false;
   const queue = { ids: scanIds, completed: [], startedAt: Date.now() };
   saveQueue(queue);
   processQueue();
