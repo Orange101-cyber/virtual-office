@@ -86,6 +86,8 @@ async function processQueue() {
 
     try {
       const mobile = await runOne(scan.url, 'mobile', apiKey);
+      // Wait between mobile and desktop to avoid rate limit
+      await new Promise(r => setTimeout(r, 1500));
       const desktop = await runOne(scan.url, 'desktop', apiKey);
 
       await supabase.from('site_health').update({
@@ -97,8 +99,12 @@ async function processQueue() {
         desktop_lcp: desktop.lcp, desktop_cls: desktop.cls,
         last_scanned: new Date().toISOString(),
       }).eq('id', id);
-    } catch {
-      // Skip failed, continue
+    } catch (err) {
+      // Mark as scanned even on failure so we know it was attempted
+      console.error('Scan failed for', scan.url, err.message);
+      await supabase.from('site_health').update({
+        last_scanned: new Date().toISOString(),
+      }).eq('id', id);
     }
 
     // Mark completed in queue + notify so UI updates immediately
@@ -110,7 +116,7 @@ async function processQueue() {
     _progress = { current: doneCount + i + 1, total, url: '', done: false };
     notify();
 
-    if (i < remaining.length - 1) await new Promise(r => setTimeout(r, 3000));
+    if (i < remaining.length - 1) await new Promise(r => setTimeout(r, 5000));
   }
 
   _progress = { current: total, total, url: '', done: true };
