@@ -205,7 +205,7 @@ export default function SiteHealth() {
         </div>
 
         {/* Background scan progress */}
-        {scanning && (
+        {scanning && bgProgress.total > 0 && !bgProgress.done && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 mt-3 flex items-center gap-3">
             <div className="w-4 h-4 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin shrink-0"></div>
             <div className="flex-1 min-w-0">
