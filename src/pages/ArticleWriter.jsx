@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useClients } from '../hooks/useClients';
 import { getClientContext, formatContextForPrompt } from '../lib/clientContext';
@@ -15,11 +15,11 @@ export default function ArticleWriter() {
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
-  const [saveTimer, setSaveTimer] = useState(null);
   const [wordTarget, setWordTarget] = useState(1100);
   const [contentType, setContentType] = useState('Blog Post');
   const [readingLevel, setReadingLevel] = useState('grade-7');
   const [customInstructions, setCustomInstructions] = useState('');
+  const saveTimerRef = useRef(null);
 
   // Load clients
   useEffect(() => {
@@ -81,10 +81,8 @@ export default function ArticleWriter() {
 
   const handleArticleChange = (newText) => {
     setArticle(newText);
-    // Debounce auto-save: save 2 seconds after user stops typing
-    if (saveTimer) clearTimeout(saveTimer);
-    const timer = setTimeout(() => saveDraft(newText), 2000);
-    setSaveTimer(timer);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => saveDraft(newText), 2000);
   };
 
   const handleGenerate = async () => {
