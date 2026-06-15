@@ -229,7 +229,7 @@ export default function ClientBucketList() {
       ...r,
       client_name: selectedClient,
       client_id: selectedClientId,
-      page_category: category,
+      page_category: r.page_category || category,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }));
@@ -491,7 +491,10 @@ function PageTable({ category, pages, onEdit, onDelete, onPlanRefresh, scoreForU
                   <th className="px-3 py-2 font-bold uppercase text-[9px]" title="SEO Checker checklist score">SEO Score</th>
                   <th className="px-3 py-2 font-bold uppercase text-[9px] text-center" title="PageSpeed Insights — Performance / Accessibility / SEO">PSI</th>
                   {(category === 'general' || category === 'service') && (
-                    <th className="px-3 py-2 font-bold uppercase text-[9px]">Refresh</th>
+                    <>
+                      <th className="px-3 py-2 font-bold uppercase text-[9px]">Published</th>
+                      <th className="px-3 py-2 font-bold uppercase text-[9px]">Refresh</th>
+                    </>
                   )}
                   {(category === 'landing' || category === 'blog') && (
                     <>
@@ -585,9 +588,14 @@ function PageTable({ category, pages, onEdit, onDelete, onPlanRefresh, scoreForU
                         )}
                       </td>
                       {(category === 'general' || category === 'service') && (
-                        <td className="px-3 py-2 text-[10px] text-gray-500">
-                          {REFRESH_SCHEDULES.find(s => s.value === p.refresh_schedule)?.label || '—'}
-                        </td>
+                        <>
+                          <td className="px-3 py-2 text-[10px] text-gray-500">
+                            {p.date_published ? new Date(p.date_published).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-[10px] text-gray-500">
+                            {REFRESH_SCHEDULES.find(s => s.value === p.refresh_schedule)?.label || '—'}
+                          </td>
+                        </>
                       )}
                       {(category === 'landing' || category === 'blog') && (
                         <>
@@ -1068,7 +1076,7 @@ function WebsiteScanModal({ clientName, clientId, existingPages, onImport, onClo
 
     try {
       setScanStep('Fetching ranked pages from DataForSEO...');
-      const ranked = await dfs.getRankedKeywordsForDomain(domain.trim(), 100);
+      const ranked = await dfs.getRankedKeywordsForDomain(domain.trim(), 200);
 
       setScanStep(`Processing ${ranked.length} keywords...`);
       const pageMap = {};
@@ -1104,6 +1112,7 @@ function WebsiteScanModal({ clientName, clientId, existingPages, onImport, onClo
           focus_keyword: p.bestKeyword || (td.title || '').split(/[|–:—]/)[0].trim().substring(0, 60),
           category: guessCategory(p.url, td.title || td.h1),
           rank: p.bestRank, sv: p.bestSv, keywordCount: p.keywords.length,
+          allKeywords: p.keywords.sort((a, b) => (b.search_volume || 0) - (a.search_volume || 0)).map(k => k.keyword),
           isDuplicate: existingUrls.has(urlClean),
           kwDuplicate: p.bestKeyword ? existingKws.has(p.bestKeyword.toLowerCase()) : false,
         };
@@ -1198,8 +1207,18 @@ function WebsiteScanModal({ clientName, clientId, existingPages, onImport, onClo
                         <div className="text-[9px] text-gray-400 truncate">{page.url.replace(/^https?:\/\//, '')}</div>
                       </td>
                       <td className="px-3 py-2">
-                        <input value={page.focus_keyword} onChange={e => setDiscovered(prev => prev.map((d, j) => j === i ? { ...d, focus_keyword: e.target.value } : d))}
-                          className="border border-gray-200 rounded px-1.5 py-1 text-[10px] bg-[#f8f8f6] w-full max-w-[160px]" />
+                        <input
+                          list={`kw-list-${i}`}
+                          value={page.focus_keyword}
+                          onChange={e => setDiscovered(prev => prev.map((d, j) => j === i ? { ...d, focus_keyword: e.target.value } : d))}
+                          className="border border-gray-200 rounded px-1.5 py-1 text-[10px] bg-[#f8f8f6] w-full max-w-[160px]"
+                          title={`${page.allKeywords?.length || 0} keyword variants available — click to browse`}
+                        />
+                        {page.allKeywords?.length > 1 && (
+                          <datalist id={`kw-list-${i}`}>
+                            {page.allKeywords.map((kw, ki) => <option key={ki} value={kw} />)}
+                          </datalist>
+                        )}
                       </td>
                       <td className="px-3 py-2">
                         <select value={page.category} onChange={e => setDiscovered(prev => prev.map((d, j) => j === i ? { ...d, category: e.target.value } : d))}
