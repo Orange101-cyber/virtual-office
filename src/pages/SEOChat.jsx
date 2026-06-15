@@ -7,19 +7,47 @@ import toast from 'react-hot-toast';
 
 const ANTHROPIC_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY;
 
-const SYSTEM_PROMPT = (clientContext) => `You are an expert SEO assistant for Campaigns You Love (CYL), an Australian digital marketing agency. You help the content team with keyword research, content strategy, and SEO advice.
+const SYSTEM_PROMPT = (clientContext) => `You are an expert SEO content strategist for Campaigns You Love (CYL), an Australian digital marketing agency. You help Rowena and the content team plan quarterly content strategies, find keyword opportunities, identify refresh candidates, and maximise SEO results for each client.
 
-You have access to LIVE tools — when the user asks about keywords, search volume, or competitors, you MUST use tool calls to fetch real data. Never guess metrics.
+You have access to LIVE tools — when discussing keywords, search volume, or competitors, you MUST use tools to fetch real data. Never guess metrics.
 
 ${clientContext ? `ACTIVE CLIENT CONTEXT:\n${clientContext}\n` : 'No client selected — give general SEO advice.'}
 
-Rules:
-- Always use Australian English (optimise, analyse, colour)
-- Location context is Australia (unless specified)
-- When suggesting keywords, always recommend checking real SV/KD
-- Be concise and actionable — this team is busy
-- If you reference data, cite whether it's from DataForSEO (real) or your knowledge (estimated)
-- When the user asks "what should we write next", analyse the client's existing content gaps`;
+━━━ QUARTERLY CONTENT PLANNING ━━━
+When helping plan content for a quarter:
+1. First call get_planned_keywords to see what is already in the pipeline (avoid duplication)
+2. Call get_refresh_opportunities to identify existing pages that need updating — refreshes often outperform new content
+3. Use get_related_keywords to find gap opportunities based on the client's services
+4. For every keyword suggested, call get_keyword_metrics for real SV + KD — never estimate these
+5. Call check_cannibalization on every keyword before recommending it
+6. Present suggestions in a clear table: Keyword | SV | KD | Type (New/Refresh) | Rationale
+
+━━━ KEYWORD SELECTION RULES ━━━
+- New content: prioritise SV > 100, KD < 40 (unless client is an authority site)
+- For high-KD keywords (KD > 60): suggest long-tail variants instead — use get_related_keywords
+- SV < 50: only worth targeting if highly commercial (buyer intent) or hyper-local
+- Always balance the quarter across a mix of KD levels — not all easy, not all hard
+- Prefer keywords with clear commercial or local intent for service businesses
+
+━━━ CANNIBALIZATION RULES (CRITICAL) ━━━
+- ALWAYS run check_cannibalization before recommending any keyword
+- If a keyword is already in the bucket list: recommend a REFRESH of the existing page, NOT new content — the URL will be shown in the cannibalization result
+- "commercial roller shutters" and "roller shutters commercial" target the same intent — flag semantic overlaps too
+- If a keyword is in the content plan but not yet live, flag it as already planned
+- Never suggest two pieces targeting the same search intent in the same quarter
+
+━━━ REFRESH vs NEW CONTENT ━━━
+- Pages that already rank (even #11–30) are better candidates for a refresh than writing new content on the same topic
+- Use get_refresh_opportunities to surface overdue pages from the bucket list
+- When recommending a refresh, always include the existing URL so it can be pre-filled in the content plan
+
+━━━ RESPONSE STYLE ━━━
+- Australian English always (optimise, analyse, colour, favour)
+- Be concise and actionable — Rowena is busy
+- When listing keywords, always show: Keyword | SV | KD | Type | Notes
+- Use ⚠️ CANNIBALIZATION RISK and ✅ CLEAR labels prominently
+- Cite data source: DataForSEO (real) or Knowledge (estimated)
+- End planning sessions with a prioritised shortlist ready to add to the content plan`;
 
 const TOOLS = [
   {
@@ -77,6 +105,24 @@ const TOOLS = [
       required: ['domain']
     }
   },
+  {
+    name: 'get_refresh_opportunities',
+    description: 'Get pages from the client bucket list that are candidates for a content refresh — pages that exist but may be outdated or have never been refreshed. Use this when planning quarterly content to identify refresh vs new content opportunities.',
+    input_schema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  },
+  {
+    name: 'get_planned_keywords',
+    description: 'Get keywords already in the content plan for this client (Planned, Researched, Briefed, or Client Approved). Use this at the start of quarterly planning to avoid duplicating content already in the pipeline.',
+    input_schema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  },
 ];
 
 async function executeTool(toolName, input, clientData) {
@@ -89,10 +135,35 @@ async function executeTool(toolName, input, clientData) {
     case 'check_cannibalization': {
       const kw = input.keyword.toLowerCase().trim();
       const pastKws = (clientData.pastKeywords || []).map(k => k.toLowerCase());
-      const pageKws = (clientData.pageKeywords || []).map(k => k.toLowerCase());
       const inBank = pastKws.some(p => p.includes(kw) || kw.includes(p));
-      const inPages = pageKws.some(p => p.includes(kw) || kw.includes(p));
-      return { keyword: kw, already_targeted: inBank || inPages, in_keyword_bank: inBank, in_bucket_list: inPages, warning: (inBank || inPages) ? 'This keyword is already targeted — consider a refresh or different angle' : 'Keyword is available' };
+      const matchingPage = (clientData.pages || []).find(p => {
+        const pk = (p.focus_keyword || '').toLowerCase().trim();
+        return pk && (pk.includes(kw) || kw.includes(pk));
+      });
+      const inPages = !!matchingPage;
+      const plannedMatch = (clientData.contentPlan || []).find(p => {
+        const pk = (p.focus_keyword || '').toLowerCase().trim();
+        return pk && (pk.includes(kw) || kw.includes(pk));
+      });
+      const result = {
+        keyword: kw,
+        already_targeted: inBank || inPages || !!plannedMatch,
+        in_keyword_bank: inBank,
+        in_bucket_list: inPages,
+        in_content_plan: !!plannedMatch,
+      };
+      if (matchingPage) {
+        result.existing_page = { url: matchingPage.url, focus_keyword: matchingPage.focus_keyword, category: matchingPage.page_category };
+        result.recommendation = `REFRESH the existing page at ${matchingPage.url} rather than creating new content`;
+      } else if (plannedMatch) {
+        result.recommendation = `Already planned: "${plannedMatch.title}" [${plannedMatch.status}] — avoid duplicating`;
+      } else if (inBank) {
+        result.recommendation = 'Keyword is in the past keyword bank — check if an existing page covers this topic';
+      } else {
+        result.recommendation = 'Keyword is available — safe to plan new content';
+      }
+      result.warning = (inBank || inPages || !!plannedMatch) ? 'CANNIBALIZATION RISK — see recommendation above' : '✅ Clear — no conflicts found';
+      return result;
     }
     case 'get_related_keywords': {
       if (!dfs.isConfigured()) return { error: 'DataForSEO not configured' };
@@ -108,6 +179,45 @@ async function executeTool(toolName, input, clientData) {
       if (!dfs.isConfigured()) return { error: 'DataForSEO not configured' };
       const kws = await dfs.getRankedKeywordsForDomain(input.domain, 30);
       return { domain: input.domain, total: kws.length, top_keywords: kws.slice(0, 20).map(k => ({ keyword: k.keyword, rank: k.rank, sv: k.search_volume, kd: k.kd })) };
+    }
+    case 'get_refresh_opportunities': {
+      const pages = clientData.pages || [];
+      const refreshCandidates = pages
+        .filter(p => p.page_category !== 'video')
+        .map(p => ({
+          url: p.url,
+          focus_keyword: p.focus_keyword,
+          category: p.page_category,
+          bucket: p.bucket,
+          is_refreshed: p.is_refreshed,
+          date_published: p.date_published,
+          date_refreshed: p.date_refreshed,
+        }));
+      const neverRefreshed = refreshCandidates.filter(p => !p.is_refreshed);
+      const refreshed = refreshCandidates.filter(p => p.is_refreshed);
+      return {
+        total_pages: refreshCandidates.length,
+        never_refreshed: neverRefreshed.length,
+        pages_never_refreshed: neverRefreshed.slice(0, 20),
+        pages_previously_refreshed: refreshed.slice(0, 10),
+        recommendation: neverRefreshed.length > 0
+          ? `${neverRefreshed.length} pages have never been refreshed — these are strong candidates for quarterly refresh content`
+          : 'All pages have been refreshed at least once',
+      };
+    }
+    case 'get_planned_keywords': {
+      const plan = clientData.contentPlan || [];
+      const active = plan.filter(p => ['Planned', 'Researched', 'Briefed', 'Client Approved'].includes(p.status));
+      return {
+        total_in_pipeline: active.length,
+        keywords_in_pipeline: active.map(p => ({
+          title: p.title,
+          focus_keyword: p.focus_keyword,
+          status: p.status,
+          month: p.month,
+        })),
+        note: active.length > 0 ? 'Avoid planning content for any of these keywords — they are already in progress' : 'Pipeline is empty — all keywords are available',
+      };
     }
     default:
       return { error: 'Unknown tool' };
@@ -142,8 +252,8 @@ export default function SEOChat() {
       const [bvRes, kwRes, pagesRes, planRes] = await Promise.all([
         supabase.from('client_brand_voice').select('*').eq('client_name', selectedClient).maybeSingle(),
         dbClient?.id ? supabase.from('clients').select('past_keywords').eq('id', dbClient.id).maybeSingle() : Promise.resolve({ data: null }),
-        supabase.from('client_pages').select('url, focus_keyword, page_category, bucket').eq('client_name', selectedClient),
-        supabase.from('content_plans').select('title, focus_keyword, status, month').eq('client_name', selectedClient),
+        supabase.from('client_pages').select('url, focus_keyword, page_category, bucket, is_refreshed, date_published, date_refreshed').eq('client_name', selectedClient),
+        supabase.from('content_plans').select('title, focus_keyword, status, month, search_volume, kd').eq('client_name', selectedClient),
       ]);
       setClientData({
         brandVoice: bvRes.data,
@@ -179,18 +289,20 @@ export default function SEOChat() {
       if (bv.tone) ctx += `Tone: ${bv.tone}\n`;
     }
     if (clientData.pages.length) {
-      ctx += `\nExisting pages (${clientData.pages.length}):\n`;
-      clientData.pages.slice(0, 30).forEach(p => {
-        ctx += `- [${p.page_category}] ${p.focus_keyword || p.url} (bucket: ${p.bucket || 'none'})\n`;
+      ctx += `\nBucket list — existing pages (${clientData.pages.length} total, showing up to 40):\n`;
+      clientData.pages.slice(0, 40).forEach(p => {
+        const refreshFlag = p.is_refreshed ? ' [refreshed]' : ' [never refreshed]';
+        ctx += `- [${p.page_category}] "${p.focus_keyword || '—'}" | ${p.url || 'no url'} | bucket: ${p.bucket || 'none'}${refreshFlag}\n`;
       });
     }
     if (clientData.pastKeywords.length) {
-      ctx += `\nPast keywords targeted (${clientData.pastKeywords.length}): ${clientData.pastKeywords.slice(0, 20).join(', ')}\n`;
+      ctx += `\nPast keywords targeted (${clientData.pastKeywords.length}): ${clientData.pastKeywords.slice(0, 30).join(', ')}\n`;
     }
     if (clientData.contentPlan.length) {
-      ctx += `\nContent plan:\n`;
-      clientData.contentPlan.slice(0, 15).forEach(p => {
-        ctx += `- "${p.title}" (${p.focus_keyword}) [${p.status}]\n`;
+      const active = clientData.contentPlan.filter(p => ['Planned', 'Researched', 'Briefed', 'Client Approved'].includes(p.status));
+      ctx += `\nContent plan — active pipeline (${active.length} items):\n`;
+      active.slice(0, 20).forEach(p => {
+        ctx += `- "${p.title}" | FK: ${p.focus_keyword || '—'} | ${p.month || '—'} [${p.status}]\n`;
       });
     }
     return ctx;
@@ -322,15 +434,44 @@ export default function SEOChat() {
     setActiveChatId(null);
   };
 
-  const handleAddToPlan = async (keyword, title) => {
+  const handleAddToPlan = async (keyword, title, options = {}) => {
     if (!selectedClient) return;
     const now = new Date();
     const quarter = `Q${Math.floor(now.getMonth() / 3) + 1} ${now.getFullYear()}`;
-    await supabase.from('content_plans').insert({
-      client_name: selectedClient, quarter, month: now.toLocaleDateString('en-AU', { month: 'long' }),
-      content_type: 'Blog', title: title || keyword, focus_keyword: keyword, status: 'Planned',
-    });
-    toast.success(`Added "${keyword}" to Content Plan`);
+
+    // Look up if this keyword already has a page in the bucket list
+    const kwLower = keyword.toLowerCase().trim();
+    const existingPage = clientData.pages.find(p =>
+      (p.focus_keyword || '').toLowerCase().trim() === kwLower
+    );
+
+    const existingUrl = options.url || existingPage?.url || null;
+    const isRefresh = !!(existingUrl);
+
+    const payload = {
+      client_name: selectedClient,
+      quarter,
+      month: now.toLocaleDateString('en-AU', { month: 'long' }),
+      content_type: 'Blog',
+      title: title || keyword,
+      focus_keyword: keyword,
+      status: 'Planned',
+      search_volume: options.sv != null ? parseInt(options.sv) : null,
+      kd: options.kd != null ? parseInt(options.kd) : null,
+      existing_url: existingUrl,
+      is_refresh: isRefresh,
+    };
+
+    try {
+      await supabase.from('content_plans').insert(payload);
+      if (existingPage) {
+        toast.success(`Added "${keyword}" to Content Plan as a REFRESH (existing page found)`);
+      } else {
+        toast.success(`Added "${keyword}" to Content Plan`);
+      }
+    } catch (err) {
+      toast.error('Could not add to plan: ' + err.message);
+    }
   };
 
   const handleSaveKeyword = async (keyword) => {
@@ -348,10 +489,10 @@ export default function SEOChat() {
 
   // Quick prompts
   const quickPrompts = [
-    { label: '📊 What should we write next?', prompt: `What content should we create next for ${selectedClient || 'this client'}? Analyse their existing pages and suggest gaps.` },
-    { label: '🔑 Find keyword opportunities', prompt: `Find keyword opportunities for ${selectedClient || 'this client'} based on their services and target audience.` },
-    { label: '⚔️ Competitor analysis', prompt: `Analyse our main competitors and find keywords they rank for that we don't.` },
-    { label: '📈 Content audit', prompt: `Review our existing content and suggest which pages need refreshing or updating.` },
+    { label: '📅 Plan Q3 content', prompt: `Let's plan the quarterly content for ${selectedClient || 'this client'}. Start by checking what's already in the pipeline and what pages could be refreshed, then suggest new keyword opportunities with real search data. Make sure to check for cannibalization before recommending anything.` },
+    { label: '🔄 Find refresh opportunities', prompt: `Which existing pages for ${selectedClient || 'this client'} should we prioritise for a content refresh this quarter? Check the bucket list and recommend the best candidates.` },
+    { label: '🔑 Find new keyword gaps', prompt: `Find keyword opportunities for ${selectedClient || 'this client'} that we haven't targeted yet. Check against the bucket list for cannibalization and get real SV + KD data before recommending.` },
+    { label: '⚔️ Competitor keyword gaps', prompt: `Analyse our main competitors for ${selectedClient || 'this client'} and find keywords they rank for that we don't. Flag any that overlap with our existing pages.` },
   ];
 
   return (
@@ -536,7 +677,7 @@ function ToolResultDisplay({ toolName, result, onAddToPlan, onSaveKeyword }) {
                 <span className="text-gray-500">SV: <b className="text-[#1a1a1a]">{(k.search_volume || 0).toLocaleString()}</b></span>
                 <span className="text-gray-500">KD: <b className={k.kd <= 20 ? 'text-green-600' : k.kd <= 50 ? 'text-orange-500' : 'text-red-500'}>{k.kd}</b></span>
                 {k.cpc > 0 && <span className="text-gray-400">${Number(k.cpc).toFixed(2)}</span>}
-                <button onClick={() => onAddToPlan(k.keyword)} className="text-[9px] text-[#F5C518] font-bold bg-transparent border border-[#F5C518] rounded px-1.5 py-0.5 cursor-pointer hover:bg-[#F5C518]/10">+ Plan</button>
+                <button onClick={() => onAddToPlan(k.keyword, null, { sv: k.search_volume, kd: k.kd })} className="text-[9px] text-[#F5C518] font-bold bg-transparent border border-[#F5C518] rounded px-1.5 py-0.5 cursor-pointer hover:bg-[#F5C518]/10">+ Plan</button>
                 <button onClick={() => onSaveKeyword(k.keyword)} className="text-[9px] text-blue-500 font-bold bg-transparent border border-blue-200 rounded px-1.5 py-0.5 cursor-pointer hover:bg-blue-50">💾</button>
               </div>
             ))}
@@ -549,12 +690,22 @@ function ToolResultDisplay({ toolName, result, onAddToPlan, onSaveKeyword }) {
   if (toolName === 'check_cannibalization') {
     return (
       <div className="flex justify-start">
-        <div className={`rounded-lg p-3 text-[11px] ${result.already_targeted ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
-          <span className={result.already_targeted ? 'text-red-600' : 'text-green-600'}>
-            {result.already_targeted ? '⚠ ' : '✓ '}{result.warning}
-          </span>
-          {result.in_keyword_bank && <span className="text-red-500 text-[10px] ml-2">(in keyword bank)</span>}
-          {result.in_bucket_list && <span className="text-red-500 text-[10px] ml-2">(in bucket list)</span>}
+        <div className={`rounded-lg p-3 text-[11px] max-w-lg w-full ${result.already_targeted ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
+          <div className={`font-bold mb-1 ${result.already_targeted ? 'text-red-600' : 'text-green-600'}`}>
+            {result.already_targeted ? '⚠️ CANNIBALIZATION RISK' : '✅ Clear'} — "{result.keyword}"
+          </div>
+          <div className="text-gray-700 text-[10px] mb-1">{result.recommendation}</div>
+          <div className="flex flex-wrap gap-1 mt-1">
+            {result.in_keyword_bank && <span className="text-[9px] bg-red-100 text-red-600 font-bold px-1.5 py-0.5 rounded">in keyword bank</span>}
+            {result.in_bucket_list && <span className="text-[9px] bg-red-100 text-red-600 font-bold px-1.5 py-0.5 rounded">in bucket list</span>}
+            {result.in_content_plan && <span className="text-[9px] bg-orange-100 text-orange-600 font-bold px-1.5 py-0.5 rounded">already planned</span>}
+          </div>
+          {result.existing_page && (
+            <div className="mt-1.5 bg-white rounded border border-red-100 px-2 py-1 text-[10px] text-gray-600">
+              Existing page: <a href={result.existing_page.url} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline">{result.existing_page.url}</a>
+              <span className="ml-2 text-gray-400">[{result.existing_page.category}]</span>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -565,14 +716,65 @@ function ToolResultDisplay({ toolName, result, onAddToPlan, onSaveKeyword }) {
       <div className="flex justify-start">
         <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 max-w-lg w-full">
           <div className="text-[9px] font-bold uppercase text-purple-600 mb-1.5">🔗 Related Keywords for "{result.seed}"</div>
-          <div className="flex flex-wrap gap-1">
+          <div className="space-y-1">
             {result.related.slice(0, 15).map((k, i) => (
-              <button key={i} onClick={() => onAddToPlan(k.keyword)}
-                className="text-[10px] bg-white border border-purple-200 text-gray-700 rounded-full px-2 py-0.5 cursor-pointer hover:border-[#F5C518]">
-                {k.keyword} <span className="text-gray-400">({k.sv})</span>
-              </button>
+              <div key={i} className="flex items-center gap-2 bg-white border border-purple-100 rounded px-2 py-1 text-[10px]">
+                <span className="flex-1 text-gray-800">{k.keyword}</span>
+                <span className="text-gray-400">SV: <b>{(k.sv || 0).toLocaleString()}</b></span>
+                <span className="text-gray-400">KD: <b className={k.kd <= 20 ? 'text-green-600' : k.kd <= 50 ? 'text-orange-500' : 'text-red-500'}>{k.kd ?? '—'}</b></span>
+                <button onClick={() => onAddToPlan(k.keyword, null, { sv: k.sv, kd: k.kd })}
+                  className="text-[9px] text-[#F5C518] font-bold bg-transparent border border-[#F5C518] rounded px-1.5 py-0.5 cursor-pointer hover:bg-[#F5C518]/10">+ Plan</button>
+                <button onClick={() => onSaveKeyword(k.keyword)}
+                  className="text-[9px] text-blue-500 font-bold bg-transparent border border-blue-200 rounded px-1.5 py-0.5 cursor-pointer hover:bg-blue-50">💾</button>
+              </div>
             ))}
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (toolName === 'get_refresh_opportunities') {
+    return (
+      <div className="flex justify-start">
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 max-w-lg w-full">
+          <div className="text-[9px] font-bold uppercase text-amber-700 mb-1.5">🔄 Refresh Opportunities ({result.total_pages} pages total)</div>
+          <div className="text-[10px] text-amber-800 mb-2">{result.recommendation}</div>
+          {result.pages_never_refreshed?.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-[9px] font-bold uppercase text-gray-500 mb-1">Never Refreshed ({result.never_refreshed})</div>
+              {result.pages_never_refreshed.slice(0, 10).map((p, i) => (
+                <div key={i} className="flex items-center gap-2 bg-white border border-amber-100 rounded px-2 py-1 text-[10px]">
+                  <span className="flex-1 text-gray-700 truncate">{p.focus_keyword || p.url}</span>
+                  <span className="text-[9px] text-gray-400">[{p.category}]</span>
+                  <button onClick={() => onAddToPlan(p.focus_keyword || '', null, { url: p.url })}
+                    className="text-[9px] text-amber-600 font-bold bg-transparent border border-amber-300 rounded px-1.5 py-0.5 cursor-pointer hover:bg-amber-100 shrink-0">+ Refresh</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (toolName === 'get_planned_keywords') {
+    return (
+      <div className="flex justify-start">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 max-w-lg w-full">
+          <div className="text-[9px] font-bold uppercase text-blue-700 mb-1.5">📅 Content Plan Pipeline ({result.total_in_pipeline} items)</div>
+          <div className="text-[10px] text-blue-800 mb-2">{result.note}</div>
+          {result.keywords_in_pipeline?.length > 0 && (
+            <div className="space-y-0.5">
+              {result.keywords_in_pipeline.map((p, i) => (
+                <div key={i} className="flex items-center gap-2 text-[10px] bg-white border border-blue-100 rounded px-2 py-1">
+                  <span className="flex-1 text-gray-700 truncate">{p.focus_keyword || p.title}</span>
+                  <span className="text-gray-400">{p.month || '—'}</span>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${p.status === 'Planned' ? 'bg-gray-100 text-gray-500' : p.status === 'Briefed' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'}`}>{p.status}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     );
