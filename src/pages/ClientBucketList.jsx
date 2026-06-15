@@ -184,7 +184,13 @@ export default function ClientBucketList() {
         payload.created_at = new Date().toISOString();
         const { data: newPage, error } = await supabase.from('client_pages').insert(payload).select().single();
         if (error) throw error;
-        setPages(prev => [newPage, ...prev]);
+        if (newPage) {
+          setPages(prev => [newPage, ...prev]);
+        } else {
+          // Insert succeeded but select returned nothing — re-fetch to show saved data
+          const { data: refreshed } = await supabase.from('client_pages').select('*').eq('client_name', selectedClient).order('updated_at', { ascending: false });
+          if (refreshed) setPages(refreshed);
+        }
         toast.success('Page added');
       }
 
@@ -1075,8 +1081,15 @@ function WebsiteScanModal({ clientName, clientId, existingPages, onImport, onClo
     setSelections({});
 
     try {
-      setScanStep('Fetching ranked pages from DataForSEO...');
+      setScanStep(`Fetching ranked pages for ${domain.trim()}...`);
       const ranked = await dfs.getRankedKeywordsForDomain(domain.trim(), 200);
+
+      if (!ranked || ranked.length === 0) {
+        toast.error(`No ranked keywords found for "${domain.trim()}". Check the domain is correct (no https://, no trailing slash) and has DataForSEO data.`);
+        setScanning(false);
+        setScanStep('');
+        return;
+      }
 
       setScanStep(`Processing ${ranked.length} keywords...`);
       const pageMap = {};
