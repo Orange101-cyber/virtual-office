@@ -1,429 +1,832 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useClients } from '../hooks/useClients';
 import toast from 'react-hot-toast';
 
-const EMPTY_SHOOT = {
-  client_name: '',
-  shoot_date: '',
-  location: '',
-  contact_name: '',
-  contact_phone: '',
-  objectives: '',
-  notes: '',
-  shots: JSON.stringify([]),
-  timeline: JSON.stringify([]),
-  handoff: JSON.stringify({ editing_done: false, copy_written: false, ads_ready: false, published: false }),
+const CONTENT_TYPES = ['Podcast', 'Content Arbitrage', 'Both'];
+
+const STATUS_OPTIONS = ['Planned', 'Recorded', 'In Edit', 'Complete'];
+
+const STATUS_COLORS = {
+  Planned: 'bg-gray-100 text-gray-600',
+  Recorded: 'bg-blue-100 text-blue-700',
+  'In Edit': 'bg-orange-100 text-orange-700',
+  Complete: 'bg-green-100 text-green-700',
 };
 
-const PLATFORMS = ['Facebook', 'Instagram', 'YouTube', 'TikTok', 'LinkedIn', 'Google Ads', 'Website'];
+const CONTENT_TYPE_BADGE = {
+  Podcast: 'bg-purple-100 text-purple-700',
+  'Content Arbitrage': 'bg-yellow-100 text-yellow-800',
+  Both: 'bg-pink-100 text-pink-700',
+};
 
-export default function ShootPlanner() {
-  const { clients } = useClients();
-  const [shoots, setShoots] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [activeShoot, setActiveShoot] = useState(null);
-  const [form, setForm] = useState(EMPTY_SHOOT);
-  const [saving, setSaving] = useState(false);
+function Badge({ label, colorClass }) {
+  return (
+    <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${colorClass}`}>
+      {label}
+    </span>
+  );
+}
 
-  useEffect(() => {
-    supabase.from('shoot_planner')
-      .select('*')
-      .order('shoot_date', { ascending: false })
-      .then(({ data, error }) => {
-        if (error && error.code !== '42P01') console.error(error);
-        setShoots(data || []);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, []);
+function monthKey(dateStr) {
+  if (!dateStr) return 'Unknown';
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleString('default', { month: 'long', year: 'numeric' });
+}
 
-  const openShoot = (shoot) => {
-    setActiveShoot(shoot.id);
-    setForm({
-      client_name: shoot.client_name || '',
-      shoot_date: shoot.shoot_date || '',
-      location: shoot.location || '',
-      contact_name: shoot.contact_name || '',
-      contact_phone: shoot.contact_phone || '',
-      objectives: shoot.objectives || '',
-      notes: shoot.notes || '',
-      shots: shoot.shots || '[]',
-      timeline: shoot.timeline || '[]',
-      handoff: shoot.handoff || '{"editing_done":false,"copy_written":false,"ads_ready":false,"published":false}',
-    });
-  };
-
-  const newShoot = () => {
-    setActiveShoot('new');
-    setForm({ ...EMPTY_SHOOT, shoot_date: new Date().toISOString().split('T')[0] });
-  };
-
-  const handleSave = async () => {
-    if (!form.client_name) return toast.error('Select a client');
-    setSaving(true);
-    const payload = { ...form, updated_at: new Date().toISOString() };
-    try {
-      if (activeShoot === 'new') {
-        payload.created_at = new Date().toISOString();
-        const { data, error } = await supabase.from('shoot_planner').insert(payload).select().single();
-        if (error) throw error;
-        setShoots(prev => [data, ...prev]);
-        setActiveShoot(data.id);
-        toast.success('Run sheet created');
-      } else {
-        const { error } = await supabase.from('shoot_planner').update(payload).eq('id', activeShoot);
-        if (error) throw error;
-        setShoots(prev => prev.map(s => s.id === activeShoot ? { ...s, ...payload } : s));
-        toast.success('Saved');
-      }
-    } catch (err) {
-      toast.error('Save error: ' + err.message);
+// ─── Agreement Form ───────────────────────────────────────────────────────────
+function AgreementForm({ clients, initial, onSave, onCancel }) {
+  const [form, setForm] = useState(
+    initial || {
+      client_name: '',
+      content_type: 'Podcast',
+      frequency: '',
+      shorts_per_session: 8,
+      deliverables: '',
+      run_sheet_notes: '',
+      run_sheet_url: '',
+      drive_link: '',
+      trello_link: '',
     }
-    setSaving(false);
-  };
+  );
 
-  const handleDelete = async (id) => {
-    if (!confirm('Delete this run sheet?')) return;
-    await supabase.from('shoot_planner').delete().eq('id', id);
-    setShoots(prev => prev.filter(s => s.id !== id));
-    if (activeShoot === id) { setActiveShoot(null); setForm(EMPTY_SHOOT); }
-    toast.success('Deleted');
-  };
-
-  const handleExport = () => {
-    const shots = JSON.parse(form.shots || '[]');
-    const timeline = JSON.parse(form.timeline || '[]');
-    const handoff = JSON.parse(form.handoff || '{}');
-    const doc = `
-${'═'.repeat(60)}
-  VIDEO SHOOT RUN SHEET
-${'═'.repeat(60)}
-
-CLIENT:     ${form.client_name}
-DATE:       ${form.shoot_date ? new Date(form.shoot_date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : 'TBD'}
-LOCATION:   ${form.location || 'TBD'}
-CONTACT:    ${form.contact_name || '—'}  ${form.contact_phone ? '| ' + form.contact_phone : ''}
-
-OBJECTIVES:
-${form.objectives || '(none)'}
-
-${'─'.repeat(60)}
-SHOT LIST (${shots.length} videos)
-${'─'.repeat(60)}
-${shots.length === 0 ? '(no shots added)' : shots.map((s, i) => `
-${i + 1}. ${s.description || 'Untitled'}
-   Platform: ${s.platform || '—'}  |  Duration: ${s.duration || '—'}  |  Ratio: ${s.aspect || '—'}
-   ${s.script_hook ? `Hook: ${s.script_hook}` : ''}
-   ${s.script_body ? `Body: ${s.script_body}` : ''}
-   ${s.script_cta ? `CTA: ${s.script_cta}` : ''}
-   ${s.reference_url ? `Reference: ${s.reference_url}` : ''}
-   ${s.notes ? `Notes: ${s.notes}` : ''}
-`).join('')}
-${'─'.repeat(60)}
-DAY-OF TIMELINE
-${'─'.repeat(60)}
-${timeline.length === 0 ? '(no timeline set)' : timeline.map(t => `${t.time || '—'}  ${t.activity || ''}`).join('\n')}
-
-${'─'.repeat(60)}
-POST-SHOOT HANDOFF
-${'─'.repeat(60)}
-[ ${handoff.editing_done ? 'X' : ' '} ] Editing complete
-[ ${handoff.copy_written ? 'X' : ' '} ] Ad copy written
-[ ${handoff.ads_ready ? 'X' : ' '} ] Ads team ready to post
-[ ${handoff.published ? 'X' : ' '} ] Published / Live
-
-NOTES:
-${form.notes || '(none)'}
-
-${'─'.repeat(60)}
-Generated by CYL Virtual Office
-Campaigns You Love · cylglobal.com
-`.trim();
-
-    const blob = new Blob([doc], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Run-Sheet-${form.client_name}-${form.shoot_date || 'undated'}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success('Run sheet exported');
-  };
-
-  // ── Shoot list view ──
-  if (!activeShoot) {
-    const upcoming = shoots.filter(s => !s.shoot_date || new Date(s.shoot_date) >= new Date(new Date().setHours(0,0,0,0)));
-    const past = shoots.filter(s => s.shoot_date && new Date(s.shoot_date) < new Date(new Date().setHours(0,0,0,0)));
-
-    return (
-      <div className="h-full flex flex-col overflow-hidden">
-        <div className="bg-white border-b border-gray-200 px-5 py-3 shrink-0 flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-[#1a1a1a]">🎬 Shoot Planner</h1>
-            <p className="text-[11px] text-gray-400">Run sheets for upcoming video shoots</p>
-          </div>
-          <button onClick={newShoot}
-            className="bg-[#F5C518] text-[#1a1a1a] border-none rounded px-4 py-2 text-[11px] font-bold cursor-pointer hover:bg-[#e6b800]">
-            + New Run Sheet
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-5">
-          <div className="max-w-3xl mx-auto">
-            {loading ? <div className="text-center py-10 text-gray-400">Loading...</div> : (
-              <>
-                {upcoming.length > 0 && (
-                  <div className="mb-6">
-                    <div className="text-[10px] font-bold uppercase text-gray-400 tracking-wider mb-3">Upcoming Shoots</div>
-                    <div className="space-y-2">
-                      {upcoming.map(s => <ShootCard key={s.id} shoot={s} onOpen={() => openShoot(s)} onDelete={() => handleDelete(s.id)} />)}
-                    </div>
-                  </div>
-                )}
-                {past.length > 0 && (
-                  <div>
-                    <div className="text-[10px] font-bold uppercase text-gray-400 tracking-wider mb-3">Past Shoots</div>
-                    <div className="space-y-2">
-                      {past.map(s => <ShootCard key={s.id} shoot={s} onOpen={() => openShoot(s)} onDelete={() => handleDelete(s.id)} past />)}
-                    </div>
-                  </div>
-                )}
-                {shoots.length === 0 && (
-                  <div className="text-center py-16">
-                    <div className="text-4xl mb-2 opacity-30">🎬</div>
-                    <div className="text-sm text-gray-500">No run sheets yet</div>
-                    <div className="text-[11px] text-gray-400 mt-1">Create your first one to start planning a shoot</div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    );
+  function set(field, val) {
+    setForm((f) => ({ ...f, [field]: val }));
   }
 
-  // ── Run sheet editor ──
-  const shots = JSON.parse(form.shots || '[]');
-  const timeline = JSON.parse(form.timeline || '[]');
-  const handoff = JSON.parse(form.handoff || '{}');
-  const setShots = (fn) => setForm(f => ({ ...f, shots: JSON.stringify(typeof fn === 'function' ? fn(JSON.parse(f.shots || '[]')) : fn) }));
-  const setTimeline = (fn) => setForm(f => ({ ...f, timeline: JSON.stringify(typeof fn === 'function' ? fn(JSON.parse(f.timeline || '[]')) : fn) }));
-  const setHandoff = (key, val) => setForm(f => {
-    const h = JSON.parse(f.handoff || '{}');
-    return { ...f, handoff: JSON.stringify({ ...h, [key]: val }) };
+  function handleSubmit(e) {
+    e.preventDefault();
+    if (!form.client_name) return toast.error('Please select a client.');
+    onSave(form);
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-600 mb-1">Client *</label>
+          <select
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[12px] focus:outline-none focus:ring-2 focus:ring-[#F5C518]"
+            value={form.client_name}
+            onChange={(e) => set('client_name', e.target.value)}
+          >
+            <option value="">Select client…</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.name}>{c.name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-600 mb-1">Content Type</label>
+          <select
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[12px] focus:outline-none focus:ring-2 focus:ring-[#F5C518]"
+            value={form.content_type}
+            onChange={(e) => set('content_type', e.target.value)}
+          >
+            {CONTENT_TYPES.map((t) => <option key={t}>{t}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-600 mb-1">Recording Frequency</label>
+          <input
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[12px] focus:outline-none focus:ring-2 focus:ring-[#F5C518]"
+            placeholder="e.g. Once every 2–3 months"
+            value={form.frequency}
+            onChange={(e) => set('frequency', e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-600 mb-1">Shorts per Session</label>
+          <input
+            type="number"
+            min={1}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[12px] focus:outline-none focus:ring-2 focus:ring-[#F5C518]"
+            value={form.shorts_per_session}
+            onChange={(e) => set('shorts_per_session', Number(e.target.value))}
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-[11px] font-semibold text-gray-600 mb-1">Agreed Deliverables</label>
+        <textarea
+          rows={3}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[12px] focus:outline-none focus:ring-2 focus:ring-[#F5C518]"
+          placeholder="What are we delivering each session?"
+          value={form.deliverables}
+          onChange={(e) => set('deliverables', e.target.value)}
+        />
+      </div>
+
+      <div>
+        <label className="block text-[11px] font-semibold text-gray-600 mb-1">Run Sheet Notes</label>
+        <textarea
+          rows={3}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[12px] focus:outline-none focus:ring-2 focus:ring-[#F5C518]"
+          placeholder="What happens each session? Steps, format, flow…"
+          value={form.run_sheet_notes}
+          onChange={(e) => set('run_sheet_notes', e.target.value)}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-600 mb-1">Run Sheet URL</label>
+          <input
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[12px] focus:outline-none focus:ring-2 focus:ring-[#F5C518]"
+            placeholder="https://docs.google.com/…"
+            value={form.run_sheet_url}
+            onChange={(e) => set('run_sheet_url', e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-600 mb-1">Google Drive Folder</label>
+          <input
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[12px] focus:outline-none focus:ring-2 focus:ring-[#F5C518]"
+            placeholder="https://drive.google.com/…"
+            value={form.drive_link}
+            onChange={(e) => set('drive_link', e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-[11px] font-semibold text-gray-600 mb-1">Trello Board Link</label>
+        <input
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[12px] focus:outline-none focus:ring-2 focus:ring-[#F5C518]"
+          placeholder="https://trello.com/…"
+          value={form.trello_link}
+          onChange={(e) => set('trello_link', e.target.value)}
+        />
+      </div>
+
+      <div className="flex gap-3 pt-2">
+        <button
+          type="submit"
+          className="bg-[#F5C518] text-[#1a1a1a] font-semibold px-4 py-2 rounded-lg text-[12px] hover:brightness-95 transition"
+        >
+          Save Agreement
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-gray-500 text-[12px] hover:text-gray-700"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// ─── Session Form ─────────────────────────────────────────────────────────────
+function SessionForm({ agreements, onSave, onCancel }) {
+  const [form, setForm] = useState({
+    client_name: '',
+    shoot_date: '',
+    episode_title: '',
+    content_type: '',
+    status: 'Planned',
+    notes: '',
   });
 
+  function set(field, val) {
+    setForm((f) => ({ ...f, [field]: val }));
+  }
+
+  function handleClientChange(clientName) {
+    const agreement = agreements.find((a) => a.client_name === clientName);
+    setForm((f) => ({
+      ...f,
+      client_name: clientName,
+      content_type: agreement ? (agreement.objectives || '') : f.content_type,
+    }));
+  }
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    if (!form.client_name) return toast.error('Please select a client.');
+    if (!form.shoot_date) return toast.error('Please set a date.');
+    onSave(form);
+  }
+
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-5 py-3 shrink-0 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <button onClick={() => setActiveShoot(null)}
-            className="text-[11px] text-gray-400 hover:text-[#F5C518] bg-transparent border-none cursor-pointer">← All Shoots</button>
-          <div className="text-sm font-bold text-[#1a1a1a]">
-            {form.client_name || 'New Run Sheet'} {form.shoot_date ? `— ${new Date(form.shoot_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}` : ''}
-          </div>
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-600 mb-1">Client *</label>
+          <select
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[12px] focus:outline-none focus:ring-2 focus:ring-[#F5C518]"
+            value={form.client_name}
+            onChange={(e) => handleClientChange(e.target.value)}
+          >
+            <option value="">Select client…</option>
+            {agreements.map((a) => (
+              <option key={a.id} value={a.client_name}>{a.client_name}</option>
+            ))}
+          </select>
         </div>
-        <div className="flex gap-2">
-          <button onClick={handleExport} className="bg-transparent border border-gray-300 text-gray-700 rounded px-3 py-1.5 text-[11px] font-semibold cursor-pointer hover:border-[#F5C518]">
-            📄 Export Run Sheet
-          </button>
-          <button onClick={handleSave} disabled={saving}
-            className="bg-[#F5C518] text-[#1a1a1a] border-none rounded px-4 py-1.5 text-[11px] font-bold cursor-pointer hover:bg-[#e6b800] disabled:opacity-40">
-            {saving ? 'Saving...' : 'Save'}
-          </button>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-600 mb-1">Date *</label>
+          <input
+            type="date"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[12px] focus:outline-none focus:ring-2 focus:ring-[#F5C518]"
+            value={form.shoot_date}
+            onChange={(e) => set('shoot_date', e.target.value)}
+          />
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-5">
-        <div className="max-w-4xl mx-auto space-y-6">
+      <div>
+        <label className="block text-[11px] font-semibold text-gray-600 mb-1">Episode Title / Description</label>
+        <input
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[12px] focus:outline-none focus:ring-2 focus:ring-[#F5C518]"
+          placeholder="What's this session about?"
+          value={form.episode_title}
+          onChange={(e) => set('episode_title', e.target.value)}
+        />
+      </div>
 
-          {/* ── Section 1: Shoot Details ── */}
-          <Section title="Shoot Details">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="md:col-span-2">
-                <Label>Client</Label>
-                <select value={form.client_name} onChange={e => setForm(f => ({ ...f, client_name: e.target.value }))} className="sf">
-                  <option value="">Select client...</option>
-                  {clients.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <Label>Shoot Date</Label>
-                <input type="date" value={form.shoot_date} onChange={e => setForm(f => ({ ...f, shoot_date: e.target.value }))} className="sf" />
-              </div>
-              <div>
-                <Label>Location</Label>
-                <input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} placeholder="e.g. Client's office, Gold Coast" className="sf" />
-              </div>
-              <div>
-                <Label>Client Contact</Label>
-                <input value={form.contact_name} onChange={e => setForm(f => ({ ...f, contact_name: e.target.value }))} placeholder="Name" className="sf" />
-              </div>
-              <div>
-                <Label>Phone</Label>
-                <input value={form.contact_phone} onChange={e => setForm(f => ({ ...f, contact_phone: e.target.value }))} placeholder="04xx xxx xxx" className="sf" />
-              </div>
-              <div className="md:col-span-2">
-                <Label>Shoot Objectives</Label>
-                <textarea value={form.objectives} onChange={e => setForm(f => ({ ...f, objectives: e.target.value }))} rows={2}
-                  placeholder="What do we need to walk away with? e.g. 3x testimonial videos, 2x property walkthrough, 1x team intro" className="sf resize-y" />
-              </div>
-            </div>
-          </Section>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-600 mb-1">Content Type</label>
+          <select
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[12px] focus:outline-none focus:ring-2 focus:ring-[#F5C518]"
+            value={form.content_type}
+            onChange={(e) => set('content_type', e.target.value)}
+          >
+            <option value="">Select…</option>
+            {CONTENT_TYPES.map((t) => <option key={t}>{t}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-600 mb-1">Status</label>
+          <select
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[12px] focus:outline-none focus:ring-2 focus:ring-[#F5C518]"
+            value={form.status}
+            onChange={(e) => set('status', e.target.value)}
+          >
+            {STATUS_OPTIONS.map((s) => <option key={s}>{s}</option>)}
+          </select>
+        </div>
+      </div>
 
-          {/* ── Section 2: Shot List ── */}
-          <Section title={`Shot List (${shots.length})`}>
-            {shots.length === 0 ? (
-              <div className="text-[11px] text-gray-400 italic mb-2">No shots added yet</div>
-            ) : (
-              <div className="space-y-3 mb-3">
-                {shots.map((shot, i) => (
-                  <div key={i} className="bg-[#f8f8f6] border border-gray-200 rounded-lg p-3">
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="text-[10px] font-bold text-gray-500">Shot {i + 1}</div>
-                      <button onClick={() => setShots(prev => prev.filter((_, j) => j !== i))}
-                        className="text-[10px] text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer">✕</button>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
-                      <div className="md:col-span-2">
-                        <input value={shot.description || ''} placeholder="What are we shooting? e.g. Client testimonial — John"
-                          onChange={e => setShots(prev => prev.map((s, j) => j === i ? { ...s, description: e.target.value } : s))} className="sf" />
+      <div>
+        <label className="block text-[11px] font-semibold text-gray-600 mb-1">Notes</label>
+        <textarea
+          rows={3}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[12px] focus:outline-none focus:ring-2 focus:ring-[#F5C518]"
+          placeholder="Anything specific about this session?"
+          value={form.notes}
+          onChange={(e) => set('notes', e.target.value)}
+        />
+      </div>
+
+      <div className="flex gap-3 pt-2">
+        <button
+          type="submit"
+          className="bg-[#F5C518] text-[#1a1a1a] font-semibold px-4 py-2 rounded-lg text-[12px] hover:brightness-95 transition"
+        >
+          Save Session
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-gray-500 text-[12px] hover:text-gray-700"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+export default function ShootPlanner() {
+  const [tab, setTab] = useState('register');
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showAgreementForm, setShowAgreementForm] = useState(false);
+  const [editingAgreement, setEditingAgreement] = useState(null);
+  const [showSessionForm, setShowSessionForm] = useState(false);
+  const [expandedSession, setExpandedSession] = useState(null);
+
+  const { clients } = useClients();
+
+  async function loadData() {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('shoot_planner')
+      .select('*')
+      .order('shoot_date', { ascending: false });
+
+    if (error) {
+      if (error.code === '42P01') {
+        setRows([]);
+      } else {
+        toast.error('Failed to load data');
+        console.error(error);
+      }
+    } else {
+      setRows(data || []);
+    }
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const agreements = useMemo(
+    () =>
+      rows
+        .filter((r) => r.shoot_type === 'agreement')
+        .map((r) => ({
+          ...r,
+          timeline_parsed: (() => {
+            try {
+              return typeof r.timeline === 'string'
+                ? JSON.parse(r.timeline)
+                : r.timeline || {};
+            } catch {
+              return {};
+            }
+          })(),
+        })),
+    [rows]
+  );
+
+  const sessions = useMemo(
+    () => rows.filter((r) => r.shoot_type !== 'agreement'),
+    [rows]
+  );
+
+  // ── Agreement CRUD ──────────────────────────────────────────────────────────
+  async function saveAgreement(form) {
+    const timeline = JSON.stringify({
+      frequency: form.frequency,
+      shorts_per_session: form.shorts_per_session,
+      deliverables: form.deliverables,
+      run_sheet_url: form.run_sheet_url,
+      drive_link: form.drive_link,
+      trello_link: form.trello_link,
+    });
+
+    const payload = {
+      shoot_type: 'agreement',
+      client_name: form.client_name,
+      objectives: form.content_type,
+      notes: form.run_sheet_notes,
+      timeline,
+    };
+
+    if (editingAgreement) {
+      const { error } = await supabase
+        .from('shoot_planner')
+        .update(payload)
+        .eq('id', editingAgreement.id);
+      if (error) return toast.error('Failed to update agreement');
+      toast.success('Agreement updated');
+    } else {
+      const { error } = await supabase.from('shoot_planner').insert(payload);
+      if (error) return toast.error('Failed to save agreement');
+      toast.success('Agreement saved');
+    }
+
+    setShowAgreementForm(false);
+    setEditingAgreement(null);
+    loadData();
+  }
+
+  async function deleteAgreement(id) {
+    if (!window.confirm('Delete this client agreement?')) return;
+    const { error } = await supabase.from('shoot_planner').delete().eq('id', id);
+    if (error) return toast.error('Failed to delete');
+    toast.success('Deleted');
+    loadData();
+  }
+
+  function startEditAgreement(agreement) {
+    setEditingAgreement(agreement);
+    setShowAgreementForm(true);
+  }
+
+  // ── Session CRUD ────────────────────────────────────────────────────────────
+  async function saveSession(form) {
+    const payload = {
+      shoot_type: 'session',
+      client_name: form.client_name,
+      shoot_date: form.shoot_date,
+      objectives: form.episode_title,
+      notes: form.notes,
+      contact_name: form.status,
+      location: form.content_type,
+    };
+
+    const { error } = await supabase.from('shoot_planner').insert(payload);
+    if (error) return toast.error('Failed to save session');
+    toast.success('Session saved');
+    setShowSessionForm(false);
+    loadData();
+  }
+
+  // ── Sessions grouped by month ───────────────────────────────────────────────
+  const sessionsByMonth = useMemo(() => {
+    const groups = {};
+    const sorted = [...sessions].sort(
+      (a, b) => new Date(b.shoot_date) - new Date(a.shoot_date)
+    );
+    sorted.forEach((s) => {
+      const key = monthKey(s.shoot_date);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(s);
+    });
+    return groups;
+  }, [sessions]);
+
+  const thisMonthKey = monthKey(new Date().toISOString().slice(0, 10));
+  const thisMonthSessions = sessionsByMonth[thisMonthKey] || [];
+  const thisMonthClients = new Set(thisMonthSessions.map((s) => s.client_name)).size;
+
+  // ── UI ──────────────────────────────────────────────────────────────────────
+  return (
+    <div className="min-h-screen bg-[#f8f8f6]">
+      {/* Top bar */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link
+            to="/video-hub"
+            className="text-[11px] text-gray-400 hover:text-[#F5C518] transition"
+          >
+            ← Video Hub
+          </Link>
+          <div>
+            <h1 className="text-[18px] font-bold text-[#1a1a1a] leading-tight">
+              Shoot Planner
+            </h1>
+            <p className="text-[11px] text-gray-400">
+              Client video register &amp; recording schedule
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {tab === 'register' && (
+            <button
+              onClick={() => {
+                setEditingAgreement(null);
+                setShowAgreementForm(true);
+              }}
+              className="bg-[#F5C518] text-[#1a1a1a] font-semibold px-4 py-2 rounded-lg text-[12px] hover:brightness-95 transition"
+            >
+              + Add Client Agreement
+            </button>
+          )}
+          {tab === 'schedule' && (
+            <button
+              onClick={() => setShowSessionForm(true)}
+              className="bg-[#F5C518] text-[#1a1a1a] font-semibold px-4 py-2 rounded-lg text-[12px] hover:brightness-95 transition"
+            >
+              + New Session
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="bg-white border-b border-gray-200 px-6">
+        <div className="flex gap-6">
+          {[
+            { key: 'register', label: 'Client Register' },
+            { key: 'schedule', label: 'Recording Schedule' },
+          ].map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`py-3 text-[12px] font-semibold border-b-2 transition ${
+                tab === key
+                  ? 'border-[#F5C518] text-[#1a1a1a]'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="p-6 max-w-5xl mx-auto">
+        {loading ? (
+          <div className="text-center py-16 text-gray-400 text-[12px]">Loading…</div>
+        ) : (
+          <>
+            {/* ── CLIENT REGISTER TAB ─────────────────────────────────────────── */}
+            {tab === 'register' && (
+              <div className="space-y-4">
+                {showAgreementForm && (
+                  <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                    <h3 className="text-[14px] font-bold text-[#1a1a1a] mb-4">
+                      {editingAgreement ? 'Edit Agreement' : 'New Client Agreement'}
+                    </h3>
+                    <AgreementForm
+                      clients={clients}
+                      initial={
+                        editingAgreement
+                          ? {
+                              client_name: editingAgreement.client_name,
+                              content_type: editingAgreement.objectives || 'Podcast',
+                              frequency:
+                                editingAgreement.timeline_parsed?.frequency || '',
+                              shorts_per_session:
+                                editingAgreement.timeline_parsed?.shorts_per_session ?? 8,
+                              deliverables:
+                                editingAgreement.timeline_parsed?.deliverables || '',
+                              run_sheet_notes: editingAgreement.notes || '',
+                              run_sheet_url:
+                                editingAgreement.timeline_parsed?.run_sheet_url || '',
+                              drive_link:
+                                editingAgreement.timeline_parsed?.drive_link || '',
+                              trello_link:
+                                editingAgreement.timeline_parsed?.trello_link || '',
+                            }
+                          : undefined
+                      }
+                      onSave={saveAgreement}
+                      onCancel={() => {
+                        setShowAgreementForm(false);
+                        setEditingAgreement(null);
+                      }}
+                    />
+                  </div>
+                )}
+
+                {agreements.length === 0 && !showAgreementForm && (
+                  <div className="text-center py-16 text-gray-400 text-[12px]">
+                    No client agreements yet. Click "Add Client Agreement" to get started.
+                  </div>
+                )}
+
+                {agreements.map((a) => {
+                  const tl = a.timeline_parsed || {};
+                  return (
+                    <div
+                      key={a.id}
+                      className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-full bg-[#F5C518] flex items-center justify-center font-bold text-[#1a1a1a] text-[13px]">
+                            {(a.client_name || '?')[0].toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-[14px] font-bold text-[#1a1a1a]">
+                              {a.client_name}
+                            </p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <Badge
+                                label={a.objectives || 'Podcast'}
+                                colorClass={
+                                  CONTENT_TYPE_BADGE[a.objectives] ||
+                                  'bg-gray-100 text-gray-600'
+                                }
+                              />
+                              {tl.frequency && (
+                                <span className="text-[10px] text-gray-400">
+                                  {tl.frequency}
+                                </span>
+                              )}
+                              {tl.shorts_per_session !== undefined && (
+                                <span className="text-[10px] text-gray-400">
+                                  {tl.shorts_per_session} shorts/session
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => startEditAgreement(a)}
+                            className="text-[11px] text-gray-500 hover:text-[#1a1a1a] transition px-2 py-1 rounded border border-gray-200 hover:border-gray-400"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => deleteAgreement(a.id)}
+                            className="text-[11px] text-red-400 hover:text-red-600 transition px-2 py-1 rounded border border-red-100 hover:border-red-300"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </div>
-                      <select value={shot.platform || ''} onChange={e => setShots(prev => prev.map((s, j) => j === i ? { ...s, platform: e.target.value } : s))} className="sf">
-                        <option value="">Platform</option>
-                        {PLATFORMS.map(p => <option key={p}>{p}</option>)}
-                      </select>
-                      <div className="flex gap-2">
-                        <input value={shot.duration || ''} placeholder="30s" onChange={e => setShots(prev => prev.map((s, j) => j === i ? { ...s, duration: e.target.value } : s))} className="sf" style={{ width: '60px' }} />
-                        <select value={shot.aspect || ''} onChange={e => setShots(prev => prev.map((s, j) => j === i ? { ...s, aspect: e.target.value } : s))} className="sf">
-                          <option value="">Ratio</option>
-                          <option>9:16</option><option>16:9</option><option>1:1</option><option>4:5</option>
-                        </select>
+
+                      <div className="mt-4 grid grid-cols-2 gap-4">
+                        {tl.deliverables && (
+                          <div>
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">
+                              Deliverables
+                            </p>
+                            <p className="text-[11px] text-gray-600 whitespace-pre-wrap">
+                              {tl.deliverables}
+                            </p>
+                          </div>
+                        )}
+                        {a.notes && (
+                          <div>
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">
+                              Run Sheet Notes
+                            </p>
+                            <p className="text-[11px] text-gray-600 whitespace-pre-wrap">
+                              {a.notes}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap gap-3">
+                        {tl.run_sheet_url && (
+                          <a
+                            href={tl.run_sheet_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] text-blue-600 hover:underline"
+                          >
+                            Run Sheet →
+                          </a>
+                        )}
+                        {tl.drive_link && (
+                          <a
+                            href={tl.drive_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] text-blue-600 hover:underline"
+                          >
+                            Google Drive →
+                          </a>
+                        )}
+                        {tl.trello_link && (
+                          <a
+                            href={tl.trello_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] text-blue-600 hover:underline"
+                          >
+                            Trello Board →
+                          </a>
+                        )}
                       </div>
                     </div>
-                    {/* Script */}
-                    <div className="grid grid-cols-3 gap-2 mb-2">
-                      <input value={shot.script_hook || ''} placeholder="Hook (first 3s)" onChange={e => setShots(prev => prev.map((s, j) => j === i ? { ...s, script_hook: e.target.value } : s))} className="sf text-[10px]" />
-                      <input value={shot.script_body || ''} placeholder="Body / key message" onChange={e => setShots(prev => prev.map((s, j) => j === i ? { ...s, script_body: e.target.value } : s))} className="sf text-[10px]" />
-                      <input value={shot.script_cta || ''} placeholder="CTA" onChange={e => setShots(prev => prev.map((s, j) => j === i ? { ...s, script_cta: e.target.value } : s))} className="sf text-[10px]" />
+                  );
+                })}
+              </div>
+            )}
+
+            {/* ── RECORDING SCHEDULE TAB ─────────────────────────────────────── */}
+            {tab === 'schedule' && (
+              <div className="space-y-6">
+                {/* Summary banner */}
+                <div className="bg-[#1a1a1a] text-white rounded-xl px-5 py-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] text-gray-400 mb-0.5 uppercase tracking-wide">
+                      {thisMonthKey}
+                    </p>
+                    <p className="text-[14px] font-bold">
+                      {thisMonthSessions.length}{' '}
+                      {thisMonthSessions.length === 1 ? 'session' : 'sessions'} this month
+                      {thisMonthClients > 0 &&
+                        ` · ${thisMonthClients} ${thisMonthClients === 1 ? 'client' : 'clients'}`}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] text-gray-400 mb-0.5">All time</p>
+                    <p className="text-[13px] font-semibold">
+                      {sessions.filter((s) => s.contact_name === 'Complete').length}{' '}
+                      <span className="text-gray-400 font-normal">of</span> {sessions.length}{' '}
+                      complete
+                    </p>
+                  </div>
+                </div>
+
+                {showSessionForm && (
+                  <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                    <h3 className="text-[14px] font-bold text-[#1a1a1a] mb-4">
+                      New Recording Session
+                    </h3>
+                    <SessionForm
+                      agreements={agreements}
+                      onSave={saveSession}
+                      onCancel={() => setShowSessionForm(false)}
+                    />
+                  </div>
+                )}
+
+                {sessions.length === 0 && !showSessionForm && (
+                  <div className="text-center py-16 text-gray-400 text-[12px]">
+                    No sessions recorded yet. Click "New Session" to add one.
+                  </div>
+                )}
+
+                {Object.entries(sessionsByMonth).map(([month, monthSessions]) => (
+                  <div key={month}>
+                    <div className="flex items-center gap-3 mb-3">
+                      <h3 className="text-[12px] font-bold text-[#1a1a1a]">{month}</h3>
+                      <span className="text-[10px] text-gray-400">
+                        {monthSessions.length}{' '}
+                        {monthSessions.length === 1 ? 'session' : 'sessions'}
+                      </span>
+                      <div className="flex-1 h-px bg-gray-200" />
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <input value={shot.reference_url || ''} placeholder="Reference video URL (competitor or past example)" onChange={e => setShots(prev => prev.map((s, j) => j === i ? { ...s, reference_url: e.target.value } : s))} className="sf text-[10px]" />
-                      <input value={shot.notes || ''} placeholder="Shot notes (framing, B-roll, props, etc.)" onChange={e => setShots(prev => prev.map((s, j) => j === i ? { ...s, notes: e.target.value } : s))} className="sf text-[10px]" />
+
+                    <div className="space-y-2">
+                      {monthSessions.map((s) => {
+                        const status = s.contact_name || 'Planned';
+                        const contentType = s.location || '';
+                        const isExpanded = expandedSession === s.id;
+                        const dateObj = s.shoot_date
+                          ? new Date(s.shoot_date + 'T00:00:00')
+                          : null;
+
+                        return (
+                          <div
+                            key={s.id}
+                            className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden"
+                          >
+                            <div
+                              className="flex items-center gap-4 px-5 py-3 cursor-pointer hover:bg-gray-50 transition"
+                              onClick={() =>
+                                setExpandedSession(isExpanded ? null : s.id)
+                              }
+                            >
+                              {/* Date block */}
+                              <div className="text-center min-w-[44px]">
+                                <p className="text-[10px] text-gray-400 uppercase leading-none">
+                                  {dateObj
+                                    ? dateObj.toLocaleString('default', { month: 'short' })
+                                    : '—'}
+                                </p>
+                                <p className="text-[20px] font-bold text-[#1a1a1a] leading-tight">
+                                  {dateObj ? dateObj.getDate() : '?'}
+                                </p>
+                              </div>
+
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">
+                                  {s.client_name}
+                                </p>
+                                <p className="text-[11px] text-gray-400 truncate">
+                                  {s.objectives || 'Untitled session'}
+                                </p>
+                              </div>
+
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                {contentType && (
+                                  <Badge
+                                    label={contentType}
+                                    colorClass={
+                                      CONTENT_TYPE_BADGE[contentType] ||
+                                      'bg-gray-100 text-gray-600'
+                                    }
+                                  />
+                                )}
+                                <Badge
+                                  label={status}
+                                  colorClass={
+                                    STATUS_COLORS[status] || 'bg-gray-100 text-gray-600'
+                                  }
+                                />
+                                <span className="text-gray-300 text-[11px] ml-1">
+                                  {isExpanded ? '▲' : '▼'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {isExpanded && (
+                              <div className="px-5 pb-4 border-t border-gray-100 pt-3 bg-gray-50">
+                                {s.notes && (
+                                  <p className="text-[11px] text-gray-600 mb-3 whitespace-pre-wrap">
+                                    {s.notes}
+                                  </p>
+                                )}
+                                <Link
+                                  to={`/edit-workflow?session=${s.id}`}
+                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#1a1a1a] hover:text-[#F5C518] transition"
+                                >
+                                  Open in Edit Workflow →
+                                </Link>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
               </div>
             )}
-            <button onClick={() => setShots(prev => [...prev, { description: '', platform: 'Facebook', duration: '30s', aspect: '9:16', script_hook: '', script_body: '', script_cta: '', reference_url: '', notes: '' }])}
-              className="text-[11px] text-[#F5C518] font-bold bg-transparent border border-[#F5C518] rounded px-3 py-1.5 cursor-pointer hover:bg-[#F5C518]/10">
-              + Add Shot
-            </button>
-          </Section>
-
-          {/* ── Section 3: Day-of Timeline ── */}
-          <Section title="Day-of Timeline">
-            {timeline.length === 0 ? (
-              <div className="text-[11px] text-gray-400 italic mb-2">No timeline set</div>
-            ) : (
-              <div className="space-y-1.5 mb-3">
-                {timeline.map((t, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <input type="time" value={t.time || ''} onChange={e => setTimeline(prev => prev.map((r, j) => j === i ? { ...r, time: e.target.value } : r))} className="sf" style={{ width: '100px' }} />
-                    <input value={t.activity || ''} placeholder="e.g. Setup gear, Shot 1 — testimonial, Lunch break..."
-                      onChange={e => setTimeline(prev => prev.map((r, j) => j === i ? { ...r, activity: e.target.value } : r))} className="sf flex-1" />
-                    <button onClick={() => setTimeline(prev => prev.filter((_, j) => j !== i))}
-                      className="text-[10px] text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer">✕</button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <button onClick={() => setTimeline(prev => [...prev, { time: '', activity: '' }])}
-              className="text-[11px] text-[#F5C518] font-bold bg-transparent border border-[#F5C518] rounded px-3 py-1.5 cursor-pointer hover:bg-[#F5C518]/10">
-              + Add Time Slot
-            </button>
-          </Section>
-
-          {/* ── Section 4: Post-Shoot Handoff ── */}
-          <Section title="Post-Shoot Handoff">
-            <div className="space-y-2">
-              {[
-                ['editing_done', '🎬 Editing complete — Carlos has finished editing all shots'],
-                ['copy_written', '✍️ Ad copy written — copy team has written the ad text'],
-                ['ads_ready', '📣 Ads team ready — campaign set up and ready to launch'],
-                ['published', '✅ Published / Live — ads are running'],
-              ].map(([key, label]) => (
-                <label key={key} className="flex items-center gap-2.5 text-[12px] text-gray-700 cursor-pointer py-1">
-                  <input type="checkbox" checked={handoff[key] || false} onChange={e => setHandoff(key, e.target.checked)}
-                    className="w-4 h-4 accent-[#F5C518]" />
-                  <span className={handoff[key] ? 'line-through text-gray-400' : ''}>{label}</span>
-                </label>
-              ))}
-            </div>
-          </Section>
-
-          {/* ── Section 5: Notes ── */}
-          <Section title="Notes">
-            <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={3}
-              placeholder="Any additional notes — gear to bring, parking info, things to remember..."
-              className="sf resize-y w-full" />
-          </Section>
-        </div>
-      </div>
-
-      <style>{`
-        .sf { width:100%; border:1px solid #e5e7eb; border-radius:5px; padding:6px 10px; font-size:12px; background:#f8f8f6; outline:none; }
-        .sf:focus { border-color:#F5C518; background:white; }
-      `}</style>
-    </div>
-  );
-}
-
-function Section({ title, children }) {
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
-      <div className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-3">{title}</div>
-      {children}
-    </div>
-  );
-}
-
-function Label({ children }) {
-  return <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">{children}</label>;
-}
-
-function ShootCard({ shoot, onOpen, onDelete, past }) {
-  const shots = JSON.parse(shoot.shots || '[]');
-  const handoff = JSON.parse(shoot.handoff || '{}');
-  const done = [handoff.editing_done, handoff.copy_written, handoff.ads_ready, handoff.published].filter(Boolean).length;
-  return (
-    <div onClick={onOpen}
-      className={`bg-white border border-gray-200 rounded-lg p-4 cursor-pointer hover:border-[#F5C518] hover:shadow-md transition-all ${past ? 'opacity-60' : ''}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[12px] font-bold text-[#1a1a1a]">{shoot.client_name || 'No client'}</span>
-            {shoot.shoot_date && (
-              <span className="text-[10px] text-gray-500">
-                {new Date(shoot.shoot_date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}
-              </span>
-            )}
-          </div>
-          <div className="text-[11px] text-gray-500 mb-1">{shoot.location || 'Location TBD'}</div>
-          <div className="flex items-center gap-3 text-[10px] text-gray-400">
-            <span>🎬 {shots.length} shot{shots.length !== 1 ? 's' : ''}</span>
-            <span>Handoff: {done}/4</span>
-            {shoot.objectives && <span className="truncate max-w-[200px]">{shoot.objectives}</span>}
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          {done === 4 && <span className="text-[9px] font-bold bg-green-50 text-green-600 px-2 py-0.5 rounded-full">Complete</span>}
-          {!past && done < 4 && <span className="text-[9px] font-bold bg-[#F5C518]/20 text-[#1a1a1a] px-2 py-0.5 rounded-full">In Progress</span>}
-          <button onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            className="text-[10px] text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer">🗑</button>
-        </div>
+          </>
+        )}
       </div>
     </div>
   );
