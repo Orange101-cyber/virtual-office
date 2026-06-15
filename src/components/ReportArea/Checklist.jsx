@@ -318,12 +318,32 @@ function FixProposal({ proposal, onApprove, onReject, onExpand }) {
   );
 }
 
-export default function Checklist({ checklistState, onToggle, fields, onFieldChange, clientName }) {
+export default function Checklist({ checklistState, onToggle, onBulkToggle, fields, onFieldChange, clientName }) {
   const [collapsedCats, setCollapsedCats] = useState(new Set());
   const [proposalsByItem, setProposalsByItem] = useState({});
   const [loadingItem, setLoadingItem] = useState(null);
   const [expandedItem, setExpandedItem] = useState(null);
   const [scopeFilter, setScopeFilter] = useState('all'); // 'all' | 'writing' | 'technical'
+
+  const visibleIds = useMemo(() => {
+    return CHECKS.flatMap(cat =>
+      scopeFilter === 'all' ? cat.items : cat.items.filter(i => i.scope === scopeFilter)
+    ).map(i => i.id);
+  }, [scopeFilter]);
+
+  const handleSelectAll = () => {
+    if (!onBulkToggle) return;
+    const updates = {};
+    visibleIds.forEach(id => { updates[id] = true; });
+    onBulkToggle(updates);
+  };
+
+  const handleDeselectAll = () => {
+    if (!onBulkToggle) return;
+    const updates = {};
+    visibleIds.forEach(id => { updates[id] = false; });
+    onBulkToggle(updates);
+  };
 
   const toggleCat = (idx) => {
     setCollapsedCats((prev) => {
@@ -398,11 +418,18 @@ export default function Checklist({ checklistState, onToggle, fields, onFieldCha
           className={`text-[10px] font-semibold px-2.5 py-1 rounded-full border cursor-pointer ${scopeFilter === 'technical' ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>
           ⚙️ Tech Only
         </button>
-        <span className="text-[9px] text-gray-400 ml-auto">
-          {scopeFilter === 'writing' && 'Showing items SEO writers control'}
-          {scopeFilter === 'technical' && 'Showing post-publish/admin items'}
-          {scopeFilter === 'all' && 'Showing all items'}
-        </span>
+        <div className="ml-auto flex items-center gap-1">
+          <button onClick={handleSelectAll}
+            className="text-[9px] font-bold px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 cursor-pointer hover:border-[#1a1a1a] hover:text-[#1a1a1a]"
+            title="Check all visible items">
+            ✓ All
+          </button>
+          <button onClick={handleDeselectAll}
+            className="text-[9px] font-bold px-2 py-1 rounded border border-gray-200 bg-white text-gray-500 cursor-pointer hover:border-gray-400"
+            title="Uncheck all visible items">
+            ✕ None
+          </button>
+        </div>
       </div>
 
       {CHECKS.map((cat, ci) => {

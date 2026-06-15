@@ -195,6 +195,7 @@ export default function SEOChecker() {
             onFieldChange={updateField}
             checklistState={checklistState}
             onToggle={toggleCheck}
+            onBulkToggle={setAutoChecks}
             aiFindings={aiFindings}
             gscData={gscData}
             onGscChange={updateGsc}

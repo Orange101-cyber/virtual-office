@@ -27,6 +27,7 @@ export default function ReportArea({
   onFieldChange,
   checklistState,
   onToggle,
+  onBulkToggle,
   aiFindings,
   gscData,
   onGscChange,
@@ -119,6 +120,7 @@ export default function ReportArea({
               <Checklist
                 checklistState={checklistState}
                 onToggle={onToggle}
+                onBulkToggle={onBulkToggle}
                 fields={fields}
                 onFieldChange={onFieldChange}
                 clientName={clients?.find(c => c.id === clientId)?.name}
