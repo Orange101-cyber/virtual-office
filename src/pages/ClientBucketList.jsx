@@ -869,42 +869,84 @@ function parseCsvOrTsv(text) {
     out.push(cur);
     return out.map(s => s.trim());
   };
-  const headers = splitLine(lines[0]).map(h => h.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''));
+  const rawHeaders = splitLine(lines[0]).map(h => h.replace(/^"|"$/g, '').trim());
+  const headers = rawHeaders.map(h => h.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''));
   const rows = lines.slice(1).map(line => {
     const values = splitLine(line);
     const row = {};
     headers.forEach((h, i) => { row[h] = values[i] || ''; });
     return row;
   });
-  return { headers, rows };
+  return { headers, rawHeaders, rows };
 }
 
 // Map common header variants to our field names
+// Normalized headers: lowercased, non-alnum → underscore, leading/trailing _ stripped
 const HEADER_ALIASES = {
-  url: ['url', 'url_link', 'link', 'page_url', 'page'],
-  focus_keyword: ['focus_keyword', 'focus_kw', 'fk', 'keyword', 'focus', 'used_focus_keywords', 'used_focus_keyword'],
-  bucket: ['bucket', 'buckets', 'focus_bucket', 'theme', 'category', 'focus_or_bucket'],
+  url: ['url', 'url_link', 'link', 'link_slug', 'page_url', 'page', 'slug'],
+  focus_keyword: [
+    'focus_keyword', 'focus_kw', 'fk', 'keyword', 'focus',
+    'used_focus_keywords', 'used_focus_keyword',
+    // matches "Used focus keywords\n[AT link in comment]" after normalisation
+    'used_focus_keywords_at_link_in_comment',
+  ],
+  bucket: ['bucket', 'buckets', 'focus_bucket', 'focus_or_bucket', 'theme', 'category'],
   refresh_schedule: ['refresh_schedule', 'refresh'],
-  date_published: ['date_published', 'publish_date', 'published', 'date_originally_published', 'date'],
-  is_refreshed: ['refreshed', 'is_refreshed', 'refreshed_yes_or_no'],
+  date_published: ['date_published', 'publish_date', 'date_originally_published', 'date'],
+  is_refreshed: ['refreshed', 'is_refreshed', 'refreshed_yes_or_no', 'refreshed_yes_or_no_i'],
   date_refreshed: ['date_refreshed', 'refresh_date'],
-  new_focus_keyword: ['new_focus_keyword', 'new_fk', 'new_keyword'],
-  approved_in_airtable: ['approved_by_client_and_in_at', 'approved_in_airtable', 'in_at', 'approved', 'approved_and_in_at'],
-  is_published: ['published', 'live', 'is_published'],
-  has_video: ['video_on_page', 'has_video'],
-  video_drive_link: ['video_g_drive_link', 'video_link', 'video_drive_link', 'drive_link'],
-  notes: ['notes', 'note'],
+  new_focus_keyword: ['new_focus_keyword', 'new_focus_keyword_', 'new_fk', 'new_keyword'],
+  approved_in_airtable: [
+    'approved_by_client_and_in_at', 'approved_in_airtable', 'in_at',
+    'approved_and_in_at', 'approved_by_client_in_at',
+  ],
+  is_published: ['published', 'published_', 'live', 'is_published'],
+  has_video: ['video_on_page', 'video_on_page_', 'has_video'],
+  video_drive_link: ['video_g_drive_link', 'video_g_drive_link_i', 'video_link', 'video_drive_link', 'drive_link'],
+  notes: ['notes', 'notes_', 'note'],
   title: ['title', 'page_title', 'name'],
 };
 
-function mapRowToPayload(row) {
-  const payload = {};
+// Human-readable labels for each destination field
+const FIELD_LABELS = {
+  url: 'URL / Slug',
+  focus_keyword: 'Focus Keyword',
+  bucket: 'Focus / Bucket',
+  date_published: 'Publish Date',
+  is_refreshed: 'Refreshed? (Yes/No)',
+  date_refreshed: 'Date Refreshed',
+  new_focus_keyword: 'New Focus Keyword',
+  approved_in_airtable: 'Approved in AT?',
+  is_published: 'Published?',
+  has_video: 'Video on Page?',
+  video_drive_link: 'Video Drive Link',
+  notes: 'Notes',
+  title: 'Title',
+  refresh_schedule: 'Refresh Schedule',
+};
+
+
+// Build initial column mapping from parsed headers using HEADER_ALIASES
+function buildInitialMapping(normalizedHeaders) {
+  const mapping = {}; // field → normalized header (or '')
   Object.entries(HEADER_ALIASES).forEach(([field, aliases]) => {
     for (const alias of aliases) {
-      if (row[alias] !== undefined && row[alias] !== '') {
-        payload[field] = row[alias];
+      if (normalizedHeaders.includes(alias)) {
+        mapping[field] = alias;
         break;
       }
+    }
+    if (!mapping[field]) mapping[field] = '';
+  });
+  return mapping;
+}
+
+// Apply a column mapping to a raw row object (keys are normalized headers)
+function applyMapping(rawRow, mapping) {
+  const payload = {};
+  Object.entries(mapping).forEach(([field, normHeader]) => {
+    if (normHeader && rawRow[normHeader] !== undefined && rawRow[normHeader] !== '') {
+      payload[field] = rawRow[normHeader];
     }
   });
   // Coerce booleans
@@ -914,7 +956,7 @@ function mapRowToPayload(row) {
       payload[f] = ['yes', 'y', 'true', '1', '✓', 'x'].includes(v);
     }
   });
-  // Coerce dates — leave as string, let Postgres parse
+  // Coerce dates
   ['date_published', 'date_refreshed'].forEach(f => {
     if (payload[f]) {
       const d = new Date(payload[f]);
@@ -925,17 +967,13 @@ function mapRowToPayload(row) {
   return payload;
 }
 
+// Steps: 'upload' → 'map' → 'preview'
 function CsvImportModal({ category, onImport, onClose }) {
+  const [step, setStep] = useState('upload'); // 'upload' | 'map' | 'preview'
   const [text, setText] = useState('');
-  const [parsed, setParsed] = useState({ headers: [], rows: [] });
-  const [mapped, setMapped] = useState([]);
-
-  const handleParse = () => {
-    const result = parseCsvOrTsv(text);
-    setParsed(result);
-    const mappedRows = result.rows.map(mapRowToPayload).filter(r => r.url || r.title || r.focus_keyword);
-    setMapped(mappedRows);
-  };
+  const [parsed, setParsed] = useState({ headers: [], normalizedHeaders: [], rows: [] });
+  const [colMapping, setColMapping] = useState({}); // field → normalized header
+  const [previewRows, setPreviewRows] = useState([]);
 
   const handleFile = (e) => {
     const file = e.target.files[0];
@@ -945,88 +983,245 @@ function CsvImportModal({ category, onImport, onClose }) {
     reader.readAsText(file);
   };
 
+  const handleParse = () => {
+    const result = parseCsvOrTsv(text);
+    if (!result.headers.length) return;
+    setParsed(result);
+    const initMapping = buildInitialMapping(result.headers);
+    setColMapping(initMapping);
+    setStep('map');
+  };
+
+  const handleConfirmMapping = () => {
+    const rows = parsed.rows
+      .map(r => applyMapping(r, colMapping))
+      .filter(r => r.url || r.title || r.focus_keyword);
+    setPreviewRows(rows);
+    setStep('preview');
+  };
+
+  const catLabel = CATEGORIES.find(c => c.id === category)?.label || category;
+
+  // Count how many fields are mapped
+  const mappedCount = Object.values(colMapping).filter(Boolean).length;
+  const unmappedFields = Object.keys(FIELD_LABELS).filter(f => !colMapping[f]);
+
   return (
     <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
         <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between shrink-0">
           <div>
-            <div className="text-[10px] font-bold uppercase text-[#F5C518]">Import CSV / TSV</div>
+            <div className="text-[10px] font-bold uppercase text-[#F5C518]">Import Spreadsheet → {catLabel}</div>
             <div className="text-sm font-semibold text-[#1a1a1a] mt-0.5">
-              Bulk import into {CATEGORIES.find(c => c.id === category)?.label}
+              {step === 'upload' && 'Upload your Google Sheet export'}
+              {step === 'map' && 'Map your columns'}
+              {step === 'preview' && `Preview — ${previewRows.length} rows ready`}
             </div>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-[#1a1a1a] bg-transparent border-none text-xl cursor-pointer leading-none p-1">×</button>
+          <div className="flex items-center gap-3">
+            {/* Step indicator */}
+            <div className="flex items-center gap-1 text-[9px] text-gray-400">
+              {['upload','map','preview'].map((s, i) => (
+                <span key={s} className="flex items-center gap-1">
+                  <span className={`w-4 h-4 rounded-full flex items-center justify-center font-bold text-[8px] ${step === s ? 'bg-[#F5C518] text-[#1a1a1a]' : i < ['upload','map','preview'].indexOf(step) ? 'bg-[#1a1a1a] text-white' : 'bg-gray-200 text-gray-400'}`}>{i+1}</span>
+                  {i < 2 && <span className="text-gray-300">›</span>}
+                </span>
+              ))}
+            </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-[#1a1a1a] bg-transparent border-none text-xl cursor-pointer leading-none p-1">×</button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5">
-          <div className="text-[11px] text-gray-500 mb-3 leading-relaxed">
-            Paste rows from your existing Google Sheet below (or upload a CSV). The first row should be headers.
-            Common names are auto-detected: <code className="text-[10px] bg-gray-100 px-1">URL</code>, <code className="text-[10px] bg-gray-100 px-1">Focus KW</code>, <code className="text-[10px] bg-gray-100 px-1">Bucket</code>, <code className="text-[10px] bg-gray-100 px-1">Refreshed</code>, <code className="text-[10px] bg-gray-100 px-1">Date Published</code>, <code className="text-[10px] bg-gray-100 px-1">Notes</code>, etc.
-          </div>
 
-          <div className="mb-3">
-            <input type="file" accept=".csv,.tsv,.txt" onChange={handleFile}
-              className="text-[11px] mb-2" />
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              rows={8}
-              placeholder={`URL,Focus KW,Bucket,Refreshed\nhttps://example.com/page,keyword here,Business Loans,No`}
-              className="w-full border border-gray-200 rounded px-2.5 py-2 text-[11px] font-mono bg-[#f8f8f6] resize-y focus:outline-none focus:border-[#F5C518]"
-            />
-            <button onClick={handleParse} disabled={!text.trim()}
-              className="mt-2 bg-[#1a1a1a] text-white border-none rounded px-3 py-1.5 text-[11px] font-bold cursor-pointer hover:bg-[#333] disabled:opacity-40">
-              Preview {parsed.rows.length ? 'again' : ''}
-            </button>
-          </div>
-
-          {mapped.length > 0 && (
-            <div className="bg-[#f8f8f6] rounded-lg p-3 border border-gray-200">
-              <div className="text-[10px] font-bold uppercase text-gray-500 mb-2">
-                Preview — {mapped.length} {mapped.length === 1 ? 'row' : 'rows'} detected
+          {/* STEP 1: Upload */}
+          {step === 'upload' && (
+            <div>
+              <div className="text-[11px] text-gray-500 mb-4 leading-relaxed">
+                Export your Google Sheet as a <strong>CSV</strong> (File → Download → CSV) or copy-paste directly from the sheet. The first row must be the column headers.
               </div>
-              <div className="max-h-64 overflow-y-auto bg-white rounded border border-gray-200">
-                <table className="w-full text-[10px]">
-                  <thead className="bg-[#f8f8f6] border-b border-gray-200 sticky top-0">
-                    <tr className="text-left text-gray-500">
-                      <th className="px-2 py-1.5 font-bold uppercase text-[9px]">URL / Title</th>
-                      <th className="px-2 py-1.5 font-bold uppercase text-[9px]">Focus KW</th>
-                      <th className="px-2 py-1.5 font-bold uppercase text-[9px]">Bucket</th>
-                      <th className="px-2 py-1.5 font-bold uppercase text-[9px]">Refreshed</th>
+
+              <div className="border-2 border-dashed border-gray-200 rounded-lg p-5 mb-4 text-center bg-[#fafafa]">
+                <div className="text-2xl mb-2">📄</div>
+                <div className="text-[11px] text-gray-600 mb-3">Drag & drop a CSV file here, or click to browse</div>
+                <input type="file" accept=".csv,.tsv,.txt" onChange={handleFile}
+                  className="text-[11px]" />
+              </div>
+
+              <div className="text-[10px] text-gray-400 text-center mb-3">— or paste your data below —</div>
+
+              <textarea
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                rows={8}
+                placeholder={`Used focus keywords\tLink / Slug\tPublish Date\tRefreshed: Yes or No\tDate Refreshed\tFocus/Bucket\tNew Focus Keyword\tNOTES:\nmy keyword here\thttps://example.com/page\t01/06/2025\tNo\t\tBusiness Loans\t\t`}
+                className="w-full border border-gray-200 rounded px-2.5 py-2 text-[11px] font-mono bg-[#f8f8f6] resize-y focus:outline-none focus:border-[#F5C518]"
+              />
+
+              {text.trim() && (
+                <div className="mt-2 text-[10px] text-gray-500">
+                  {text.split(/\r?\n/).filter(l => l.trim()).length - 1} data rows detected
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* STEP 2: Column Mapping */}
+          {step === 'map' && (
+            <div>
+              <div className="text-[11px] text-gray-500 mb-4 leading-relaxed">
+                We auto-detected <strong>{mappedCount}</strong> of your columns. Check the mapping below and fix anything that looks wrong. Columns you don't need can be left as <em>— skip —</em>.
+              </div>
+
+              <div className="bg-[#f8f8f6] rounded-lg border border-gray-200 overflow-hidden mb-4">
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-white">
+                      <th className="px-3 py-2 text-left text-[9px] font-bold uppercase text-gray-500 w-1/3">Bucket List Field</th>
+                      <th className="px-3 py-2 text-left text-[9px] font-bold uppercase text-gray-500">Your Spreadsheet Column</th>
+                      <th className="px-3 py-2 text-left text-[9px] font-bold uppercase text-gray-500 w-24">Sample Value</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {mapped.slice(0, 50).map((r, i) => (
-                      <tr key={i} className="border-b border-gray-100">
-                        <td className="px-2 py-1 truncate max-w-xs">{r.url || r.title || '—'}</td>
-                        <td className="px-2 py-1">{r.focus_keyword || '—'}</td>
-                        <td className="px-2 py-1">{r.bucket || '—'}</td>
-                        <td className="px-2 py-1">{r.is_refreshed ? '✓' : '—'}</td>
-                      </tr>
-                    ))}
+                    {Object.entries(FIELD_LABELS).map(([field, label]) => {
+                      const selectedNorm = colMapping[field] || '';
+                      const sampleRow = parsed.rows[0] || {};
+                      const sampleVal = selectedNorm ? sampleRow[selectedNorm] : '';
+                      const isAutoDetected = selectedNorm !== '';
+                      return (
+                        <tr key={field} className={`border-b border-gray-100 ${isAutoDetected ? '' : 'bg-yellow-50'}`}>
+                          <td className="px-3 py-2 font-medium text-[#1a1a1a]">
+                            {label}
+                            {['url','focus_keyword'].includes(field) && <span className="text-[#F5C518] ml-1">*</span>}
+                          </td>
+                          <td className="px-3 py-2">
+                            <select
+                              value={selectedNorm}
+                              onChange={(e) => setColMapping(prev => ({ ...prev, [field]: e.target.value }))}
+                              className="border border-gray-200 rounded px-2 py-1 text-[11px] bg-white focus:outline-none focus:border-[#F5C518] w-full"
+                            >
+                              <option value="">— skip —</option>
+                              {parsed.headers.map((norm, i) => (
+                                <option key={norm} value={norm}>
+                                  {parsed.rawHeaders?.[i] || norm}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-3 py-2 text-gray-400 truncate max-w-[6rem] text-[10px]">
+                            {sampleVal || <span className="italic">—</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
-              {mapped.length > 50 && (
-                <div className="text-[9px] text-gray-400 mt-1">Showing first 50 of {mapped.length}</div>
+
+              {unmappedFields.filter(f => ['url','focus_keyword'].includes(f)).length > 0 && (
+                <div className="bg-orange-50 border border-orange-200 rounded p-2.5 text-[11px] text-orange-700 mb-3">
+                  ⚠️ <strong>URL / Slug</strong> or <strong>Focus Keyword</strong> is not mapped — rows without these will be skipped.
+                </div>
+              )}
+
+              <div className="text-[10px] text-gray-400">
+                <span className="text-[#F5C518]">*</span> Required to import a row. &nbsp;
+                <span className="bg-yellow-50 border border-yellow-200 rounded px-1 py-0.5">Yellow rows</span> were not auto-detected.
+              </div>
+            </div>
+          )}
+
+          {/* STEP 3: Preview */}
+          {step === 'preview' && (
+            <div>
+              {previewRows.length === 0 ? (
+                <div className="text-center py-8 text-[11px] text-gray-500">
+                  No rows matched — go back and check the column mapping.
+                </div>
+              ) : (
+                <div className="bg-[#f8f8f6] rounded-lg border border-gray-200 overflow-hidden">
+                  <div className="max-h-96 overflow-y-auto">
+                    <table className="w-full text-[10px]">
+                      <thead className="bg-white border-b border-gray-200 sticky top-0">
+                        <tr className="text-left">
+                          <th className="px-2 py-1.5 font-bold uppercase text-[9px] text-gray-500">#</th>
+                          <th className="px-2 py-1.5 font-bold uppercase text-[9px] text-gray-500">URL / Title</th>
+                          <th className="px-2 py-1.5 font-bold uppercase text-[9px] text-gray-500">Focus KW</th>
+                          <th className="px-2 py-1.5 font-bold uppercase text-[9px] text-gray-500">Bucket</th>
+                          <th className="px-2 py-1.5 font-bold uppercase text-[9px] text-gray-500">Published</th>
+                          <th className="px-2 py-1.5 font-bold uppercase text-[9px] text-gray-500">Refreshed</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {previewRows.slice(0, 100).map((r, i) => (
+                          <tr key={i} className="border-b border-gray-100 hover:bg-white">
+                            <td className="px-2 py-1 text-gray-300">{i + 1}</td>
+                            <td className="px-2 py-1 truncate max-w-[180px] text-blue-600">{r.url || r.title || '—'}</td>
+                            <td className="px-2 py-1 truncate max-w-[120px]">{r.focus_keyword || '—'}</td>
+                            <td className="px-2 py-1">{r.bucket || '—'}</td>
+                            <td className="px-2 py-1">{r.date_published || '—'}</td>
+                            <td className="px-2 py-1">{r.is_refreshed ? <span className="text-green-600 font-bold">✓</span> : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {previewRows.length > 100 && (
+                    <div className="px-3 py-2 text-[9px] text-gray-400 border-t border-gray-200">
+                      Showing first 100 of {previewRows.length} rows
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
         </div>
 
+        {/* Footer */}
         <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-between shrink-0 bg-[#fafafa]">
-          <div className="text-[10px] text-gray-500">
-            {mapped.length > 0 ? `Ready to import ${mapped.length} rows into ${CATEGORIES.find(c => c.id === category)?.label}` : 'Paste data and click Preview'}
-          </div>
           <div className="flex gap-2">
+            {step !== 'upload' && (
+              <button
+                onClick={() => setStep(step === 'preview' ? 'map' : 'upload')}
+                className="bg-transparent border border-gray-300 text-gray-600 rounded px-4 py-1.5 text-[11px] font-semibold cursor-pointer hover:border-gray-400"
+              >
+                ← Back
+              </button>
+            )}
             <button onClick={onClose}
               className="bg-transparent border border-gray-300 text-gray-600 rounded px-4 py-1.5 text-[11px] font-semibold cursor-pointer hover:border-gray-400">
               Cancel
             </button>
-            <button onClick={() => onImport(mapped)} disabled={!mapped.length}
-              className="bg-[#F5C518] text-[#1a1a1a] border-none rounded px-4 py-1.5 text-[11px] font-bold cursor-pointer hover:bg-[#e6b800] disabled:opacity-40">
-              ✓ Import {mapped.length || ''} {mapped.length === 1 ? 'Row' : 'Rows'}
-            </button>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {step === 'map' && (
+              <div className="text-[10px] text-gray-400">{parsed.rows.length} rows · {mappedCount} fields mapped</div>
+            )}
+            {step === 'preview' && previewRows.length > 0 && (
+              <div className="text-[10px] text-gray-400">Ready to import {previewRows.length} rows into <strong>{catLabel}</strong></div>
+            )}
+
+            {step === 'upload' && (
+              <button onClick={handleParse} disabled={!text.trim()}
+                className="bg-[#1a1a1a] text-white border-none rounded px-4 py-1.5 text-[11px] font-bold cursor-pointer hover:bg-[#333] disabled:opacity-40">
+                Next: Map Columns →
+              </button>
+            )}
+            {step === 'map' && (
+              <button onClick={handleConfirmMapping}
+                className="bg-[#1a1a1a] text-white border-none rounded px-4 py-1.5 text-[11px] font-bold cursor-pointer hover:bg-[#333]">
+                Next: Preview →
+              </button>
+            )}
+            {step === 'preview' && (
+              <button onClick={() => onImport(previewRows)} disabled={!previewRows.length}
+                className="bg-[#F5C518] text-[#1a1a1a] border-none rounded px-4 py-1.5 text-[11px] font-bold cursor-pointer hover:bg-[#e6b800] disabled:opacity-40">
+                ✓ Import {previewRows.length} {previewRows.length === 1 ? 'Row' : 'Rows'}
+              </button>
+            )}
           </div>
         </div>
       </div>
