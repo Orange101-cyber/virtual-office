@@ -229,20 +229,58 @@ export default function ClientBucketList() {
   };
 
   // Bulk import rows from CSV
-  const handleImportRows = async (rows) => {
+  const handleImportRows = async (rows, { updateMode = false } = {}) => {
     if (!rows.length) return;
-    const payload = rows.map(r => ({
-      ...r,
-      client_name: selectedClient,
-      client_id: selectedClientId,
-      page_category: r.page_category || category,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }));
+
+    // Normalise a URL for comparison (lowercase, strip trailing slash, strip protocol)
+    const normUrl = (u = '') => u.trim().toLowerCase().replace(/\/+$/, '').replace(/^https?:\/\//, '');
+
+    const existingUrlMap = {}; // normUrl → existing page id
+    pages.forEach(p => { if (p.url) existingUrlMap[normUrl(p.url)] = p.id; });
+
+    const toInsert = [];
+    const toUpdate = []; // { id, payload }
+
+    rows.forEach(r => {
+      const base = {
+        ...r,
+        client_name: selectedClient,
+        client_id: selectedClientId,
+        page_category: r.page_category || category,
+        updated_at: new Date().toISOString(),
+      };
+      const existingId = r.url ? existingUrlMap[normUrl(r.url)] : null;
+      if (existingId && updateMode) {
+        toUpdate.push({ id: existingId, payload: base });
+      } else if (!existingId) {
+        toInsert.push({ ...base, created_at: new Date().toISOString() });
+      }
+      // if existingId && !updateMode → skip (duplicate, skip mode)
+    });
+
     try {
-      const { data, error } = await supabase.from('client_pages').insert(payload).select();
-      if (error) throw error;
-      setPages(prev => [...(data || []), ...prev]);
+      let inserted = [], updated = [];
+
+      if (toInsert.length) {
+        const { data, error } = await supabase.from('client_pages').insert(toInsert).select();
+        if (error) throw error;
+        inserted = data || [];
+      }
+
+      if (toUpdate.length) {
+        // Update one by one (Supabase doesn't batch update by different IDs easily)
+        for (const { id, payload } of toUpdate) {
+          const { data, error } = await supabase.from('client_pages').update(payload).eq('id', id).select().single();
+          if (error) throw error;
+          if (data) updated.push(data);
+        }
+      }
+
+      // Merge into local state
+      setPages(prev => {
+        const updatedIds = new Set(updated.map(p => p.id));
+        return [...inserted, ...prev.filter(p => !updatedIds.has(p.id)), ...updated];
+      });
 
       // Sync all focus keywords to client's past_keywords bank
       if (selectedClientId) {
@@ -258,7 +296,12 @@ export default function ClientBucketList() {
           }
         }
       }
-      toast.success(`Imported ${rows.length} ${rows.length === 1 ? 'entry' : 'entries'}`);
+      const parts = [];
+      if (inserted.length) parts.push(`${inserted.length} new`);
+      if (updated.length) parts.push(`${updated.length} updated`);
+      const skipped = rows.length - inserted.length - updated.length;
+      if (skipped > 0) parts.push(`${skipped} skipped (duplicates)`);
+      toast.success(`Import complete: ${parts.join(', ')}`);
     } catch (err) {
       toast.error('Import error: ' + err.message);
     }
@@ -431,6 +474,7 @@ export default function ClientBucketList() {
           {showImport && (
             <CsvImportModal
               category={category}
+              existingPages={pages}
               onImport={handleImportRows}
               onClose={() => setShowImport(false)}
             />
@@ -968,12 +1012,16 @@ function applyMapping(rawRow, mapping) {
 }
 
 // Steps: 'upload' → 'map' → 'preview'
-function CsvImportModal({ category, onImport, onClose }) {
+function CsvImportModal({ category, existingPages = [], onImport, onClose }) {
   const [step, setStep] = useState('upload'); // 'upload' | 'map' | 'preview'
   const [text, setText] = useState('');
   const [parsed, setParsed] = useState({ headers: [], normalizedHeaders: [], rows: [] });
   const [colMapping, setColMapping] = useState({}); // field → normalized header
   const [previewRows, setPreviewRows] = useState([]);
+  const [dupMode, setDupMode] = useState('skip'); // 'skip' | 'update'
+
+  const normUrl = (u = '') => u.trim().toLowerCase().replace(/\/+$/, '').replace(/^https?:\/\//, '');
+  const existingUrls = new Set(existingPages.map(p => normUrl(p.url || '')).filter(Boolean));
 
   const handleFile = (e) => {
     const file = e.target.files[0];
@@ -1134,49 +1182,107 @@ function CsvImportModal({ category, onImport, onClose }) {
           )}
 
           {/* STEP 3: Preview */}
-          {step === 'preview' && (
-            <div>
-              {previewRows.length === 0 ? (
-                <div className="text-center py-8 text-[11px] text-gray-500">
-                  No rows matched — go back and check the column mapping.
-                </div>
-              ) : (
-                <div className="bg-[#f8f8f6] rounded-lg border border-gray-200 overflow-hidden">
-                  <div className="max-h-96 overflow-y-auto">
-                    <table className="w-full text-[10px]">
-                      <thead className="bg-white border-b border-gray-200 sticky top-0">
-                        <tr className="text-left">
-                          <th className="px-2 py-1.5 font-bold uppercase text-[9px] text-gray-500">#</th>
-                          <th className="px-2 py-1.5 font-bold uppercase text-[9px] text-gray-500">URL / Title</th>
-                          <th className="px-2 py-1.5 font-bold uppercase text-[9px] text-gray-500">Focus KW</th>
-                          <th className="px-2 py-1.5 font-bold uppercase text-[9px] text-gray-500">Bucket</th>
-                          <th className="px-2 py-1.5 font-bold uppercase text-[9px] text-gray-500">Published</th>
-                          <th className="px-2 py-1.5 font-bold uppercase text-[9px] text-gray-500">Refreshed</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {previewRows.slice(0, 100).map((r, i) => (
-                          <tr key={i} className="border-b border-gray-100 hover:bg-white">
-                            <td className="px-2 py-1 text-gray-300">{i + 1}</td>
-                            <td className="px-2 py-1 truncate max-w-[180px] text-blue-600">{r.url || r.title || '—'}</td>
-                            <td className="px-2 py-1 truncate max-w-[120px]">{r.focus_keyword || '—'}</td>
-                            <td className="px-2 py-1">{r.bucket || '—'}</td>
-                            <td className="px-2 py-1">{r.date_published || '—'}</td>
-                            <td className="px-2 py-1">{r.is_refreshed ? <span className="text-green-600 font-bold">✓</span> : '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+          {step === 'preview' && (() => {
+            const dupRows = previewRows.filter(r => r.url && existingUrls.has(normUrl(r.url)));
+            const newRows = previewRows.filter(r => !r.url || !existingUrls.has(normUrl(r.url)));
+            const willImport = dupMode === 'update' ? previewRows.length : newRows.length;
+            return (
+              <div>
+                {previewRows.length === 0 ? (
+                  <div className="text-center py-8 text-[11px] text-gray-500">
+                    No rows matched — go back and check the column mapping.
                   </div>
-                  {previewRows.length > 100 && (
-                    <div className="px-3 py-2 text-[9px] text-gray-400 border-t border-gray-200">
-                      Showing first 100 of {previewRows.length} rows
+                ) : (
+                  <>
+                    {/* Stats strip */}
+                    <div className="grid grid-cols-3 gap-3 mb-4">
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+                        <div className="text-lg font-bold text-green-700">{newRows.length}</div>
+                        <div className="text-[9px] font-bold uppercase text-green-600">New rows</div>
+                      </div>
+                      <div className={`border rounded-lg p-3 text-center ${dupRows.length > 0 ? 'bg-orange-50 border-orange-200' : 'bg-gray-50 border-gray-200'}`}>
+                        <div className={`text-lg font-bold ${dupRows.length > 0 ? 'text-orange-700' : 'text-gray-400'}`}>{dupRows.length}</div>
+                        <div className={`text-[9px] font-bold uppercase ${dupRows.length > 0 ? 'text-orange-600' : 'text-gray-400'}`}>Duplicates</div>
+                      </div>
+                      <div className="bg-[#f8f8f6] border border-gray-200 rounded-lg p-3 text-center">
+                        <div className="text-lg font-bold text-[#1a1a1a]">{willImport}</div>
+                        <div className="text-[9px] font-bold uppercase text-gray-500">Will import</div>
+                      </div>
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+
+                    {/* Duplicate handling choice */}
+                    {dupRows.length > 0 && (
+                      <div className="mb-4 bg-orange-50 border border-orange-200 rounded-lg p-3">
+                        <div className="text-[11px] font-semibold text-orange-800 mb-2">
+                          {dupRows.length} {dupRows.length === 1 ? 'row matches' : 'rows match'} an existing URL — what should we do?
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setDupMode('skip')}
+                            className={`px-3 py-1.5 rounded text-[11px] font-semibold border cursor-pointer ${dupMode === 'skip' ? 'bg-[#1a1a1a] text-white border-[#1a1a1a]' : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}
+                          >
+                            Skip duplicates <span className="opacity-70">(safe re-upload)</span>
+                          </button>
+                          <button
+                            onClick={() => setDupMode('update')}
+                            className={`px-3 py-1.5 rounded text-[11px] font-semibold border cursor-pointer ${dupMode === 'update' ? 'bg-[#F5C518] text-[#1a1a1a] border-[#F5C518]' : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}
+                          >
+                            Update existing <span className="opacity-70">(overwrite with sheet data)</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="bg-[#f8f8f6] rounded-lg border border-gray-200 overflow-hidden">
+                      <div className="max-h-72 overflow-y-auto">
+                        <table className="w-full text-[10px]">
+                          <thead className="bg-white border-b border-gray-200 sticky top-0">
+                            <tr className="text-left">
+                              <th className="px-2 py-1.5 font-bold uppercase text-[9px] text-gray-500 w-6">#</th>
+                              <th className="px-2 py-1.5 font-bold uppercase text-[9px] text-gray-500 w-14">Status</th>
+                              <th className="px-2 py-1.5 font-bold uppercase text-[9px] text-gray-500">URL / Title</th>
+                              <th className="px-2 py-1.5 font-bold uppercase text-[9px] text-gray-500">Focus KW</th>
+                              <th className="px-2 py-1.5 font-bold uppercase text-[9px] text-gray-500">Bucket</th>
+                              <th className="px-2 py-1.5 font-bold uppercase text-[9px] text-gray-500">Published</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {previewRows.slice(0, 100).map((r, i) => {
+                              const isDup = r.url && existingUrls.has(normUrl(r.url));
+                              const willSkip = isDup && dupMode === 'skip';
+                              return (
+                                <tr key={i} className={`border-b border-gray-100 ${willSkip ? 'opacity-40' : 'hover:bg-white'} ${isDup && !willSkip ? 'bg-orange-50' : ''}`}>
+                                  <td className="px-2 py-1 text-gray-300">{i + 1}</td>
+                                  <td className="px-2 py-1">
+                                    {isDup ? (
+                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${dupMode === 'update' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-400'}`}>
+                                        {dupMode === 'update' ? 'UPDATE' : 'SKIP'}
+                                      </span>
+                                    ) : (
+                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700">NEW</span>
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-1 truncate max-w-[160px] text-blue-600">{r.url || r.title || '—'}</td>
+                                  <td className="px-2 py-1 truncate max-w-[110px]">{r.focus_keyword || '—'}</td>
+                                  <td className="px-2 py-1">{r.bucket || '—'}</td>
+                                  <td className="px-2 py-1">{r.date_published || '—'}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      {previewRows.length > 100 && (
+                        <div className="px-3 py-2 text-[9px] text-gray-400 border-t border-gray-200">
+                          Showing first 100 of {previewRows.length} rows
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Footer */}
@@ -1200,9 +1306,11 @@ function CsvImportModal({ category, onImport, onClose }) {
             {step === 'map' && (
               <div className="text-[10px] text-gray-400">{parsed.rows.length} rows · {mappedCount} fields mapped</div>
             )}
-            {step === 'preview' && previewRows.length > 0 && (
-              <div className="text-[10px] text-gray-400">Ready to import {previewRows.length} rows into <strong>{catLabel}</strong></div>
-            )}
+            {step === 'preview' && previewRows.length > 0 && (() => {
+              const dupCount = previewRows.filter(r => r.url && existingUrls.has(normUrl(r.url))).length;
+              const willImport = dupMode === 'update' ? previewRows.length : previewRows.length - dupCount;
+              return <div className="text-[10px] text-gray-400">{willImport} rows will be imported into <strong>{catLabel}</strong></div>;
+            })()}
 
             {step === 'upload' && (
               <button onClick={handleParse} disabled={!text.trim()}
@@ -1216,11 +1324,16 @@ function CsvImportModal({ category, onImport, onClose }) {
                 Next: Preview →
               </button>
             )}
-            {step === 'preview' && (
-              <button onClick={() => onImport(previewRows)} disabled={!previewRows.length}
-                className="bg-[#F5C518] text-[#1a1a1a] border-none rounded px-4 py-1.5 text-[11px] font-bold cursor-pointer hover:bg-[#e6b800] disabled:opacity-40">
-                ✓ Import {previewRows.length} {previewRows.length === 1 ? 'Row' : 'Rows'}
-              </button>
+            {step === 'preview' && (() => {
+              const dupCount = previewRows.filter(r => r.url && existingUrls.has(normUrl(r.url))).length;
+              const willImport = dupMode === 'update' ? previewRows.length : previewRows.length - dupCount;
+              return (
+                <button onClick={() => onImport(previewRows, { updateMode: dupMode === 'update' })} disabled={willImport === 0}
+                  className="bg-[#F5C518] text-[#1a1a1a] border-none rounded px-4 py-1.5 text-[11px] font-bold cursor-pointer hover:bg-[#e6b800] disabled:opacity-40">
+                  ✓ {dupMode === 'update' && dupCount > 0 ? `Import ${previewRows.length - dupCount} new + Update ${dupCount}` : `Import ${willImport} ${willImport === 1 ? 'Row' : 'Rows'}`}
+                </button>
+              );
+            })()
             )}
           </div>
         </div>
