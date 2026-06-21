@@ -202,7 +202,7 @@ export default function BriefGenerator() {
           'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-5',
           max_tokens: 2500,
           system: 'You are an SEO content strategist. Return ONLY valid JSON with no markdown fences.',
           messages: [{ role: 'user', content: BRIEF_PROMPT({ ...form, styleSamples, serpData, clientContextText }) }],
@@ -338,7 +338,7 @@ RULES:
           'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-5',
           max_tokens: 4096,
           messages: [{ role: 'user', content: draftPrompt }],
         }),

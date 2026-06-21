@@ -253,7 +253,7 @@ export default function KeywordResearch() {
           'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-5',
           max_tokens: 3000,
           system: 'You are an SEO keyword research analyst. Return ONLY valid JSON, no markdown fences.',
           messages: [{ role: 'user', content: prompt }],
@@ -473,7 +473,7 @@ Return ONLY valid JSON:
           'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-5',
           max_tokens: 3000,
           messages: [{ role: 'user', content: prompt }],
         }),
@@ -527,7 +527,7 @@ Return ONLY valid JSON:
           'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-5',
           max_tokens: 2000,
           messages: [{ role: 'user', content: `Group these keywords into topic clusters. Each cluster should represent one article/page theme. Pick the best primary keyword for each cluster.
 
