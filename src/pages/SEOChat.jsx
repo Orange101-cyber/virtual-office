@@ -134,16 +134,27 @@ async function executeTool(toolName, input, clientData) {
     }
     case 'check_cannibalization': {
       const kw = input.keyword.toLowerCase().trim();
+      // Word-overlap scoring: keywords share significant words (not just substring)
+      const kwWords = new Set(kw.split(/\s+/).filter(w => w.length > 2));
+      const overlapScore = (other) => {
+        const otherWords = other.toLowerCase().trim().split(/\s+/).filter(w => w.length > 2);
+        if (!otherWords.length || !kwWords.size) return 0;
+        const shared = otherWords.filter(w => kwWords.has(w)).length;
+        return shared / Math.max(kwWords.size, otherWords.length);
+      };
+      const THRESHOLD = 0.5; // 50% word overlap = cannibalization risk
+
       const pastKws = (clientData.pastKeywords || []).map(k => k.toLowerCase());
-      const inBank = pastKws.some(p => p.includes(kw) || kw.includes(p));
+      // Exact match or high word overlap for past keywords
+      const inBank = pastKws.some(p => p === kw || overlapScore(p) >= THRESHOLD);
       const matchingPage = (clientData.pages || []).find(p => {
         const pk = (p.focus_keyword || '').toLowerCase().trim();
-        return pk && (pk.includes(kw) || kw.includes(pk));
+        return pk && (pk === kw || overlapScore(pk) >= THRESHOLD);
       });
       const inPages = !!matchingPage;
       const plannedMatch = (clientData.contentPlan || []).find(p => {
         const pk = (p.focus_keyword || '').toLowerCase().trim();
-        return pk && (pk.includes(kw) || kw.includes(pk));
+        return pk && (pk === kw || overlapScore(pk) >= THRESHOLD);
       });
       const result = {
         keyword: kw,
@@ -208,13 +219,20 @@ async function executeTool(toolName, input, clientData) {
     case 'get_planned_keywords': {
       const plan = clientData.contentPlan || [];
       const active = plan.filter(p => ['Planned', 'Researched', 'Briefed', 'Client Approved'].includes(p.status));
+      const refreshes = active.filter(p => p.is_refresh);
+      const newContent = active.filter(p => !p.is_refresh);
       return {
         total_in_pipeline: active.length,
+        new_content: newContent.length,
+        refreshes: refreshes.length,
         keywords_in_pipeline: active.map(p => ({
           title: p.title,
           focus_keyword: p.focus_keyword,
           status: p.status,
           month: p.month,
+          quarter: p.quarter,
+          type: p.is_refresh ? 'REFRESH' : 'NEW',
+          existing_url: p.existing_url || null,
         })),
         note: active.length > 0 ? 'Avoid planning content for any of these keywords — they are already in progress' : 'Pipeline is empty — all keywords are available',
       };
@@ -253,7 +271,7 @@ export default function SEOChat() {
         supabase.from('client_brand_voice').select('*').eq('client_name', selectedClient).maybeSingle(),
         dbClient?.id ? supabase.from('clients').select('past_keywords').eq('id', dbClient.id).maybeSingle() : Promise.resolve({ data: null }),
         supabase.from('client_pages').select('url, focus_keyword, page_category, bucket, is_refreshed, date_published, date_refreshed').eq('client_name', selectedClient),
-        supabase.from('content_plans').select('title, focus_keyword, status, month, search_volume, kd').eq('client_name', selectedClient),
+        supabase.from('content_plans').select('title, focus_keyword, status, month, quarter, content_type, existing_url, is_refresh, search_volume, kd').eq('client_name', selectedClient),
       ]);
       setClientData({
         brandVoice: bvRes.data,
@@ -300,9 +318,10 @@ export default function SEOChat() {
     }
     if (clientData.contentPlan.length) {
       const active = clientData.contentPlan.filter(p => ['Planned', 'Researched', 'Briefed', 'Client Approved'].includes(p.status));
-      ctx += `\nContent plan — active pipeline (${active.length} items):\n`;
+      ctx += `\nContent plan — active pipeline (${active.length} items, DO NOT re-plan these keywords):\n`;
       active.slice(0, 20).forEach(p => {
-        ctx += `- "${p.title}" | FK: ${p.focus_keyword || '—'} | ${p.month || '—'} [${p.status}]\n`;
+        const type = p.is_refresh ? 'REFRESH' : 'NEW';
+        ctx += `- [${type}] "${p.title}" | FK: ${p.focus_keyword || '—'} | ${p.quarter || ''} ${p.month || ''} [${p.status}]${p.existing_url ? ' | url: ' + p.existing_url : ''}\n`;
       });
     }
     return ctx;
@@ -311,6 +330,10 @@ export default function SEOChat() {
   const handleSend = async () => {
     const text = input.trim();
     if (!text || sending) return;
+    if (!selectedClient) {
+      setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ Please select a client first so I can check their bucket list and content plan.' }]);
+      return;
+    }
 
     const userMsg = { role: 'user', content: text };
     const newMessages = [...messages, userMsg];
@@ -462,15 +485,23 @@ export default function SEOChat() {
       is_refresh: isRefresh,
     };
 
-    try {
-      await supabase.from('content_plans').insert(payload);
+    const { error } = await supabase.from('content_plans').insert(payload);
+    if (error) {
+      toast.error('Could not add to plan: ' + error.message);
+    } else {
+      // Refresh local content plan so cannibalization checks stay accurate
+      const { data: freshPlan } = await supabase
+        .from('content_plans')
+        .select('title, focus_keyword, status, month, quarter, content_type, existing_url, is_refresh, search_volume, kd')
+        .eq('client_name', selectedClient);
+      if (freshPlan) {
+        setClientData(prev => ({ ...prev, contentPlan: freshPlan }));
+      }
       if (existingPage) {
-        toast.success(`Added "${keyword}" to Content Plan as a REFRESH (existing page found)`);
+        toast.success(`Added "${keyword}" to Content Plan as a REFRESH`);
       } else {
         toast.success(`Added "${keyword}" to Content Plan`);
       }
-    } catch (err) {
-      toast.error('Could not add to plan: ' + err.message);
     }
   };
 
