@@ -147,7 +147,7 @@ Return ONLY valid JSON with this exact structure:
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-5',
+          model: 'claude-sonnet-4-6',
           max_tokens: 1500,
           system: 'You are a business analyst. Return ONLY valid JSON, no markdown fences. Only use information from the provided website content — never make up or guess details.',
           messages: [{ role: 'user', content: prompt }],

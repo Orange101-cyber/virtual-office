@@ -406,14 +406,18 @@ export default function SEOChat() {
         'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
+        model: 'claude-sonnet-4-6',
         max_tokens: 2000,
         system: SYSTEM_PROMPT(clientContext),
         tools: dfs.isConfigured() ? TOOLS : [],
         messages: apiMessages,
       }),
     });
-    if (!res.ok) throw new Error(`API error ${res.status}`);
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      const detail = errBody?.error?.message || errBody?.message || JSON.stringify(errBody);
+      throw new Error(`API error ${res.status}: ${detail}`);
+    }
     return res.json();
   };
 
