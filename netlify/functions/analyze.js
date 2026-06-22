@@ -42,7 +42,7 @@ export async function handler(event) {
     const client = new Anthropic({ apiKey });
 
     const message = await client.messages.create({
-      model: 'claude-opus-4-8',
+      model: 'claude-sonnet-4-5',
       max_tokens: 1024,
       system: 'You are an SEO audit assistant. Return ONLY valid JSON with no markdown fences.',
       messages: [

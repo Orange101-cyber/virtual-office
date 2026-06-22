@@ -34,7 +34,7 @@ export async function analyzeArticle({ content, focusKw, secKws, url, title, met
         'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({
-        model: 'claude-opus-4-8',
+        model: 'claude-sonnet-4-5',
         max_tokens: 1024,
         system: 'You are an SEO audit assistant. Return ONLY valid JSON with no markdown fences.',
         messages: [{ role: 'user', content: SEO_PROMPT_TEMPLATE(content, focusKw, secKws, url, title, meta) }],

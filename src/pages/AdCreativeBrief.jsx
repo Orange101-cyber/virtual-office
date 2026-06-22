@@ -116,7 +116,7 @@ Return ONLY valid JSON:
           'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
-          model: 'claude-opus-4-8', max_tokens: 2500,
+          model: 'claude-sonnet-4-5', max_tokens: 2500,
           system: 'You are a creative director. Return ONLY valid JSON, no markdown fences.',
           messages: [{ role: 'user', content: prompt }],
         }),
