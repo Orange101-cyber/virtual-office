@@ -1333,8 +1333,7 @@ function CsvImportModal({ category, existingPages = [], onImport, onClose }) {
                   ✓ {dupMode === 'update' && dupCount > 0 ? `Import ${previewRows.length - dupCount} new + Update ${dupCount}` : `Import ${willImport} ${willImport === 1 ? 'Row' : 'Rows'}`}
                 </button>
               );
-            })()
-            )}
+            })()}
           </div>
         </div>
       </div>
