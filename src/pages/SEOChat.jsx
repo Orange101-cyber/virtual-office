@@ -398,28 +398,45 @@ export default function SEOChat() {
 
   const callClaude = async (apiMessages, clientContext) => {
     if (!ANTHROPIC_KEY) throw new Error('Anthropic API key not configured — ask your admin to set VITE_ANTHROPIC_API_KEY in Netlify environment variables');
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 2000,
-        system: SYSTEM_PROMPT(clientContext),
-        tools: dfs.isConfigured() ? TOOLS : [],
-        messages: apiMessages,
-      }),
+
+    const body = JSON.stringify({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 2000,
+      system: SYSTEM_PROMPT(clientContext),
+      tools: dfs.isConfigured() ? TOOLS : [],
+      messages: apiMessages,
     });
-    if (!res.ok) {
+
+    // Retry on 529 (overloaded) and 503 with exponential backoff
+    const RETRY_STATUSES = [429, 503, 529];
+    const MAX_ATTEMPTS = 4;
+    let lastErr;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': ANTHROPIC_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body,
+      });
+
+      if (res.ok) return res.json();
+
       const errBody = await res.json().catch(() => ({}));
       const detail = errBody?.error?.message || errBody?.message || JSON.stringify(errBody);
-      throw new Error(`API error ${res.status}: ${detail}`);
+      lastErr = new Error(`API error ${res.status}: ${detail}`);
+
+      // Retry on overload/rate-limit, otherwise fail fast
+      if (!RETRY_STATUSES.includes(res.status) || attempt === MAX_ATTEMPTS - 1) {
+        throw lastErr;
+      }
+      const waitMs = Math.min(1000 * Math.pow(2, attempt), 8000);
+      await new Promise(r => setTimeout(r, waitMs));
     }
-    return res.json();
+    throw lastErr;
   };
 
   const saveChat = async (msgs, lastResponse) => {
