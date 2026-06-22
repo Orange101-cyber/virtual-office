@@ -407,7 +407,7 @@ export default function SEOChat() {
         'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
+        model: 'claude-3-5-sonnet-20241022',
         max_tokens: 2000,
         system: SYSTEM_PROMPT(clientContext),
         tools: dfs.isConfigured() ? TOOLS : [],

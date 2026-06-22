@@ -184,7 +184,7 @@ FORMATTING RULES:
           'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
+          model: 'claude-3-5-sonnet-20241022',
           max_tokens: 8192,
           messages: [{ role: 'user', content: prompt }],
         }),
