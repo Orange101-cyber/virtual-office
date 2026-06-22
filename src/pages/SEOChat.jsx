@@ -397,6 +397,7 @@ export default function SEOChat() {
   };
 
   const callClaude = async (apiMessages, clientContext) => {
+    if (!ANTHROPIC_KEY) throw new Error('Anthropic API key not configured — ask your admin to set VITE_ANTHROPIC_API_KEY in Netlify environment variables');
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
