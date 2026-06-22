@@ -28,7 +28,7 @@ export default function TriviaQuiz({ onComplete }) {
           'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
-          model: 'claude-3-5-sonnet-20241022', max_tokens: 1500,
+          model: 'claude-opus-4-8', max_tokens: 1500,
           system: 'You are a trivia question generator. Return ONLY valid JSON, no markdown fences.',
           messages: [{ role: 'user', content: `Generate 10 trivia questions for the category: ${cat}.\nReturn a JSON array where each object has:\n- "question": string\n- "options": array of exactly 4 strings\n- "correct_index": number between 0 and 3\n- "explanation": string (one sentence max)` }],
         }),

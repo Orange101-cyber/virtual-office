@@ -119,7 +119,7 @@ export default function AdInspiration() {
           'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
-          model: 'claude-3-5-sonnet-20241022', max_tokens: 2000,
+          model: 'claude-opus-4-8', max_tokens: 2000,
           system: 'You are an expert ad copywriter. Return ONLY valid JSON, no markdown fences.',
           messages: [{ role: 'user', content: AD_PROMPT({ ...form, brandVoice: bv, pastCopyText, clientContextText }) }],
         }),

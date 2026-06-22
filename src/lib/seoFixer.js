@@ -86,7 +86,7 @@ export async function fixSeoIssues({ fields, failedItemIds, clientContextText })
       'anthropic-dangerous-direct-browser-access': 'true',
     },
     body: JSON.stringify({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-opus-4-8',
       max_tokens: 8192,
       system: 'You are an SEO editor. Return ONLY valid JSON, no markdown fences.',
       messages: [{ role: 'user', content: prompt }],
@@ -165,7 +165,7 @@ Or if it cannot be auto-fixed:
       'anthropic-dangerous-direct-browser-access': 'true',
     },
     body: JSON.stringify({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-opus-4-8',
       max_tokens: 8192,
       system: 'You are an SEO editor. Return ONLY valid JSON, no markdown fences.',
       messages: [{ role: 'user', content: prompt }],
