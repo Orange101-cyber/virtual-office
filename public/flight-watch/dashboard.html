@@ -807,6 +807,28 @@ const AIRPORT = { lat: -27.39, lng: 153.13, label: 'Brisbane Airport' };
 const BBOX = { lamin: -27.65, lomin: 152.85, lamax: -27.25, lomax: 153.30 };
 const BOM_URL = 'https://www.bom.gov.au/fwo/IDQ60901/IDQ60901.94578.json';
 const OPENSKY_URL = `https://opensky-network.org/api/states/all?lamin=${BBOX.lamin}&lomin=${BBOX.lomin}&lamax=${BBOX.lamax}&lomax=${BBOX.lomax}`;
+
+// Supabase Edge Function proxies (reliable server-side fetch of BoM + OpenSky).
+// The anon key is public by design (already shipped in the frontend). If the
+// functions aren't deployed yet, these calls fail fast and the code falls back
+// to the public CORS proxies below — so the dashboard works either way.
+const SB_FN_BASE = 'https://rdrufdlhfrwczqvmvzgr.supabase.co/functions/v1';
+const SB_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkcnVmZGxoZnJ3Y3pxdm12emdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2ODY5OTgsImV4cCI6MjA4ODI2Mjk5OH0.k8EiIOB2HiHxjuPITlIYf5xWGCNWV7EA5Tfe3br7yew';
+async function fetchSupabaseFn(name, timeoutMs = 5000) {
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const r = await fetch(`${SB_FN_BASE}/${name}`, {
+      signal: controller.signal,
+      headers: { apikey: SB_ANON_KEY, Authorization: `Bearer ${SB_ANON_KEY}` },
+    });
+    clearTimeout(tid);
+    return r;
+  } catch (e) {
+    clearTimeout(tid);
+    throw e;
+  }
+}
 const REFRESH_AIRCRAFT_MS = 30000;
 const REFRESH_WIND_MS = 5 * 60 * 1000;
 
@@ -962,9 +984,9 @@ async function fetchViaProxies(targetUrl, timeoutMs = 8000) {
 
 // === FETCH WIND (BoM) ===
 async function fetchWind() {
-  // Try local server first (fast, reliable when running node flight-watch-server.js)
+  // Try the Supabase Edge Function proxy first (reliable, cached server-side)
   try {
-    const r = await fetchWithTimeout('/api/wind', 3000);
+    const r = await fetchSupabaseFn('flight-watch-wind', 5000);
     if (r.ok) {
       const j = await r.json();
       const obs = j?.observations?.data;
@@ -1019,9 +1041,9 @@ async function fetchWind() {
 
 // === FETCH AIRCRAFT (OpenSky) ===
 async function fetchAircraft() {
-  // Try local server first
+  // Try the Supabase Edge Function proxy first (reliable, cached server-side)
   try {
-    const r = await fetchWithTimeout('/api/aircraft', 3000);
+    const r = await fetchSupabaseFn('flight-watch-aircraft', 5000);
     if (r.ok) {
       const j = await r.json();
       const states = j?.states || [];
