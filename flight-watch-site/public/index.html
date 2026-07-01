@@ -604,6 +604,109 @@
 </head>
 <body>
 
+<!-- ============== PIN GATE ============== -->
+<div id="pin-gate">
+  <div class="pin-title">Enter PIN</div>
+  <div class="pin-sub">Balmoral · Flight Watch</div>
+  <div id="pin-boxes" class="pin-boxes">
+    <input type="password" inputmode="numeric" maxlength="1" class="pin-digit" />
+    <input type="password" inputmode="numeric" maxlength="1" class="pin-digit" />
+    <input type="password" inputmode="numeric" maxlength="1" class="pin-digit" />
+    <input type="password" inputmode="numeric" maxlength="1" class="pin-digit" />
+  </div>
+  <div id="pin-msg" class="pin-msg"></div>
+</div>
+<style>
+  #pin-gate {
+    position: fixed; inset: 0; z-index: 2147483647;
+    background: #F4F0E8;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+  #pin-gate.unlocked { display: none; }
+  .pin-title { font: 400 44px 'Instrument Serif', Georgia, serif; color: #1A2230; letter-spacing: -0.01em; }
+  .pin-sub { color: #6b7280; font-size: 13px; margin-top: 4px; margin-bottom: 28px; }
+  .pin-boxes { display: flex; gap: 14px; }
+  .pin-boxes.shake { animation: pinShake 0.5s ease; }
+  .pin-digit {
+    width: 58px; height: 72px; text-align: center;
+    font: 400 32px 'JetBrains Mono', monospace; color: #1A2230;
+    background: #fff; border: 2px solid rgba(26,34,48,0.12);
+    border-radius: 12px; outline: none; caret-color: #3E6B6B;
+  }
+  .pin-digit:focus { border-color: #3E6B6B; }
+  .pin-digit:disabled { opacity: 0.5; }
+  .pin-msg { height: 22px; margin-top: 16px; color: #B5503C; font-size: 13px; font-weight: 500; }
+  @keyframes pinShake {
+    0%,100% { transform: translateX(0); }
+    20% { transform: translateX(-8px); }
+    40% { transform: translateX(8px); }
+    60% { transform: translateX(-6px); }
+    80% { transform: translateX(6px); }
+  }
+</style>
+<script>
+(function () {
+  var PIN = '1954', MAX = 5, LOCKOUT = 60000;
+  var gate = document.getElementById('pin-gate');
+  var boxes = document.getElementById('pin-boxes');
+  var msg = document.getElementById('pin-msg');
+  var inputs = Array.prototype.slice.call(document.querySelectorAll('.pin-digit'));
+  var attempts = 0, lockedUntil = 0;
+
+  if (sessionStorage.getItem('flightWatchUnlocked') === 'true') {
+    gate.classList.add('unlocked');
+    return;
+  }
+  setTimeout(function () { inputs[0].focus(); }, 50);
+
+  function clearBoxes() { inputs.forEach(function (i) { i.value = ''; }); inputs[0].focus(); }
+  function setDisabled(d) { inputs.forEach(function (i) { i.disabled = d; }); }
+
+  function submit(code) {
+    if (code === PIN) {
+      sessionStorage.setItem('flightWatchUnlocked', 'true');
+      gate.classList.add('unlocked');
+      window.dispatchEvent(new Event('resize')); // nudge Leaflet to re-measure
+      return;
+    }
+    attempts++;
+    boxes.classList.add('shake');
+    setTimeout(function () { boxes.classList.remove('shake'); }, 500);
+    if (attempts >= MAX) {
+      lockedUntil = Date.now() + LOCKOUT;
+      attempts = 0;
+      setDisabled(true);
+      var tick = setInterval(function () {
+        var left = Math.ceil((lockedUntil - Date.now()) / 1000);
+        if (left <= 0) { clearInterval(tick); setDisabled(false); msg.textContent = ''; clearBoxes(); }
+        else { msg.textContent = 'Locked — try again in ' + left + 's'; }
+      }, 250);
+    } else {
+      msg.textContent = 'Incorrect';
+    }
+    clearBoxes();
+  }
+
+  inputs.forEach(function (input, i) {
+    input.addEventListener('input', function () {
+      if (lockedUntil > Date.now()) return;
+      input.value = input.value.replace(/\D/g, '').slice(-1);
+      msg.textContent = '';
+      if (input.value && i < 3) inputs[i + 1].focus();
+      if (input.value && i === 3) {
+        var code = inputs.map(function (x) { return x.value; }).join('');
+        if (code.length === 4) setTimeout(function () { submit(code); }, 80);
+      }
+    });
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Backspace' && !input.value && i > 0) inputs[i - 1].focus();
+    });
+  });
+})();
+</script>
+
 <div id="app">
   <div class="style-switcher">
     <button id="btn-calm" class="active" onclick="setView('calm')">Calm</button>
@@ -808,27 +911,9 @@ const BBOX = { lamin: -27.65, lomin: 152.85, lamax: -27.25, lomax: 153.30 };
 const BOM_URL = 'https://www.bom.gov.au/fwo/IDQ60901/IDQ60901.94578.json';
 const OPENSKY_URL = `https://opensky-network.org/api/states/all?lamin=${BBOX.lamin}&lomin=${BBOX.lomin}&lamax=${BBOX.lamax}&lomax=${BBOX.lomax}`;
 
-// Supabase Edge Function proxies (reliable server-side fetch of BoM + OpenSky).
-// The anon key is public by design (already shipped in the frontend). If the
-// functions aren't deployed yet, these calls fail fast and the code falls back
-// to the public CORS proxies below — so the dashboard works either way.
-const SB_FN_BASE = 'https://rdrufdlhfrwczqvmvzgr.supabase.co/functions/v1';
-const SB_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkcnVmZGxoZnJ3Y3pxdm12emdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2ODY5OTgsImV4cCI6MjA4ODI2Mjk5OH0.k8EiIOB2HiHxjuPITlIYf5xWGCNWV7EA5Tfe3br7yew';
-async function fetchSupabaseFn(name, timeoutMs = 5000) {
-  const controller = new AbortController();
-  const tid = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const r = await fetch(`${SB_FN_BASE}/${name}`, {
-      signal: controller.signal,
-      headers: { apikey: SB_ANON_KEY, Authorization: `Bearer ${SB_ANON_KEY}` },
-    });
-    clearTimeout(tid);
-    return r;
-  } catch (e) {
-    clearTimeout(tid);
-    throw e;
-  }
-}
+// Data fetching uses the same-origin /api/wind and /api/aircraft Netlify
+// Functions (defined in netlify/functions), which proxy BoM + OpenSky
+// server-side. See fetchWind() / fetchAircraft() below.
 const REFRESH_AIRCRAFT_MS = 30000;
 const REFRESH_WIND_MS = 5 * 60 * 1000;
 
@@ -986,7 +1071,7 @@ async function fetchViaProxies(targetUrl, timeoutMs = 8000) {
 async function fetchWind() {
   // Try the Supabase Edge Function proxy first (reliable, cached server-side)
   try {
-    const r = await fetchSupabaseFn('flight-watch-wind', 5000);
+    const r = await fetchWithTimeout('/api/wind', 5000);
     if (r.ok) {
       const j = await r.json();
       const obs = j?.observations?.data;
@@ -1043,7 +1128,7 @@ async function fetchWind() {
 async function fetchAircraft() {
   // Try the Supabase Edge Function proxy first (reliable, cached server-side)
   try {
-    const r = await fetchSupabaseFn('flight-watch-aircraft', 5000);
+    const r = await fetchWithTimeout('/api/aircraft', 5000);
     if (r.ok) {
       const j = await r.json();
       const states = j?.states || [];
@@ -1642,5 +1727,10 @@ function toggleNightPanel() {
   savePrefs();
 }
 </script>
+
+<!-- Lock button — clears the session and re-prompts for the PIN -->
+<button id="lock-btn" title="Lock Flight Watch"
+  style="position:fixed; bottom:12px; left:12px; z-index:9999; width:36px; height:36px; border:none; border-radius:999px; background:rgba(26,34,48,0.85); color:#F4F0E8; cursor:pointer; font-size:14px; box-shadow:0 2px 12px rgba(0,0,0,0.15);"
+  onclick="sessionStorage.removeItem('flightWatchUnlocked'); location.reload();">🔒</button>
 </body>
 </html>

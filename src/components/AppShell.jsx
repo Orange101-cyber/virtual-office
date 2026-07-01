@@ -59,10 +59,15 @@ export default function AppShell({ children }) {
   const navRef = useRef(null);
   const { isAdmin, currentUser } = useAdmin();
 
-  // Flight Watch is Cameron's personal dashboard — only show the tab to him.
+  // Flight Watch is Cameron's personal dashboard, hosted on its own Netlify
+  // site (it needs a backend the static Virtual Office can't provide). The tab
+  // just links out to it, and only Cameron sees it.
+  // NOTE: if you name the Netlify site something other than "cyl-flight-watch",
+  // update this URL to match.
+  const FLIGHT_WATCH_URL = 'https://cyl-flight-watch.netlify.app';
   const isCameron = currentUser?.email === 'cameron@cylglobal.com';
   const navItems = isCameron
-    ? [...NAV_ITEMS, { path: '/flight-watch', label: '☾ Flight Watch' }]
+    ? [...NAV_ITEMS, { path: FLIGHT_WATCH_URL, label: '☾ Flight Watch', external: true }]
     : NAV_ITEMS;
 
   // Close dropdown when clicking outside the nav entirely.
@@ -155,7 +160,9 @@ export default function AppShell({ children }) {
             }
 
             const isActive =
-              item.path === '/'
+              item.external
+                ? false
+                : item.path === '/'
                 ? location.pathname === '/'
                 : location.pathname.startsWith(item.path);
 
@@ -164,6 +171,15 @@ export default function AppShell({ children }) {
                 ? 'bg-white/10 text-[#F5C518] font-semibold'
                 : 'text-white/50 hover:text-white/80 hover:bg-white/5'
             }`;
+
+            // External links (e.g. Flight Watch on Netlify) open in a new tab
+            if (item.external) {
+              return (
+                <a key={item.path} href={item.path} target="_blank" rel="noopener noreferrer" className={className}>
+                  {item.label}
+                </a>
+              );
+            }
 
             return (
               <Link key={item.path} to={item.path} className={className}>

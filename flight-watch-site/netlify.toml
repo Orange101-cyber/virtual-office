@@ -1,0 +1,19 @@
+# Standalone Netlify site — Balmoral Flight Watch (dashboard + data proxies).
+# This is separate from the main Virtual Office (which stays on GitHub Pages).
+# When connecting this repo on netlify.com, set the base directory to
+# "flight-watch-site" so Netlify only builds this folder.
+
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+# Pretty /api/* paths that map onto the functions
+[[redirects]]
+  from = "/api/wind"
+  to = "/.netlify/functions/wind"
+  status = 200
+
+[[redirects]]
+  from = "/api/aircraft"
+  to = "/.netlify/functions/aircraft"
+  status = 200
