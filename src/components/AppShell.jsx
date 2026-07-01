@@ -57,7 +57,13 @@ export default function AppShell({ children }) {
   const location = useLocation();
   const [openDropdown, setOpenDropdown] = useState(null);
   const navRef = useRef(null);
-  const { isAdmin } = useAdmin();
+  const { isAdmin, currentUser } = useAdmin();
+
+  // Flight Watch is Cameron's personal dashboard — only show the tab to him.
+  const isCameron = currentUser?.email === 'cameron@cylglobal.com';
+  const navItems = isCameron
+    ? [...NAV_ITEMS, { path: '/flight-watch', label: '☾ Flight Watch' }]
+    : NAV_ITEMS;
 
   // Close dropdown when clicking outside the nav entirely.
   // Using mousedown so the close fires before navigation on Links.
@@ -97,7 +103,7 @@ export default function AppShell({ children }) {
 
         {/* Nav links */}
         <nav ref={navRef} className="flex items-center gap-1 ml-4 overflow-x-visible">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             if (item.dropdown) {
               const toolsMap = { seo: SEO_TOOLS, ads: ADS_TOOLS, clients: CLIENT_TOOLS, video: VIDEO_TOOLS };
               const activeMap = { seo: isInSeoSection, ads: isInAdsSection, clients: isInClientsSection, video: isInVideoSection };
