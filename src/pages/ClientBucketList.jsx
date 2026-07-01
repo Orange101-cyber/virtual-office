@@ -620,7 +620,11 @@ function PageTable({ category, pages, onEdit, onDelete, onPlanRefresh, scoreForU
                             {score}%
                           </Link>
                         ) : (
-                          <Link to="/seo-checker"
+                          <Link to={`/seo-checker?${new URLSearchParams({
+                            ...(p.url ? { url: p.url } : {}),
+                            ...(p.focus_keyword ? { focus: p.focus_keyword } : {}),
+                            ...(p.title ? { title: p.title } : {}),
+                          }).toString()}`}
                             className="text-[9px] text-gray-400 hover:text-[#F5C518] no-underline">
                             Audit →
                           </Link>
@@ -1413,6 +1417,14 @@ function WebsiteScanModal({ clientName, clientId, existingPages, onImport, onClo
       });
 
       const pages = Object.values(pageMap);
+
+      if (pages.length === 0) {
+        toast.error(`"${domain.trim()}" has ranked keywords but no page URLs in DataForSEO. This domain may be too new or too small to have indexed ranking data — add pages manually or via CSV import instead.`);
+        setScanning(false);
+        setScanStep('');
+        return;
+      }
+
       setScanStep(`Found ${pages.length} pages — fetching titles...`);
 
       const titleData = await Promise.all(pages.slice(0, 30).map(async (p) => {

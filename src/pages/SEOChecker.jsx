@@ -39,11 +39,24 @@ export default function SEOChecker() {
   const [hasReport, setHasReport] = useState(true);
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Auto-load report from URL param ?report=ID
+  // Auto-load report from URL param ?report=ID, or pre-fill a new report
+  // from ?url=&focus=&title= (when auditing a page from the bucket list)
   useEffect(() => {
     const reportId = searchParams.get('report');
     if (reportId) {
       loadReport(reportId).then(() => setHasReport(true)).catch(() => {});
+      setSearchParams({}, { replace: true });
+      return;
+    }
+    const prefillUrl = searchParams.get('url');
+    const prefillFocus = searchParams.get('focus');
+    const prefillTitle = searchParams.get('title');
+    if (prefillUrl || prefillFocus || prefillTitle) {
+      newReport();
+      setHasReport(true);
+      if (prefillUrl) updateField('url', prefillUrl);
+      if (prefillFocus) updateField('focus_keyphrase', prefillFocus);
+      if (prefillTitle) updateField('article_title', prefillTitle);
       setSearchParams({}, { replace: true });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
