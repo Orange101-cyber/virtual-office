@@ -564,6 +564,99 @@ export async function getTopRankersContent(keyword) {
   return results.filter(Boolean);
 }
 
+// ══════════════════════════════════════════════════════════════════
+// AI Optimization — LLM Mentions API
+// Measures how often a brand/domain is mentioned in AI answers
+// (Google AI Overviews via platform 'google', ChatGPT via 'chat_gpt').
+// Endpoint: POST /v3/ai_optimization/llm_mentions/...
+// ══════════════════════════════════════════════════════════════════
+
+// Headline metrics: total mentions, AI search volume, impressions for a brand.
+export async function getAiVisibilityMetrics(brand, { platform = 'google', domain = null } = {}) {
+  if (!brand) return null;
+  const cacheKey = `ai_metrics:${brand.toLowerCase().trim()}:${platform}:${domain || ''}`;
+  const cached = await getCached(cacheKey);
+  if (cached) return cached;
+
+  // target is an array of entities — track the brand name as a keyword,
+  // and optionally the client's own domain.
+  const target = [{ keyword: brand }];
+  if (domain) target.push({ domain: domain.replace(/^https?:\/\//, '').replace(/\/$/, '') });
+
+  const data = await callEndpoint('/ai_optimization/llm_mentions/aggregated_metrics/live', {
+    target,
+    platform,
+    location_code: LOCATION_AU,
+    language_code: LANGUAGE,
+  });
+  const res = data.tasks?.[0]?.result?.[0] || null;
+  const total = res?.total || res?.items?.[0]?.total || res || {};
+  const result = {
+    brand,
+    platform,
+    mentions: total.mentions ?? total.mentions_count ?? 0,
+    ai_search_volume: total.ai_search_volume ?? 0,
+    impressions: total.impressions ?? 0,
+    raw: res, // keep raw so we can adjust field mapping once we see live data
+  };
+  await setCached(cacheKey, result);
+  return result;
+}
+
+// Example AI answers that mention (or relate to) the brand — the Q&A pairs
+// plus the sources the AI model cited.
+export async function getAiMentionExamples(brand, { platform = 'google', limit = 10 } = {}) {
+  if (!brand) return [];
+  const cacheKey = `ai_examples:${brand.toLowerCase().trim()}:${platform}:${limit}`;
+  const cached = await getCached(cacheKey);
+  if (cached) return cached;
+
+  const data = await callEndpoint('/ai_optimization/llm_mentions/search/live', {
+    target: [{ keyword: brand }],
+    platform,
+    location_code: LOCATION_AU,
+    language_code: LANGUAGE,
+    limit,
+  });
+  const items = data.tasks?.[0]?.result?.[0]?.items || data.tasks?.[0]?.result || [];
+  const result = (Array.isArray(items) ? items : []).slice(0, limit).map(item => ({
+    question: item.question || item.keyword || item.query || '',
+    answer: item.answer || item.text || item.content || '',
+    sources: (item.sources || item.citations || []).map(s => ({
+      title: s.title || s.domain || '',
+      url: s.url || s.source_url || '',
+      domain: s.domain || '',
+    })),
+    mentioned: !!(item.mentioned ?? item.brand_mentioned ?? false),
+  }));
+  await setCached(cacheKey, result);
+  return result;
+}
+
+// Which domains dominate AI answers for a topic (your AI-era competitors).
+export async function getAiTopDomains(keyword, { platform = 'google', limit = 15 } = {}) {
+  if (!keyword) return [];
+  const cacheKey = `ai_top_domains:${keyword.toLowerCase().trim()}:${platform}:${limit}`;
+  const cached = await getCached(cacheKey);
+  if (cached) return cached;
+
+  const data = await callEndpoint('/ai_optimization/llm_mentions/top_domains/live', {
+    target: [{ keyword }],
+    platform,
+    location_code: LOCATION_AU,
+    language_code: LANGUAGE,
+    limit,
+  });
+  const items = data.tasks?.[0]?.result?.[0]?.items || [];
+  const result = (items || []).slice(0, limit).map(item => ({
+    domain: item.domain || '',
+    mentions: item.mentions ?? item.mentions_count ?? 0,
+    citations: item.citations ?? item.sources_count ?? 0,
+  }));
+  await setCached(cacheKey, result);
+  return result;
+}
+
 export function isConfigured() {
   return !!(LOGIN && PASSWORD);
 }
