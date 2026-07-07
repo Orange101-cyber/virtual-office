@@ -259,20 +259,28 @@ export default function SEOChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Load client context when client changes
+  // Resolve the selected client's DB id once (stable across renders even when
+  // the `clients` array gets a new reference).
+  const dbClientId = clients.find(c => c.name === selectedClient)?.id;
+
+  // Load client context when the selected client (or its id) changes.
+  // NOTE: depend on dbClientId, NOT the whole `clients` array — the array gets a
+  // new reference on every render, which otherwise reloads in a loop and makes
+  // the "context loaded" counts flicker.
   useEffect(() => {
     if (!selectedClient) {
       setClientData({ brandVoice: null, pastKeywords: [], pageKeywords: [], pages: [], contentPlan: [] });
       return;
     }
+    let cancelled = false;
     const load = async () => {
-      const dbClient = clients.find(c => c.name === selectedClient);
       const [bvRes, kwRes, pagesRes, planRes] = await Promise.all([
         supabase.from('client_brand_voice').select('*').eq('client_name', selectedClient).maybeSingle(),
-        dbClient?.id ? supabase.from('clients').select('past_keywords').eq('id', dbClient.id).maybeSingle() : Promise.resolve({ data: null }),
+        dbClientId ? supabase.from('clients').select('past_keywords').eq('id', dbClientId).maybeSingle() : Promise.resolve({ data: null }),
         supabase.from('client_pages').select('url, focus_keyword, page_category, bucket, is_refreshed, date_published, date_refreshed').eq('client_name', selectedClient),
         supabase.from('content_plans').select('title, focus_keyword, status, month, quarter, content_type, existing_url, is_refresh, search_volume, kd').eq('client_name', selectedClient),
       ]);
+      if (cancelled) return;
       setClientData({
         brandVoice: bvRes.data,
         pastKeywords: (kwRes.data?.past_keywords || '').split('\n').filter(Boolean),
@@ -282,7 +290,8 @@ export default function SEOChat() {
       });
     };
     load().catch(console.error);
-  }, [selectedClient, clients]);
+    return () => { cancelled = true; };
+  }, [selectedClient, dbClientId]);
 
   // Load chat history for client
   useEffect(() => {
@@ -407,34 +416,41 @@ export default function SEOChat() {
       messages: apiMessages,
     });
 
-    // Retry on 529 (overloaded) and 503 with exponential backoff
-    const RETRY_STATUSES = [429, 503, 529];
+    // Retry on overload/rate-limit statuses AND on network errors — a thrown
+    // "Failed to fetch" (transient network blip, larger payloads for big
+    // clients) otherwise bubbles straight to the user with no retry.
+    const RETRY_STATUSES = [429, 500, 502, 503, 529];
     const MAX_ATTEMPTS = 4;
     let lastErr;
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': ANTHROPIC_KEY,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body,
-      });
+      const isLast = attempt === MAX_ATTEMPTS - 1;
+      const backoff = async () => { await new Promise(r => setTimeout(r, Math.min(1000 * Math.pow(2, attempt), 8000))); };
+      try {
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': ANTHROPIC_KEY,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true',
+          },
+          body,
+        });
 
-      if (res.ok) return res.json();
+        if (res.ok) return res.json();
 
-      const errBody = await res.json().catch(() => ({}));
-      const detail = errBody?.error?.message || errBody?.message || JSON.stringify(errBody);
-      lastErr = new Error(`API error ${res.status}: ${detail}`);
-
-      // Retry on overload/rate-limit, otherwise fail fast
-      if (!RETRY_STATUSES.includes(res.status) || attempt === MAX_ATTEMPTS - 1) {
-        throw lastErr;
+        const errBody = await res.json().catch(() => ({}));
+        const detail = errBody?.error?.message || errBody?.message || JSON.stringify(errBody);
+        lastErr = new Error(`API error ${res.status}: ${detail}`);
+        if (!RETRY_STATUSES.includes(res.status) || isLast) throw lastErr;
+      } catch (netErr) {
+        // fetch() threw (network failure / CORS / aborted) — retry unless it's
+        // an API-error we already decided not to retry, or we're out of attempts.
+        if (netErr === lastErr) throw netErr;
+        lastErr = new Error('Network error contacting the AI (Failed to fetch) — check your connection and try again.');
+        if (isLast) throw lastErr;
       }
-      const waitMs = Math.min(1000 * Math.pow(2, attempt), 8000);
-      await new Promise(r => setTimeout(r, waitMs));
+      await backoff();
     }
     throw lastErr;
   };
