@@ -124,6 +124,29 @@ export default function RankTracker() {
     }).sort((a, b) => a.name.localeCompare(b.name));
   }, [keywords, snaps]);
 
+  // Export every tracked client's latest positions as one CSV (for reporting).
+  const exportCsv = (clientsToExport) => {
+    const headers = ['Client', 'Keyword', 'Group', 'Position', 'Change', 'Volume', 'Est. traffic', 'Top ranking page', 'Last refreshed'];
+    const lines = [headers.join(',')];
+    clientsToExport.forEach(tc => {
+      tc.stats.rows.forEach(r => {
+        const cells = [
+          tc.name, r.keyword, r.keyword_group || '',
+          r.position == null ? '>100' : r.position,
+          r.delta == null ? '' : (r.delta > 0 ? `+${r.delta}` : r.delta),
+          r.volume ?? '', r.est ?? '', r.url || '', tc.stats.latestDate || '',
+        ];
+        lines.push(cells.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','));
+      });
+    });
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `rank-tracker-${today()}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
   const clientDomain = (name) => {
     const c = activeClients.find(x => x.name === name);
     const kw = keywords.find(k => k.client_name === name && k.target_domain);
@@ -233,6 +256,7 @@ export default function RankTracker() {
             allClients={activeClients}
             onOpen={setSelected}
             onAddClient={(name) => { setSelected(name); setShowAdd(true); }}
+            onExport={() => exportCsv(trackedClients)}
           />
         )}
       </div>
@@ -251,7 +275,7 @@ export default function RankTracker() {
 }
 
 // ── Overview: client cards ──
-function Overview({ trackedClients, allClients, onOpen, onAddClient }) {
+function Overview({ trackedClients, allClients, onOpen, onAddClient, onExport }) {
   const [pick, setPick] = useState('');
   const untracked = allClients.filter(c => !trackedClients.find(t => t.name === c.name));
   return (
@@ -259,6 +283,12 @@ function Overview({ trackedClients, allClients, onOpen, onAddClient }) {
       <div className="flex items-center gap-3 mb-4">
         <div className="text-sm font-bold text-[#1a1a1a]">Websites</div>
         <div className="ml-auto flex items-center gap-2">
+          {trackedClients.length > 0 && (
+            <button onClick={onExport} title="Export all clients' latest positions as CSV"
+              className="bg-white border border-gray-300 text-gray-700 rounded px-3 py-1.5 text-[11px] font-semibold cursor-pointer hover:border-gray-400">
+              ⬇ Export CSV
+            </button>
+          )}
           <select value={pick} onChange={(e) => setPick(e.target.value)}
             className="border border-gray-200 rounded px-2 py-1.5 text-[11px] bg-white focus:outline-none focus:border-[#F5C518]">
             <option value="">+ Track a client…</option>
