@@ -632,7 +632,8 @@ export async function getAiVisibilityMetrics(brand, { platform = 'google', domai
 // plus the sources the AI model cited.
 export async function getAiMentionExamples(brand, { platform = 'google', limit = 10 } = {}) {
   if (!brand) return [];
-  const cacheKey = `ai_examples:${brand.toLowerCase().trim()}:${platform}:${limit}`;
+  // v2 cache key — v1 entries predate the source `position` field.
+  const cacheKey = `ai_examples:v2:${brand.toLowerCase().trim()}:${platform}:${limit}`;
   const cached = await getCached(cacheKey);
   if (cached) return cached;
 
