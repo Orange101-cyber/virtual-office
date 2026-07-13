@@ -34,6 +34,7 @@ import SEOChat from './pages/SEOChat';
 import SEOPerformance from './pages/SEOPerformance';
 import SiteHealth from './pages/SiteHealth';
 import AIVisibility from './pages/AIVisibility';
+import RankTracker from './pages/RankTracker';
 import Login from './pages/Login';
 import { Toaster } from 'react-hot-toast';
 import './index.css';
@@ -101,6 +102,7 @@ function Root() {
           <Route path="/seo-chat" element={<SEOChat />} />
           <Route path="/site-health" element={<SiteHealth />} />
           <Route path="/ai-visibility" element={<AIVisibility />} />
+          <Route path="/rank-tracker" element={<RankTracker />} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>

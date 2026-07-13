@@ -239,6 +239,31 @@ export async function getSerpResults(keyword) {
   return null;
 }
 
+// ── Rank Tracker: find a domain's best position for a keyword (up to top 100) ──
+// Not cached — rank tracking needs a fresh position on every refresh.
+export async function getKeywordRank(keyword, domain, { device = 'desktop' } = {}) {
+  const clean = (domain || '').replace(/^https?:\/\//, '').replace(/\/$/, '').replace(/^www\./, '');
+  const data = await callEndpoint('/serp/google/organic/live/advanced', {
+    keyword,
+    location_code: LOCATION_AU,
+    language_code: LANGUAGE,
+    device,
+    depth: 100,
+  });
+  const result = data.tasks?.[0]?.result?.[0] || null;
+  const items = (result?.items || []).filter(i => i.type === 'organic');
+  let best = null;
+  for (const it of items) {
+    const d = (it.domain || '').replace(/^www\./, '');
+    if (d === clean || d.endsWith('.' + clean) || d.endsWith(clean)) {
+      if (!best || (it.rank_absolute || 999) < best.position) {
+        best = { position: it.rank_absolute, url: it.url, title: it.title };
+      }
+    }
+  }
+  return best; // null = not in top 100
+}
+
 // ── Check if a domain ranks for a keyword ──
 export async function checkDomainRanking(keyword, domain) {
   const serp = await getSerpResults(keyword);

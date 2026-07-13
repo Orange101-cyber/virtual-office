@@ -12,6 +12,7 @@ const SEO_TOOLS = [
   { path: '/article-writer', label: 'Article Writer', icon: '✍️' },
   { path: '/seo-checker', label: 'SEO Checker', icon: '🔍' },
   { path: '/seo-performance', label: 'SEO Performance', icon: '📈' },
+  { path: '/rank-tracker', label: 'Rank Tracker', icon: '📊' },
   { path: '/ai-visibility', label: 'AI Visibility', icon: '🤖' },
   { path: '/client-bucket-list', label: 'Client Bucket List', icon: '📋' },
   { path: '/site-health', label: 'Site Health', icon: '🏥' },
