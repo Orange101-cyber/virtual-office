@@ -239,29 +239,50 @@ export async function getSerpResults(keyword) {
   return null;
 }
 
-// ── Rank Tracker: find a domain's best position for a keyword (up to top 100) ──
+// ── Rank Tracker: position + SERP features for a keyword (one SERP call) ──
 // Not cached — rank tracking needs a fresh position on every refresh.
+// Returns { position, url, features } where features flags AI Overview (and
+// whether we're cited in it), People Also Ask, Local Pack, Discussions &
+// Forums, and Images.
 export async function getKeywordRank(keyword, domain, { device = 'desktop' } = {}) {
   const clean = (domain || '').replace(/^https?:\/\//, '').replace(/\/$/, '').replace(/^www\./, '');
   const data = await callEndpoint('/serp/google/organic/live/advanced', {
-    keyword,
-    location_code: LOCATION_AU,
-    language_code: LANGUAGE,
-    device,
-    depth: 100,
+    keyword, location_code: LOCATION_AU, language_code: LANGUAGE, device, depth: 100,
   });
   const result = data.tasks?.[0]?.result?.[0] || null;
-  const items = (result?.items || []).filter(i => i.type === 'organic');
+  const allItems = result?.items || [];
+  const typeOf = (i) => i.type || i.item_type;
+
+  // Best organic position.
   let best = null;
-  for (const it of items) {
+  for (const it of allItems.filter(i => typeOf(i) === 'organic')) {
     const d = (it.domain || '').replace(/^www\./, '');
     if (d === clean || d.endsWith('.' + clean) || d.endsWith(clean)) {
-      if (!best || (it.rank_absolute || 999) < best.position) {
-        best = { position: it.rank_absolute, url: it.url, title: it.title };
-      }
+      if (!best || (it.rank_absolute || 999) < best.position) best = { position: it.rank_absolute, url: it.url, title: it.title };
     }
   }
-  return best; // null = not in top 100
+
+  // AI Overview: presence + whether we're cited + our position within it.
+  const ai = allItems.find(i => typeOf(i) === 'ai_overview');
+  let aiCited = false, aiPos = null;
+  if (ai) {
+    const refs = ai.references || ai.items || [];
+    refs.forEach((r, idx) => {
+      const d = (r.domain || r.source || '').replace(/^www\./, '');
+      if (!aiCited && d && (d === clean || d.endsWith(clean))) { aiCited = true; aiPos = idx + 1; }
+    });
+  }
+  const has = (...types) => allItems.some(i => types.includes(typeOf(i)));
+  const features = {
+    ai_overview: !!ai,
+    ai_overview_cited: aiCited,
+    ai_overview_position: aiPos,
+    people_also_ask: has('people_also_ask'),
+    local_pack: has('local_pack', 'map'),
+    discussions_forums: has('discussions_and_forums'),
+    images: has('images', 'image_pack'),
+  };
+  return { position: best?.position ?? null, url: best?.url || '', title: best?.title || '', features };
 }
 
 // ── Check if a domain ranks for a keyword ──

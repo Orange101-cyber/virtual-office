@@ -22,8 +22,12 @@ create table if not exists rank_tracker_snapshots (
   url           text,
   search_volume int,
   est_traffic   numeric,
+  features      jsonb,          -- AI Overview / PAA / Local / Forums / Images
   created_at    timestamptz default now()
 );
+
+-- If the table already exists from an earlier version, add the new column:
+alter table rank_tracker_snapshots add column if not exists features jsonb;
 
 create index if not exists idx_rt_kw_client   on rank_tracker_keywords(client_name);
 create index if not exists idx_rt_snap_client on rank_tracker_snapshots(client_name, captured_on);

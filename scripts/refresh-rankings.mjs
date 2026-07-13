@@ -47,16 +47,29 @@ async function getRank(keyword, domain, device) {
   const data = await dfs('/serp/google/organic/live/advanced', {
     keyword, location_code: LOCATION_AU, language_code: LANGUAGE, device: device || 'desktop', depth: 100,
   });
-  const items = (data.tasks?.[0]?.result?.[0]?.items || []).filter(i => i.type === 'organic');
+  const all = data.tasks?.[0]?.result?.[0]?.items || [];
+  const typeOf = (i) => i.type || i.item_type;
   const cd = clean(domain);
   let best = null;
-  for (const it of items) {
+  for (const it of all.filter(i => typeOf(i) === 'organic')) {
     const d = (it.domain || '').replace(/^www\./, '');
     if (d === cd || d.endsWith('.' + cd) || d.endsWith(cd)) {
       if (!best || (it.rank_absolute || 999) < best.position) best = { position: it.rank_absolute, url: it.url };
     }
   }
-  return best;
+  const ai = all.find(i => typeOf(i) === 'ai_overview');
+  let aiCited = false, aiPos = null;
+  if (ai) (ai.references || ai.items || []).forEach((r, idx) => {
+    const d = (r.domain || r.source || '').replace(/^www\./, '');
+    if (!aiCited && d && (d === cd || d.endsWith(cd))) { aiCited = true; aiPos = idx + 1; }
+  });
+  const has = (...t) => all.some(i => t.includes(typeOf(i)));
+  const features = {
+    ai_overview: !!ai, ai_overview_cited: aiCited, ai_overview_position: aiPos,
+    people_also_ask: has('people_also_ask'), local_pack: has('local_pack', 'map'),
+    discussions_forums: has('discussions_and_forums'), images: has('images', 'image_pack'),
+  };
+  return { position: best?.position ?? null, url: best?.url || '', features };
 }
 
 async function getVolumes(keywords) {
@@ -92,10 +105,11 @@ async function main() {
   let ok = 0, ranked = 0;
   await pool(keywords, 5, async (k) => {
     if (!k.target_domain) return;
-    let position = null, url = '';
+    let position = null, url = '', features = null;
     try {
       const r = await getRank(k.keyword, k.target_domain, k.device);
-      if (r) { position = r.position; url = r.url; ranked++; }
+      position = r.position; url = r.url; features = r.features;
+      if (position != null) ranked++;
     } catch (e) { console.warn(`rank failed for "${k.keyword}":`, e.message); }
     const vol = volMap[k.keyword.toLowerCase()] ?? null;
     const est = Math.round(CTR(position) * (vol || 0));
@@ -104,7 +118,7 @@ async function main() {
     await sb(`rank_tracker_snapshots?client_name=eq.${encodeURIComponent(k.client_name)}&keyword=eq.${encodeURIComponent(k.keyword)}&captured_on=eq.${day}`, { method: 'DELETE' });
     const ins = await sb('rank_tracker_snapshots', {
       method: 'POST', headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ client_name: k.client_name, keyword: k.keyword, captured_on: day, position, url, search_volume: vol, est_traffic: est }),
+      body: JSON.stringify({ client_name: k.client_name, keyword: k.keyword, captured_on: day, position, url, search_volume: vol, est_traffic: est, features }),
     });
     if (ins.ok) ok++; else console.warn('insert failed:', await ins.text());
   });

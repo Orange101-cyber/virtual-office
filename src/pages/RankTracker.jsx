@@ -10,6 +10,27 @@ import toast from 'react-hot-toast';
 //   • Overview  — a card per client with KPIs + mini trend
 //   • Dashboard — one client's keyword table, groups, KPIs and charts
 
+const ANTHROPIC_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY;
+
+async function suggestForKeyword({ keyword, position, url, features, volume }) {
+  if (!ANTHROPIC_KEY) throw new Error('Anthropic API key not configured');
+  const system = `You are an SEO strategist specialising in AI search (Google AI Overviews + ChatGPT). Given a keyword, the client's current Google position, the page URL, and which SERP features appear, give 3 short, concrete, high-impact suggestions to help this page rank better — PRIORITISING getting cited in AI Overviews / AI answers. Be specific and actionable for a copywriter. Return ONLY a JSON array of 3 strings, no markdown.`;
+  const user = `Keyword: "${keyword}"
+Current Google position: ${position ?? 'not in top 100'}
+Page: ${url || 'no ranking page'}
+Monthly volume: ${volume ?? 'unknown'}
+SERP features present: ${JSON.stringify(features || {})}`;
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 600, system, messages: [{ role: 'user', content: user }] }),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  const j = await res.json();
+  const text = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+  try { return JSON.parse(text.replace(/```json|```/g, '').trim()); } catch { return [text]; }
+}
+
 const CTR = (pos) => {
   if (!pos) return 0;
   const t = { 1: .28, 2: .15, 3: .11, 4: .08, 5: .06, 6: .05, 7: .04, 8: .033, 9: .028, 10: .025 };
@@ -47,6 +68,13 @@ function computeStats(keywords, snaps) {
     if (s.captured_on === prevDate) prevByKw[s.keyword] = s;
   });
 
+  // All-time-high (best/lowest position ever recorded) per keyword.
+  const athByKw = {};
+  snaps.forEach(s => {
+    if (s.position == null) return;
+    if (athByKw[s.keyword] == null || s.position < athByKw[s.keyword]) athByKw[s.keyword] = s.position;
+  });
+
   const rows = keywords.map(k => {
     const cur = latestByKw[k.keyword];
     const prev = prevByKw[k.keyword];
@@ -59,6 +87,8 @@ function computeStats(keywords, snaps) {
       volume: cur?.search_volume ?? null,
       est: cur ? (cur.est_traffic ?? estTraffic(pos, cur.search_volume)) : null,
       delta: (prev?.position != null && pos != null) ? prev.position - pos : null, // +ve = improved
+      ath: athByKw[k.keyword] ?? null,
+      features: cur?.features || null,
     };
   });
 
@@ -205,10 +235,10 @@ export default function RankTracker() {
       const volMap = {}; (svData || []).forEach(d => { volMap[(d.keyword || '').toLowerCase().trim()] = d.search_volume || 0; });
 
       await inBatches(kws, 5, async (k) => {
-        let position = null, url = '';
+        let position = null, url = '', features = null;
         try {
           const r = await dfs.getKeywordRank(k.keyword, domain, { device: k.device });
-          if (r) { position = r.position; url = r.url; }
+          position = r.position; url = r.url; features = r.features;
         } catch { /* leave unranked */ }
         const vol = volMap[k.keyword.toLowerCase()] ?? null;
         // One row per keyword per day: clear today's then insert.
@@ -216,7 +246,7 @@ export default function RankTracker() {
           .delete().eq('client_name', client).eq('keyword', k.keyword).eq('captured_on', day);
         await supabase.from('rank_tracker_snapshots').insert({
           client_name: client, keyword: k.keyword, captured_on: day,
-          position, url, search_volume: vol, est_traffic: estTraffic(position, vol),
+          position, url, search_volume: vol, est_traffic: estTraffic(position, vol), features,
         });
       }, (done) => setProgress(done));
 
@@ -395,6 +425,8 @@ function ClientDashboard({ client, domain, keywords, snaps, groupFilter, setGrou
 
   const posColor = (p) => p == null || p > 30 ? 'text-red-500' : p <= 3 ? 'text-green-600' : p <= 10 ? 'text-lime-600' : 'text-orange-500';
 
+  const [suggestFor, setSuggestFor] = useState(null); // row being suggested for
+
   return (
     <div>
       {/* Header actions */}
@@ -442,22 +474,24 @@ function ClientDashboard({ client, domain, keywords, snaps, groupFilter, setGrou
           <div className="text-[10px] font-bold uppercase text-[#F5C518]">{rows.length} Keywords</div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-[11px] min-w-[720px]">
+          <table className="w-full text-[11px] min-w-[900px]">
             <thead className="bg-[#fafafa] border-b border-gray-200">
               <tr className="text-left text-gray-500">
                 <th className="px-3 py-2 font-bold uppercase text-[9px]">Keyword</th>
                 <th className="px-3 py-2 font-bold uppercase text-[9px]">Group</th>
-                <th className="px-3 py-2 font-bold uppercase text-[9px] text-center w-24">Position</th>
-                <th className="px-3 py-2 font-bold uppercase text-[9px] text-center w-16">Change</th>
-                <th className="px-3 py-2 font-bold uppercase text-[9px] text-right w-16">Volume</th>
+                <th className="px-3 py-2 font-bold uppercase text-[9px] text-center w-20">Position</th>
+                <th className="px-3 py-2 font-bold uppercase text-[9px] text-center w-14">Change</th>
+                <th className="px-3 py-2 font-bold uppercase text-[9px] text-center w-14" title="All-time high (best position ever)">ATH</th>
+                <th className="px-3 py-2 font-bold uppercase text-[9px]">SERP features</th>
+                <th className="px-3 py-2 font-bold uppercase text-[9px] text-right w-14">Volume</th>
                 <th className="px-3 py-2 font-bold uppercase text-[9px] text-right w-16">Est. traffic</th>
                 <th className="px-3 py-2 font-bold uppercase text-[9px]">Top ranking page</th>
-                <th className="px-3 py-2 w-8"></th>
+                <th className="px-3 py-2 w-16"></th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={8} className="px-3 py-8 text-center text-gray-400 text-[11px]">No keywords yet — click “+ Add keywords”, then “Refresh rankings”.</td></tr>
+                <tr><td colSpan={10} className="px-3 py-8 text-center text-gray-400 text-[11px]">No keywords yet — click “+ Add keywords”, then “Refresh rankings”.</td></tr>
               ) : rows.map((r) => (
                 <tr key={r.id} className="border-b border-gray-100 hover:bg-[#fafafa]">
                   <td className="px-3 py-2 font-medium text-[#1a1a1a]">{r.keyword}</td>
@@ -468,14 +502,78 @@ function ClientDashboard({ client, domain, keywords, snaps, groupFilter, setGrou
                       r.delta === 0 ? <span className="text-gray-400">–</span> :
                         <span className={`text-[10px] font-bold ${r.delta > 0 ? 'text-green-600' : 'text-red-500'}`}>{r.delta > 0 ? '▲' : '▼'}{Math.abs(r.delta)}</span>}
                   </td>
+                  <td className="px-3 py-2 text-center text-gray-500">{r.ath ?? '—'}</td>
+                  <td className="px-3 py-2"><Features f={r.features} /></td>
                   <td className="px-3 py-2 text-right">{r.volume != null ? r.volume.toLocaleString() : '—'}</td>
                   <td className="px-3 py-2 text-right">{r.est != null ? r.est.toLocaleString() : '—'}</td>
                   <td className="px-3 py-2">{r.url ? <a href={r.url} target="_blank" rel="noreferrer" className="text-blue-600 no-underline">{shortUrl(r.url)}</a> : <span className="text-gray-300 italic">not in top 100</span>}</td>
-                  <td className="px-3 py-2 text-center"><button onClick={() => onRemove(r.id)} className="text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer text-[12px]">×</button></td>
+                  <td className="px-3 py-2 text-center whitespace-nowrap">
+                    <button onClick={() => setSuggestFor(r)} title="AI-search suggestions to rank better" className="text-gray-400 hover:text-[#F5C518] bg-transparent border-none cursor-pointer text-[13px] mr-1">💡</button>
+                    <button onClick={() => onRemove(r.id)} className="text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer text-[12px]">×</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {suggestFor && <SuggestModal row={suggestFor} onClose={() => setSuggestFor(null)} />}
+    </div>
+  );
+}
+
+// Compact SERP-feature badges. AI Overview highlighted (green if we're cited).
+function Features({ f }) {
+  if (!f) return <span className="text-gray-300">—</span>;
+  const badge = (on, label, title, cls) => on
+    ? <span title={title} className={`text-[9px] font-bold px-1 py-0.5 rounded ${cls}`}>{label}</span>
+    : null;
+  const items = [
+    f.ai_overview && badge(true, f.ai_overview_cited ? `AIO✓${f.ai_overview_position ? '#' + f.ai_overview_position : ''}` : 'AIO',
+      f.ai_overview_cited ? `Cited in AI Overview${f.ai_overview_position ? ' at #' + f.ai_overview_position : ''}` : 'AI Overview present (you are not cited)',
+      f.ai_overview_cited ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'),
+    badge(f.people_also_ask, 'PAA', 'People Also Ask', 'bg-blue-50 text-blue-600'),
+    badge(f.local_pack, 'Local', 'Local Pack', 'bg-amber-50 text-amber-700'),
+    badge(f.discussions_forums, 'Forum', 'Discussions & Forums', 'bg-teal-50 text-teal-700'),
+    badge(f.images, 'Img', 'Images', 'bg-pink-50 text-pink-600'),
+  ].filter(Boolean);
+  return items.length ? <div className="flex flex-wrap gap-1">{items}</div> : <span className="text-gray-300">—</span>;
+}
+
+// AI-search suggestions modal for a keyword.
+function SuggestModal({ row, onClose }) {
+  const [loading, setLoading] = useState(true);
+  const [tips, setTips] = useState([]);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    let on = true;
+    suggestForKeyword({ keyword: row.keyword, position: row.position, url: row.url, features: row.features, volume: row.volume })
+      .then(t => { if (on) { setTips(Array.isArray(t) ? t : [String(t)]); setLoading(false); } })
+      .catch(e => { if (on) { setErr(e.message); setLoading(false); } });
+    return () => { on = false; };
+  }, [row]);
+  return (
+    <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
+          <div>
+            <div className="text-[10px] font-bold uppercase text-[#F5C518]">AI-Search Suggestions</div>
+            <div className="text-[13px] font-semibold text-[#1a1a1a]">{row.keyword}</div>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-[#1a1a1a] bg-transparent border-none text-xl cursor-pointer leading-none">×</button>
+        </div>
+        <div className="p-5">
+          {loading ? <div className="text-[12px] text-gray-400 text-center py-4">Thinking…</div>
+            : err ? <div className="text-[12px] text-red-600">{err}</div>
+              : <ul className="space-y-3">
+                {tips.map((t, i) => (
+                  <li key={i} className="flex gap-2 text-[12px] text-gray-700 leading-relaxed">
+                    <span className="text-[#F5C518] font-bold shrink-0">{i + 1}.</span><span>{t}</span>
+                  </li>
+                ))}
+              </ul>}
+          <div className="text-[10px] text-gray-400 mt-4">Focused on winning AI Overview / AI-answer citations for this keyword.</div>
         </div>
       </div>
     </div>
