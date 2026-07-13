@@ -35,6 +35,7 @@ import SEOPerformance from './pages/SEOPerformance';
 import SiteHealth from './pages/SiteHealth';
 import AIVisibility from './pages/AIVisibility';
 import RankTracker from './pages/RankTracker';
+import SiteAuditor from './pages/SiteAuditor';
 import Login from './pages/Login';
 import { Toaster } from 'react-hot-toast';
 import './index.css';
@@ -103,6 +104,7 @@ function Root() {
           <Route path="/site-health" element={<SiteHealth />} />
           <Route path="/ai-visibility" element={<AIVisibility />} />
           <Route path="/rank-tracker" element={<RankTracker />} />
+          <Route path="/site-auditor" element={<SiteAuditor />} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
