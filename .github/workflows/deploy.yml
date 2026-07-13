@@ -37,6 +37,9 @@ jobs:
           VITE_DATAFORSEO_LOGIN: ${{ secrets.DATAFORSEO_LOGIN }}
           VITE_DATAFORSEO_PASSWORD: ${{ secrets.DATAFORSEO_PASSWORD }}
           VITE_FAL_API_KEY: ${{ secrets.FAL_API_KEY }}
+          VITE_TRELLO_API_KEY: ${{ secrets.TRELLO_API_KEY }}
+          VITE_TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
+          VITE_TRELLO_BOARD_ID: ${{ secrets.TRELLO_BOARD_ID }}
 
       - name: Verify build
         run: |

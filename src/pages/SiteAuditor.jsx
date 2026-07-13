@@ -6,6 +6,16 @@ import * as dfs from '../lib/dataForSeo';
 import toast from 'react-hot-toast';
 
 const ANTHROPIC_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY;
+const TRELLO_KEY = import.meta.env.VITE_TRELLO_API_KEY;
+const TRELLO_TOKEN = import.meta.env.VITE_TRELLO_TOKEN;
+const TRELLO_BOARD = import.meta.env.VITE_TRELLO_BOARD_ID;
+const trelloConfigured = !!(TRELLO_KEY && TRELLO_TOKEN && TRELLO_BOARD);
+
+// Trello REST helper (client-side; Trello allows cross-origin calls).
+const trello = (path, params = {}, method = 'GET') => {
+  const q = new URLSearchParams({ key: TRELLO_KEY, token: TRELLO_TOKEN, ...params });
+  return fetch(`https://api.trello.com/1/${path}?${q}`, { method }).then(r => r.json());
+};
 
 // Current Google / SEO priorities the auditor should weigh. Editable — update
 // this list when Google ships a notable core/spam/helpful-content update.
@@ -177,6 +187,27 @@ export default function SiteAuditor() {
     setRunning(false); setStep('');
   };
 
+  const [pushing, setPushing] = useState(false);
+  const sendToTrello = async () => {
+    if (!trelloConfigured) return toast.error('Trello not set up yet — add the VITE_TRELLO_* keys');
+    if (!audit?.tasks?.length) return;
+    setPushing(true);
+    try {
+      const lists = await trello(`boards/${TRELLO_BOARD}/lists`);
+      let list = (lists || []).find(l => l.name.toLowerCase() === client.toLowerCase());
+      if (!list) list = await trello('lists', { name: client, idBoard: TRELLO_BOARD }, 'POST');
+      if (!list?.id) throw new Error('could not find or create the client list');
+      let n = 0;
+      for (const t of audit.tasks) {
+        const desc = `**Issue:** ${t.issue}\n\n**Do this:** ${t.action}\n\n_${t.category} · ${t.impact} impact · ${t.effort} effort · Site Auditor ${audit.audited_on}_`;
+        const card = await trello('cards', { idList: list.id, name: `[${t.impact}] ${t.title}`, desc }, 'POST');
+        if (card?.id) n++;
+      }
+      toast.success(`Pushed ${n} card${n !== 1 ? 's' : ''} to Trello · list “${client}”`);
+    } catch (e) { toast.error('Trello push failed: ' + e.message); }
+    setPushing(false);
+  };
+
   const toggleTask = async (idx) => {
     if (!audit) return;
     const tasks = audit.tasks.map((t, i) => i === idx ? { ...t, done: !t.done } : t);
@@ -248,7 +279,14 @@ export default function SiteAuditor() {
             </div>
 
             {/* The 2 tasks */}
-            <div className="text-[10px] font-bold uppercase text-[#F5C518] mb-2">Your 2 Tasks This Fortnight</div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-[10px] font-bold uppercase text-[#F5C518]">Your 2 Tasks This Fortnight</div>
+              <button onClick={sendToTrello} disabled={pushing || !trelloConfigured}
+                title={trelloConfigured ? 'Create these 2 tasks as Trello cards' : 'Add VITE_TRELLO_* keys to enable'}
+                className="bg-[#0079BF] text-white border-none rounded px-3 py-1 text-[10px] font-bold cursor-pointer hover:bg-[#026aa7] disabled:opacity-40">
+                {pushing ? 'Pushing…' : '📋 Send to Trello'}
+              </button>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               {(audit.tasks || []).map((t, i) => (
                 <div key={i} className={`bg-white border rounded-lg p-4 ${t.done ? 'border-green-300 opacity-70' : 'border-gray-200'}`}>
