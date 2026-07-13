@@ -1,0 +1,27 @@
+name: Site Auditor — fortnightly
+
+on:
+  schedule:
+    # 1st and 15th of each month at 19:00 UTC (5am Brisbane) ≈ every fortnight
+    - cron: '0 19 1,15 * *'
+  workflow_dispatch: {}   # manual runs from the Actions tab
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run fortnightly site audits
+        env:
+          SUPABASE_URL: https://rdrufdlhfrwczqvmvzgr.supabase.co
+          SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkcnVmZGxoZnJ3Y3pxdm12emdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2ODY5OTgsImV4cCI6MjA4ODI2Mjk5OH0.k8EiIOB2HiHxjuPITlIYf5xWGCNWV7EA5Tfe3br7yew
+          DATAFORSEO_LOGIN: ${{ secrets.DATAFORSEO_LOGIN }}
+          DATAFORSEO_PASSWORD: ${{ secrets.DATAFORSEO_PASSWORD }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TRELLO_API_KEY: ${{ secrets.TRELLO_API_KEY }}
+          TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
+          TRELLO_BOARD_ID: ${{ secrets.TRELLO_BOARD_ID }}
+        run: node scripts/site-audit.mjs
