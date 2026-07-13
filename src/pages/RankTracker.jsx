@@ -151,6 +151,21 @@ export default function RankTracker() {
     loadAll();
   };
 
+  // Pull the client's bucket-list focus keywords into tracking.
+  const importFromBucket = async (client) => {
+    const domain = clientDomain(client);
+    const { data } = await supabase.from('client_pages').select('focus_keyword').eq('client_name', client);
+    const fromBucket = [...new Set((data || []).map(p => (p.focus_keyword || '').trim()).filter(Boolean))];
+    const existing = new Set(keywords.filter(k => k.client_name === client).map(k => k.keyword.toLowerCase()));
+    const toAdd = fromBucket.filter(k => !existing.has(k.toLowerCase()));
+    if (!toAdd.length) return toast('All bucket-list keywords are already tracked');
+    const rows = toAdd.map(keyword => ({ client_name: client, keyword, target_domain: cleanDomain(domain) || null, device: 'desktop' }));
+    const { error } = await supabase.from('rank_tracker_keywords').insert(rows);
+    if (error) return toast.error('Import failed: ' + error.message);
+    toast.success(`Imported ${rows.length} keyword${rows.length > 1 ? 's' : ''} from the bucket list`);
+    loadAll();
+  };
+
   // ── Refresh rankings (manual) ──
   const refresh = async (client) => {
     if (!dfs.isConfigured()) return toast.error('DataForSEO not configured');
@@ -209,6 +224,7 @@ export default function RankTracker() {
             refreshing={refreshing} progress={progress}
             onRefresh={() => refresh(selected)}
             onAdd={() => setShowAdd(true)}
+            onImport={() => importFromBucket(selected)}
             onRemove={removeKeyword}
           />
         ) : (
@@ -339,7 +355,7 @@ function Spark({ series }) {
 }
 
 // ── Client dashboard ──
-function ClientDashboard({ client, domain, keywords, snaps, groupFilter, setGroupFilter, refreshing, progress, onRefresh, onAdd, onRemove }) {
+function ClientDashboard({ client, domain, keywords, snaps, groupFilter, setGroupFilter, refreshing, progress, onRefresh, onAdd, onImport, onRemove }) {
   const stats = useMemo(() => computeStats(keywords, snaps), [keywords, snaps]);
   const groups = useMemo(() => [...new Set(keywords.map(k => k.keyword_group).filter(Boolean))].sort(), [keywords]);
   const rows = useMemo(() => {
@@ -363,6 +379,7 @@ function ClientDashboard({ client, domain, keywords, snaps, groupFilter, setGrou
               {groups.map(g => <option key={g} value={g}>{g}</option>)}
             </select>
           )}
+          <button onClick={onImport} className="bg-white border border-gray-300 text-gray-700 rounded px-3 py-1.5 text-[11px] font-semibold cursor-pointer hover:border-gray-400" title="Pull this client's bucket-list focus keywords into tracking">📋 Import from bucket list</button>
           <button onClick={onAdd} className="bg-white border border-gray-300 text-gray-700 rounded px-3 py-1.5 text-[11px] font-semibold cursor-pointer hover:border-gray-400">+ Add keywords</button>
           <button onClick={onRefresh} disabled={refreshing}
             className="bg-[#F5C518] text-[#1a1a1a] border-none rounded px-3 py-1.5 text-[11px] font-bold cursor-pointer hover:bg-[#e6b800] disabled:opacity-40">

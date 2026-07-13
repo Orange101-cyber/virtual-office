@@ -52,7 +52,6 @@ const NAV_ITEMS = [
   { path: '/seo-tools', label: 'SEO Tools', dropdown: 'seo' },
   { path: '/ads-hub', label: 'Ads Hub', dropdown: 'ads' },
   { path: '/video-hub', label: 'Video Hub', dropdown: 'video' },
-  { path: '/ops-board', label: '📋 Ops Board' },
 ];
 
 export default function AppShell({ children }) {
