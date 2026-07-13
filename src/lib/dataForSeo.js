@@ -620,12 +620,16 @@ export async function getAiMentionExamples(brand, { platform = 'google', limit =
   });
   const items = data.tasks?.[0]?.result?.[0]?.items || data.tasks?.[0]?.result || [];
   const result = (Array.isArray(items) ? items : []).slice(0, limit).map(item => ({
-    question: item.question || item.keyword || item.query || '',
+    question: item.question || item.query || '',
+    keyword: item.keyword || item.query || '', // the query keyword this answer relates to
     answer: item.answer || item.text || item.content || '',
-    sources: (item.sources || item.citations || []).map(s => ({
+    // Citation order matters: position 1 = first source the AI cited.
+    sources: (item.sources || item.citations || item.references || []).map((s, i) => ({
       title: s.title || s.domain || '',
-      url: s.url || s.source_url || '',
+      url: s.url || s.source_url || s.link || '',
       domain: s.domain || '',
+      // Prefer an explicit rank if the API gives one, else the array order.
+      position: s.rank_absolute ?? s.rank ?? s.position ?? (i + 1),
     })),
     mentioned: !!(item.mentioned ?? item.brand_mentioned ?? false),
   }));
