@@ -457,6 +457,9 @@ function ClientDashboard({ client, domain, keywords, snaps, groupFilter, setGrou
         {stats.latestDate && <div className="text-[10px] text-gray-400 mt-2">Last refreshed: {stats.latestDate}</div>}
       </div>
 
+      {/* AI Visibility via LLM Mentions API */}
+      <AiVisibilityPanel client={client} domain={domain} />
+
       {/* Trend charts */}
       {stats.series.filter(s => s.avg != null).length >= 2 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -612,6 +615,83 @@ function SuggestModal({ row, onClose }) {
           <div className="text-[10px] text-gray-400 mt-4">Focused on winning AI Overview / AI-answer citations for this keyword.</div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Brand-level AI visibility via the new LLM Mentions "Target Metrics" endpoint,
+// across Google AI Overviews + ChatGPT, with a change-vs-prior-period delta.
+function AiVisibilityPanel({ client, domain }) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState('');
+  const PLAT = [{ id: 'google', label: '🔎 Google AI' }, { id: 'chat_gpt', label: '💬 ChatGPT' }];
+
+  const run = async () => {
+    if (!dfs.isConfigured()) return;
+    setLoading(true); setErr('');
+    try {
+      const out = {};
+      for (const p of PLAT) {
+        const metrics = await dfs.getTargetMetrics(client, { platform: p.id }).catch(e => ({ _err: e.message }));
+        let delta = null;
+        try { delta = await dfs.getAiVisibilityDelta(client, { platform: p.id }); } catch { /* optional */ }
+        out[p.id] = { metrics, delta };
+      }
+      setData(out);
+      const anyErr = out.google?.metrics?._err || out.chat_gpt?.metrics?._err;
+      if (anyErr) setErr(anyErr);
+    } catch (e) { setErr(e.message); }
+    setLoading(false);
+  };
+
+  const M = ({ label, value, delta }) => (
+    <div>
+      <div className="text-[9px] font-bold uppercase text-gray-400">{label}</div>
+      <div className="flex items-center gap-1">
+        <span className="text-lg font-bold text-[#1a1a1a]">{typeof value === 'number' ? value.toLocaleString() : (value ?? '—')}</span>
+        {delta != null && delta !== 0 && <span className={`text-[10px] font-bold ${delta > 0 ? 'text-green-600' : 'text-red-500'}`}>{delta > 0 ? '▲' : '▼'}{Math.abs(delta)}</span>}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden mb-4">
+      <button onClick={() => { setOpen(o => !o); if (!data && !loading) run(); }}
+        className="w-full px-4 py-2.5 bg-[#fafafa] border-none cursor-pointer flex items-center justify-between text-left">
+        <div>
+          <div className="text-[10px] font-bold uppercase text-[#F5C518]">AI Visibility · LLM Mentions</div>
+          <div className="text-[11px] text-gray-500">How often AI cites this brand — Google AI Overviews + ChatGPT (vs prior period)</div>
+        </div>
+        <span className="text-[11px] text-gray-400">{loading ? '…' : open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="p-4">
+          {err && <div className="text-[11px] text-red-600 mb-2">API note: {err} <span className="text-gray-400">— if first run, send me the response so I can confirm field mapping.</span></div>}
+          {!data && !loading && <div className="text-[11px] text-gray-400">Loading…</div>}
+          {data && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {PLAT.map(p => {
+                const d = data[p.id]; const m = d?.metrics || {}; const dl = d?.delta?.delta || {};
+                return (
+                  <div key={p.id} className="border border-gray-100 rounded-lg p-3">
+                    <div className="text-[12px] font-bold text-[#1a1a1a] mb-2">{p.label}</div>
+                    {m._err ? <div className="text-[11px] text-gray-400">No data</div> : (
+                      <div className="grid grid-cols-3 gap-2">
+                        <M label="Mentions" value={m.mentions} delta={dl.mentions} />
+                        <M label="Citations" value={m.citations} delta={dl.citations} />
+                        <M label="AI Search Vol" value={m.ai_search_volume} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <button onClick={run} disabled={loading} className="mt-3 text-[10px] font-semibold text-gray-500 hover:text-[#1a1a1a] bg-transparent border border-gray-300 rounded px-2 py-1 cursor-pointer disabled:opacity-40">↻ Refresh</button>
+        </div>
+      )}
     </div>
   );
 }

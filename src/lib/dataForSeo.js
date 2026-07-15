@@ -671,6 +671,61 @@ export async function getAiVisibilityMetrics(brand, { platform = 'google', domai
   return result;
 }
 
+// ── New (2026) LLM Mentions: Target Metrics + Timeseries ──
+// Target Metrics = renamed Aggregated Metrics: AI-visibility metrics for a
+// single target (brand keyword or domain) on a platform.
+export async function getTargetMetrics(target, { platform = 'google', isDomain = false } = {}) {
+  if (!target) return null;
+  const key = `llm_target_metrics:${String(target).toLowerCase().trim()}:${platform}:${isDomain}`;
+  const cached = await getCached(key);
+  if (cached) return cached;
+  const entity = isDomain
+    ? { domain: String(target).replace(/^https?:\/\//, '').replace(/\/$/, '').replace(/^www\./, '') }
+    : { keyword: target };
+  const data = await callEndpoint('/ai_optimization/llm_mentions/target_metrics/live', {
+    target: [entity], platform, location_code: LOCATION_AU, language_code: LANGUAGE,
+  });
+  const res = data.tasks?.[0]?.result?.[0] || null;
+  const m = res?.metrics || res?.items?.[0] || res?.total || res || {};
+  const out = {
+    mentions: m.mentions ?? m.mentions_count ?? 0,
+    citations: m.citations ?? m.citations_count ?? 0,
+    ai_search_volume: m.ai_search_volume ?? m.ai_sv ?? 0,
+    visibility: m.visibility ?? m.visibility_score ?? m.share_of_voice ?? null,
+    raw: res, // keep raw so we can confirm field mapping against live data
+  };
+  await setCached(key, out);
+  return out;
+}
+
+// Timeseries Delta: compare AI visibility between two equal periods (default:
+// the last `days` vs the `days` before that). Returns current, previous, delta.
+export async function getAiVisibilityDelta(target, { platform = 'google', isDomain = false, days = 30, dates } = {}) {
+  if (!target) return null;
+  const entity = isDomain
+    ? { domain: String(target).replace(/^https?:\/\//, '').replace(/\/$/, '').replace(/^www\./, '') }
+    : { keyword: target };
+  const payload = {
+    target: [entity], platform, location_code: LOCATION_AU, language_code: LANGUAGE,
+    ...(dates || {}), // caller can pass explicit date params; else API defaults
+    period: days,
+  };
+  const data = await callEndpoint('/ai_optimization/llm_mentions/timeseries_delta/live', payload);
+  const res = data.tasks?.[0]?.result?.[0] || null;
+  const pick = (o = {}) => ({
+    mentions: o.mentions ?? o.mentions_count ?? 0,
+    citations: o.citations ?? o.citations_count ?? 0,
+    ai_search_volume: o.ai_search_volume ?? 0,
+  });
+  const cur = pick(res?.current_period || res?.second_period || res?.items?.[0]?.current_period || {});
+  const prev = pick(res?.previous_period || res?.first_period || res?.items?.[0]?.previous_period || {});
+  return {
+    current: cur, previous: prev,
+    delta: { mentions: cur.mentions - prev.mentions, citations: cur.citations - prev.citations },
+    raw: res,
+  };
+}
+
 // Example AI answers that mention (or relate to) the brand — the Q&A pairs
 // plus the sources the AI model cited.
 export async function getAiMentionExamples(brand, { platform = 'google', limit = 10 } = {}) {
