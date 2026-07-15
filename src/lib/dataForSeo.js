@@ -262,25 +262,47 @@ export async function getKeywordRank(keyword, domain, { device = 'desktop' } = {
     }
   }
 
-  // AI Overview: presence + whether we're cited + our position within it.
+  const domainFrom = (u = '') => { try { return new URL(u.startsWith('http') ? u : `https://${u}`).hostname.replace(/^www\./, ''); } catch { return ''; } };
+
+  // AI Overview: presence + whether we're cited + our position + the references.
   const ai = allItems.find(i => typeOf(i) === 'ai_overview');
   let aiCited = false, aiPos = null;
+  const aiSources = [];
   if (ai) {
-    const refs = ai.references || ai.items || [];
-    refs.forEach((r, idx) => {
-      const d = (r.domain || r.source || '').replace(/^www\./, '');
-      if (!aiCited && d && (d === clean || d.endsWith(clean))) { aiCited = true; aiPos = idx + 1; }
+    (ai.references || ai.items || []).forEach((r, idx) => {
+      const url = r.url || r.link || '';
+      const dom = (r.domain || r.source || domainFrom(url)).replace(/^www\./, '');
+      if (url || r.title) aiSources.push({ title: r.title || r.source || dom, url, domain: dom });
+      if (!aiCited && dom && (dom === clean || dom.endsWith(clean))) { aiCited = true; aiPos = idx + 1; }
     });
   }
-  const has = (...types) => allItems.some(i => types.includes(typeOf(i)));
+
+  // Collect sub-results for a feature type into {title,url,domain} entries.
+  const collect = (types, max = 8) => {
+    const out = [];
+    allItems.filter(i => types.includes(typeOf(i))).forEach(el => {
+      const subs = (Array.isArray(el.items) && el.items.length) ? el.items : [el];
+      subs.forEach(s => {
+        const url = s.url || s.link || s.source_url || s.expanded_element?.[0]?.url || '';
+        const dom = (s.domain || s.source || s.expanded_element?.[0]?.domain || domainFrom(url)).replace(/^www\./, '');
+        const title = s.title || s.question || s.alt || s.text || s.expanded_element?.[0]?.title || dom;
+        if (url || title) out.push({ title, url, domain: dom });
+      });
+    });
+    return out.slice(0, max);
+  };
+
+  const paa = collect(['people_also_ask']);
+  const local = collect(['local_pack', 'map']);
+  const forums = collect(['discussions_and_forums']);
+  const images = collect(['images', 'image_pack']);
+
   const features = {
-    ai_overview: !!ai,
-    ai_overview_cited: aiCited,
-    ai_overview_position: aiPos,
-    people_also_ask: has('people_also_ask'),
-    local_pack: has('local_pack', 'map'),
-    discussions_forums: has('discussions_and_forums'),
-    images: has('images', 'image_pack'),
+    ai_overview: !!ai, ai_overview_cited: aiCited, ai_overview_position: aiPos, ai_overview_sources: aiSources.slice(0, 10),
+    people_also_ask: paa.length > 0, paa,
+    local_pack: local.length > 0, local,
+    discussions_forums: forums.length > 0, forums,
+    images: images.length > 0, image_sources: images,
   };
   return { position: best?.position ?? null, url: best?.url || '', title: best?.title || '', features };
 }

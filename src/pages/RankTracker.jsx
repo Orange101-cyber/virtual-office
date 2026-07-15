@@ -426,6 +426,7 @@ function ClientDashboard({ client, domain, keywords, snaps, groupFilter, setGrou
   const posColor = (p) => p == null || p > 30 ? 'text-red-500' : p <= 3 ? 'text-green-600' : p <= 10 ? 'text-lime-600' : 'text-orange-500';
 
   const [suggestFor, setSuggestFor] = useState(null); // row being suggested for
+  const [featureView, setFeatureView] = useState(null); // { label, entries }
 
   return (
     <div>
@@ -503,7 +504,7 @@ function ClientDashboard({ client, domain, keywords, snaps, groupFilter, setGrou
                         <span className={`text-[10px] font-bold ${r.delta > 0 ? 'text-green-600' : 'text-red-500'}`}>{r.delta > 0 ? '▲' : '▼'}{Math.abs(r.delta)}</span>}
                   </td>
                   <td className="px-3 py-2 text-center text-gray-500">{r.ath ?? '—'}</td>
-                  <td className="px-3 py-2"><Features f={r.features} /></td>
+                  <td className="px-3 py-2"><Features f={r.features} onOpen={(label, entries) => setFeatureView({ label, entries })} /></td>
                   <td className="px-3 py-2 text-right">{r.volume != null ? r.volume.toLocaleString() : '—'}</td>
                   <td className="px-3 py-2 text-right">{r.est != null ? r.est.toLocaleString() : '—'}</td>
                   <td className="px-3 py-2">{r.url ? <a href={r.url} target="_blank" rel="noreferrer" className="text-blue-600 no-underline">{shortUrl(r.url)}</a> : <span className="text-gray-300 italic">not in top 100</span>}</td>
@@ -519,26 +520,61 @@ function ClientDashboard({ client, domain, keywords, snaps, groupFilter, setGrou
       </div>
 
       {suggestFor && <SuggestModal row={suggestFor} onClose={() => setSuggestFor(null)} />}
+      {featureView && <FeatureModal label={featureView.label} entries={featureView.entries} onClose={() => setFeatureView(null)} />}
     </div>
   );
 }
 
-// Compact SERP-feature badges. AI Overview highlighted (green if we're cited).
-function Features({ f }) {
+// Compact SERP-feature badges — clickable to reveal the actual links.
+function Features({ f, onOpen }) {
   if (!f) return <span className="text-gray-300">—</span>;
-  const badge = (on, label, title, cls) => on
-    ? <span title={title} className={`text-[9px] font-bold px-1 py-0.5 rounded ${cls}`}>{label}</span>
-    : null;
+  const chip = (on, label, entries, title, cls) => {
+    if (!on) return null;
+    const has = entries && entries.length;
+    return (
+      <button key={label} onClick={() => has && onOpen(title, entries)} title={has ? `${title} — click for links` : title}
+        className={`text-[9px] font-bold px-1 py-0.5 rounded border-none ${cls} ${has ? 'cursor-pointer hover:opacity-80' : 'cursor-default opacity-90'}`}>
+        {label}{has ? ` ${entries.length}` : ''}
+      </button>
+    );
+  };
+  const aioLabel = f.ai_overview_cited ? `AIO✓${f.ai_overview_position ? '#' + f.ai_overview_position : ''}` : 'AIO';
   const items = [
-    f.ai_overview && badge(true, f.ai_overview_cited ? `AIO✓${f.ai_overview_position ? '#' + f.ai_overview_position : ''}` : 'AIO',
-      f.ai_overview_cited ? `Cited in AI Overview${f.ai_overview_position ? ' at #' + f.ai_overview_position : ''}` : 'AI Overview present (you are not cited)',
+    f.ai_overview && chip(true, aioLabel, f.ai_overview_sources,
+      f.ai_overview_cited ? `AI Overview — you're cited${f.ai_overview_position ? ' at #' + f.ai_overview_position : ''}` : 'AI Overview references',
       f.ai_overview_cited ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'),
-    badge(f.people_also_ask, 'PAA', 'People Also Ask', 'bg-blue-50 text-blue-600'),
-    badge(f.local_pack, 'Local', 'Local Pack', 'bg-amber-50 text-amber-700'),
-    badge(f.discussions_forums, 'Forum', 'Discussions & Forums', 'bg-teal-50 text-teal-700'),
-    badge(f.images, 'Img', 'Images', 'bg-pink-50 text-pink-600'),
+    chip(f.people_also_ask, 'PAA', f.paa, 'People Also Ask', 'bg-blue-50 text-blue-600'),
+    chip(f.local_pack, 'Local', f.local, 'Local Pack', 'bg-amber-50 text-amber-700'),
+    chip(f.discussions_forums, 'Forum', f.forums, 'Discussions & Forums', 'bg-teal-50 text-teal-700'),
+    chip(f.images, 'Img', f.image_sources, 'Images', 'bg-pink-50 text-pink-600'),
   ].filter(Boolean);
   return items.length ? <div className="flex flex-wrap gap-1">{items}</div> : <span className="text-gray-300">—</span>;
+}
+
+// Modal listing the actual links/questions behind a SERP feature.
+function FeatureModal({ label, entries, onClose }) {
+  return (
+    <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl w-full max-w-lg max-h-[80vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between shrink-0">
+          <div className="text-[13px] font-semibold text-[#1a1a1a]">{label}</div>
+          <button onClick={onClose} className="text-gray-400 hover:text-[#1a1a1a] bg-transparent border-none text-xl cursor-pointer leading-none">×</button>
+        </div>
+        <div className="p-4 overflow-y-auto divide-y divide-gray-100">
+          {(!entries || entries.length === 0) ? (
+            <div className="text-[11px] text-gray-400 text-center py-4">No links captured — refresh rankings to populate.</div>
+          ) : entries.map((e, i) => (
+            <div key={i} className="py-2">
+              <div className="text-[12px] font-medium text-[#1a1a1a]">{e.title || e.domain || 'result'}</div>
+              {e.url ? (
+                <a href={e.url} target="_blank" rel="noreferrer" className="text-[11px] text-blue-600 no-underline break-all">{shortUrl(e.url)}</a>
+              ) : e.domain ? <span className="text-[11px] text-gray-400">{e.domain}</span> : null}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // AI-search suggestions modal for a keyword.

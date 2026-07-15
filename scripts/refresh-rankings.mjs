@@ -57,17 +57,33 @@ async function getRank(keyword, domain, device) {
       if (!best || (it.rank_absolute || 999) < best.position) best = { position: it.rank_absolute, url: it.url };
     }
   }
+  const domainFrom = (u = '') => { try { return new URL(u.startsWith('http') ? u : `https://${u}`).hostname.replace(/^www\./, ''); } catch { return ''; } };
   const ai = all.find(i => typeOf(i) === 'ai_overview');
-  let aiCited = false, aiPos = null;
+  let aiCited = false, aiPos = null; const aiSources = [];
   if (ai) (ai.references || ai.items || []).forEach((r, idx) => {
-    const d = (r.domain || r.source || '').replace(/^www\./, '');
+    const url = r.url || r.link || ''; const d = (r.domain || r.source || domainFrom(url)).replace(/^www\./, '');
+    if (url || r.title) aiSources.push({ title: r.title || r.source || d, url, domain: d });
     if (!aiCited && d && (d === cd || d.endsWith(cd))) { aiCited = true; aiPos = idx + 1; }
   });
-  const has = (...t) => all.some(i => t.includes(typeOf(i)));
+  const collect = (types, max = 8) => {
+    const out = [];
+    all.filter(i => types.includes(typeOf(i))).forEach(el => {
+      const subs = (Array.isArray(el.items) && el.items.length) ? el.items : [el];
+      subs.forEach(s => {
+        const url = s.url || s.link || s.source_url || s.expanded_element?.[0]?.url || '';
+        const d = (s.domain || s.source || s.expanded_element?.[0]?.domain || domainFrom(url)).replace(/^www\./, '');
+        const title = s.title || s.question || s.alt || s.text || s.expanded_element?.[0]?.title || d;
+        if (url || title) out.push({ title, url, domain: d });
+      });
+    });
+    return out.slice(0, max);
+  };
+  const paa = collect(['people_also_ask']), local = collect(['local_pack', 'map']);
+  const forums = collect(['discussions_and_forums']), images = collect(['images', 'image_pack']);
   const features = {
-    ai_overview: !!ai, ai_overview_cited: aiCited, ai_overview_position: aiPos,
-    people_also_ask: has('people_also_ask'), local_pack: has('local_pack', 'map'),
-    discussions_forums: has('discussions_and_forums'), images: has('images', 'image_pack'),
+    ai_overview: !!ai, ai_overview_cited: aiCited, ai_overview_position: aiPos, ai_overview_sources: aiSources.slice(0, 10),
+    people_also_ask: paa.length > 0, paa, local_pack: local.length > 0, local,
+    discussions_forums: forums.length > 0, forums, images: images.length > 0, image_sources: images,
   };
   return { position: best?.position ?? null, url: best?.url || '', features };
 }
