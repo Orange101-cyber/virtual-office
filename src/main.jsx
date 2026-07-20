@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
 import AppShell from './components/AppShell';
 import Dashboard from './pages/Dashboard';
+import AnalyticsDashboard from './pages/AnalyticsDashboard';
 import SEOChecker from './pages/SEOChecker';
 import ClientDashboard from './pages/ClientDashboard';
 import ContentPlanner from './pages/ContentPlanner';
@@ -74,6 +75,7 @@ function Root() {
         <Route path="/login" element={session ? <Navigate to="/" replace /> : <Login />} />
         <Route element={<AuthLayout session={session} />}>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/dashboard" element={<AnalyticsDashboard />} />
           <Route path="/client-dashboard" element={<ClientDashboard />} />
           <Route path="/seo-checker" element={<SEOChecker />} />
           <Route path="/seo-performance" element={<SEOPerformance />} />

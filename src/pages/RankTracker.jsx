@@ -43,6 +43,7 @@ const CTR = (pos) => {
 };
 const estTraffic = (pos, vol) => Math.round(CTR(pos) * (vol || 0));
 const cleanDomain = (d = '') => d.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '');
+const slug = (s = '') => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 const shortUrl = (u = '') => u.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '');
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -619,8 +620,9 @@ function SuggestModal({ row, onClose }) {
   );
 }
 
-// Brand-level AI visibility via the new LLM Mentions "Target Metrics" endpoint,
-// across Google AI Overviews + ChatGPT, with a change-vs-prior-period delta.
+// Brand-level AI visibility — derived from the LLM Mentions search endpoint
+// (the reliable one): how many AI answers we appear in, across Google AI
+// Overviews + ChatGPT, and how often they cite the brand.
 function AiVisibilityPanel({ client, domain }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -628,31 +630,41 @@ function AiVisibilityPanel({ client, domain }) {
   const [err, setErr] = useState('');
   const PLAT = [{ id: 'google', label: '🔎 Google AI' }, { id: 'chat_gpt', label: '💬 ChatGPT' }];
 
+  const brandSlug = slug(client);
+  const domSlug = slug(cleanDomain(domain || ''));
+  const isOurs = (d) => {
+    const ds = slug(cleanDomain(d));
+    if (!ds) return false;
+    if (domSlug && ds.includes(domSlug)) return true;
+    return brandSlug.length >= 4 && ds.includes(brandSlug);
+  };
+
   const run = async () => {
-    if (!dfs.isConfigured()) return;
+    if (!dfs.isConfigured()) return setErr('DataForSEO not configured');
     setLoading(true); setErr('');
     try {
       const out = {};
       for (const p of PLAT) {
-        const metrics = await dfs.getTargetMetrics(client, { platform: p.id }).catch(e => ({ _err: e.message }));
-        let delta = null;
-        try { delta = await dfs.getAiVisibilityDelta(client, { platform: p.id }); } catch { /* optional */ }
-        out[p.id] = { metrics, delta };
+        const ex = await dfs.getAiMentionExamples(client, { platform: p.id, limit: 25 }).catch(e => ({ _err: e.message }));
+        if (ex && ex._err) { out[p.id] = { _err: ex._err }; continue; }
+        const list = Array.isArray(ex) ? ex : [];
+        const cited = list.filter(a =>
+          (a.sources || []).some(s => isOurs(s.domain || s.url)) ||
+          (client && (a.answer || '').toLowerCase().includes(client.toLowerCase()))
+        ).length;
+        out[p.id] = { analysed: list.length, cited, rate: list.length ? Math.round((cited / list.length) * 100) : 0 };
       }
       setData(out);
-      const anyErr = out.google?.metrics?._err || out.chat_gpt?.metrics?._err;
-      if (anyErr) setErr(anyErr);
+      const anyErr = out.google?._err || out.chat_gpt?._err;
+      if (anyErr && !out.google?.analysed && !out.chat_gpt?.analysed) setErr(anyErr);
     } catch (e) { setErr(e.message); }
     setLoading(false);
   };
 
-  const M = ({ label, value, delta }) => (
+  const M = ({ label, value }) => (
     <div>
       <div className="text-[9px] font-bold uppercase text-gray-400">{label}</div>
-      <div className="flex items-center gap-1">
-        <span className="text-lg font-bold text-[#1a1a1a]">{typeof value === 'number' ? value.toLocaleString() : (value ?? '—')}</span>
-        {delta != null && delta !== 0 && <span className={`text-[10px] font-bold ${delta > 0 ? 'text-green-600' : 'text-red-500'}`}>{delta > 0 ? '▲' : '▼'}{Math.abs(delta)}</span>}
-      </div>
+      <div className="text-lg font-bold text-[#1a1a1a]">{typeof value === 'number' ? value.toLocaleString() : (value ?? '—')}</div>
     </div>
   );
 
@@ -662,34 +674,39 @@ function AiVisibilityPanel({ client, domain }) {
         className="w-full px-4 py-2.5 bg-[#fafafa] border-none cursor-pointer flex items-center justify-between text-left">
         <div>
           <div className="text-[10px] font-bold uppercase text-[#F5C518]">AI Visibility · LLM Mentions</div>
-          <div className="text-[11px] text-gray-500">How often AI cites this brand — Google AI Overviews + ChatGPT (vs prior period)</div>
+          <div className="text-[11px] text-gray-500">How often AI answers cite this brand — Google AI Overviews + ChatGPT</div>
         </div>
         <span className="text-[11px] text-gray-400">{loading ? '…' : open ? '▲' : '▼'}</span>
       </button>
       {open && (
         <div className="p-4">
-          {err && <div className="text-[11px] text-red-600 mb-2">API note: {err} <span className="text-gray-400">— if first run, send me the response so I can confirm field mapping.</span></div>}
-          {!data && !loading && <div className="text-[11px] text-gray-400">Loading…</div>}
+          {err && <div className="text-[11px] text-red-600 mb-2">API note: {err}</div>}
+          {!data && loading && <div className="text-[11px] text-gray-400">Loading…</div>}
           {data && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {PLAT.map(p => {
-                const d = data[p.id]; const m = d?.metrics || {}; const dl = d?.delta?.delta || {};
+                const d = data[p.id] || {};
                 return (
                   <div key={p.id} className="border border-gray-100 rounded-lg p-3">
                     <div className="text-[12px] font-bold text-[#1a1a1a] mb-2">{p.label}</div>
-                    {m._err ? <div className="text-[11px] text-gray-400">No data</div> : (
-                      <div className="grid grid-cols-3 gap-2">
-                        <M label="Mentions" value={m.mentions} delta={dl.mentions} />
-                        <M label="Citations" value={m.citations} delta={dl.citations} />
-                        <M label="AI Search Vol" value={m.ai_search_volume} />
-                      </div>
-                    )}
+                    {d._err ? <div className="text-[11px] text-gray-400">No data</div>
+                      : d.analysed === 0 ? <div className="text-[11px] text-gray-400">No AI answers found in this brand’s space yet.</div>
+                        : (
+                          <div className="grid grid-cols-3 gap-2">
+                            <M label="AI Answers" value={d.analysed} />
+                            <M label="Cite You" value={d.cited} />
+                            <M label="Cite Rate" value={`${d.rate}%`} />
+                          </div>
+                        )}
                   </div>
                 );
               })}
             </div>
           )}
-          <button onClick={run} disabled={loading} className="mt-3 text-[10px] font-semibold text-gray-500 hover:text-[#1a1a1a] bg-transparent border border-gray-300 rounded px-2 py-1 cursor-pointer disabled:opacity-40">↻ Refresh</button>
+          <div className="flex items-center gap-3 mt-3">
+            <button onClick={run} disabled={loading} className="text-[10px] font-semibold text-gray-500 hover:text-[#1a1a1a] bg-transparent border border-gray-300 rounded px-2 py-1 cursor-pointer disabled:opacity-40">↻ Refresh</button>
+            <Link to="/ai-visibility" className="text-[10px] text-gray-400 hover:text-[#F5C518] no-underline">Full AI Visibility →</Link>
+          </div>
         </div>
       )}
     </div>

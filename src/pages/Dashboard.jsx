@@ -92,8 +92,8 @@ export default function Dashboard() {
     <div className="h-full overflow-y-auto">
       <div className="max-w-4xl mx-auto px-6 py-10">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-[#1a1a1a] mb-1">CYL Virtual Office</h1>
-          <p className="text-sm text-gray-400">Internal tools for the CYL team. Pick a tool to get started.</p>
+          <h1 className="text-2xl font-bold text-[#1a1a1a] mb-1">Quick Links</h1>
+          <p className="text-sm text-gray-400">Jump to any CYL tool or workspace.</p>
         </div>
 
         {overduePages.length > 0 && (

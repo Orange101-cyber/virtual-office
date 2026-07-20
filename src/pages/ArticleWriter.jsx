@@ -21,6 +21,11 @@ export default function ArticleWriter() {
   const [customInstructions, setCustomInstructions] = useState('');
   const saveTimerRef = useRef(null);
 
+  // Stable derived keys so the effects below don't re-run every render
+  // (dbClients gets a new array reference each render → caused the flicker).
+  const dbNames = dbClients.map(c => c.name).join('|');
+  const dbClientId = dbClients.find(c => c.name === selectedClient)?.id;
+
   // Load clients
   useEffect(() => {
     const fromDb = dbClients.map(c => c.name);
@@ -30,7 +35,7 @@ export default function ArticleWriter() {
       setClients(unique);
       if (unique.length && !selectedClient) setSelectedClient(unique[0]);
     });
-  }, [dbClients]);
+  }, [dbNames]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load briefs for selected client
   useEffect(() => {
@@ -46,16 +51,14 @@ export default function ArticleWriter() {
 
   // Load past articles for writing style
   useEffect(() => {
-    if (!selectedClient) { setClientArticles([]); return; }
-    const dbClient = dbClients.find(c => c.name === selectedClient);
-    if (!dbClient) { setClientArticles([]); return; }
+    if (!selectedClient || !dbClientId) { setClientArticles([]); return; }
     supabase.from('reports')
       .select('id, name, article_title, article_content')
-      .eq('client_id', dbClient.id)
+      .eq('client_id', dbClientId)
       .order('updated_at', { ascending: false })
       .limit(5)
       .then(({ data }) => setClientArticles(data || []));
-  }, [selectedClient, dbClients]);
+  }, [selectedClient, dbClientId]);
 
   // Load saved draft when selecting a brief
   useEffect(() => {

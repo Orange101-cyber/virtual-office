@@ -46,13 +46,11 @@ const CLIENT_PATHS = CLIENT_TOOLS.map(t => t.path);
 const VIDEO_PATHS = VIDEO_TOOLS.map(t => t.path);
 
 const NAV_ITEMS = [
-  { path: '/', label: 'Dashboard' },
-  { path: '/virtual-office-games', label: 'Virtual Office' },
+  { path: '/dashboard', label: 'Dashboard' },
+  { path: '/', label: 'Quick Links' },
   { path: '/clients', label: 'Clients', dropdown: 'clients' },
   { path: '/client-dashboard', label: 'Performance' },
   { path: '/seo-tools', label: 'SEO Tools', dropdown: 'seo' },
-  { path: '/ads-hub', label: 'Ads Hub', dropdown: 'ads' },
-  { path: '/video-hub', label: 'Video Hub', dropdown: 'video' },
 ];
 
 export default function AppShell({ children }) {
@@ -61,16 +59,7 @@ export default function AppShell({ children }) {
   const navRef = useRef(null);
   const { isAdmin, currentUser } = useAdmin();
 
-  // Flight Watch is Cameron's personal dashboard, hosted on its own Netlify
-  // site (it needs a backend the static Virtual Office can't provide). The tab
-  // just links out to it, and only Cameron sees it.
-  // NOTE: if you name the Netlify site something other than "cyl-flight-watch",
-  // update this URL to match.
-  const FLIGHT_WATCH_URL = 'https://cyl-flight-watch.netlify.app';
-  const isCameron = currentUser?.email === 'cameron@cylglobal.com';
-  const navItems = isCameron
-    ? [...NAV_ITEMS, { path: FLIGHT_WATCH_URL, label: '☾ Flight Watch', external: true }]
-    : NAV_ITEMS;
+  const navItems = NAV_ITEMS;
 
   // Close dropdown when clicking outside the nav entirely.
   // Using mousedown so the close fires before navigation on Links.
