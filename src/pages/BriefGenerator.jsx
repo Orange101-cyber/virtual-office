@@ -118,6 +118,11 @@ export default function BriefGenerator() {
   const [fetchingSerp, setFetchingSerp] = useState(false);
   const [styleLoaded, setStyleLoaded] = useState(false);
 
+  // Stable derived keys so the effects below don't re-run every render
+  // (dbClients gets a new array reference each render → caused the glitch/slowdown).
+  const dbNames = dbClients.map(c => c.name).join('|');
+  const dbClientId = dbClients.find(c => c.name === form.client)?.id;
+
   useEffect(() => {
     const fromDb = dbClients.map(c => c.name);
     supabase.from('content_plans').select('client_name').then(({ data }) => {
@@ -129,23 +134,21 @@ export default function BriefGenerator() {
     supabase.from('content_briefs').select('id, client_name, title, focus_keyword, plan_id, created_at')
       .order('created_at', { ascending: false }).limit(10)
       .then(({ data }) => setHistory(data || []));
-  }, [dbClients]);
+  }, [dbNames]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load past articles for writing style reference
   useEffect(() => {
-    if (!form.client) { setClientArticles([]); setStyleLoaded(false); return; }
-    const dbClient = dbClients.find(c => c.name === form.client);
-    if (!dbClient) { setClientArticles([]); setStyleLoaded(false); return; }
+    if (!form.client || !dbClientId) { setClientArticles([]); setStyleLoaded(false); return; }
     supabase.from('reports')
       .select('id, name, article_title, article_content, focus_keyphrase')
-      .eq('client_id', dbClient.id)
+      .eq('client_id', dbClientId)
       .order('updated_at', { ascending: false })
       .limit(10)
       .then(({ data }) => {
         setClientArticles(data || []);
         setStyleLoaded(true);
       });
-  }, [form.client, dbClients]);
+  }, [form.client, dbClientId]);
 
   useEffect(() => {
     if (!form.client) { setClientPlans([]); return; }
