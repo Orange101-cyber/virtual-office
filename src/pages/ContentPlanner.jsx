@@ -185,6 +185,10 @@ function PlanModal({ open, onClose, onSave, onDelete, item, clients, dbClients }
               {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
+          <div>
+            <Label>Calendar date</Label>
+            <input type="date" value={form.scheduled_date || ''} onChange={e => setForm(f => ({ ...f, scheduled_date: e.target.value || null }))} className="input-field" />
+          </div>
         </div>
         <div className="mb-3">
           <Label>Title</Label>
@@ -316,6 +320,114 @@ function Label({ children }) {
   return <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">{children}</label>;
 }
 
+// ── Clean monthly calendar view (drag cards between days to reschedule) ──
+const TYPE_COLORS = { Blog: '#3b82f6', 'SEO Page': '#8b5cf6' };
+function kdBand(kd) {
+  if (kd == null || kd === '') return null;
+  const n = Number(kd);
+  if (n <= 20) return { label: 'LOW', color: '#16a34a' };
+  if (n <= 50) return { label: 'MEDIUM', color: '#ca8a04' };
+  return { label: 'HIGH', color: '#dc2626' };
+}
+const WEEKDAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+function CalCard({ item, onClick }) {
+  const band = kdBand(item.kd);
+  const done = item.status === 'Sent to Airtable' || item.status === 'Client Approved';
+  return (
+    <div
+      draggable
+      onDragStart={e => { e.dataTransfer.setData('text/plain', item.id); e.dataTransfer.effectAllowed = 'move'; }}
+      onClick={() => onClick(item)}
+      className="rounded-md border border-gray-200 bg-white px-2 py-1.5 mb-1.5 cursor-pointer hover:border-[#F5C518] hover:shadow-sm"
+    >
+      <div className="flex items-center gap-1 mb-0.5">
+        <span className="text-[7px] font-bold uppercase tracking-wider" style={{ color: TYPE_COLORS[item.content_type] || '#6b7280' }}>{item.content_type || 'Blog'}</span>
+        {item.is_refresh && <span className="text-[7px] font-bold uppercase text-orange-500">· Refresh</span>}
+      </div>
+      <div className="text-[10px] font-semibold text-[#1a1a1a] leading-tight line-clamp-2">{item.title || 'Untitled'}</div>
+      {item.focus_keyword && <div className="text-[9px] text-gray-400 truncate mt-0.5">{item.focus_keyword}</div>}
+      <div className="flex items-center justify-between mt-1">
+        <span className="text-[9px] text-gray-400">{item.search_volume ? item.search_volume.toLocaleString() : ''}</span>
+        {band && <span className="text-[8px] font-bold" style={{ color: band.color }}>{band.label}</span>}
+      </div>
+      <div className={`text-[8px] font-semibold mt-1 ${done ? 'text-green-600' : 'text-gray-400'}`}>{done ? '✓ ' + item.status : item.status}</div>
+    </div>
+  );
+}
+
+function CalendarView({ plans, month, onPrev, onNext, onToday, onCardClick, onReschedule }) {
+  const y = month.getFullYear(), m = month.getMonth();
+  const pad = (n) => String(n).padStart(2, '0');
+  const fmt = (d) => `${y}-${pad(m + 1)}-${pad(d)}`;
+  const startDay = new Date(y, m, 1).getDay();
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const todayStr = (() => { const t = new Date(); return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`; })();
+
+  const cells = [];
+  for (let i = 0; i < startDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const byDay = {};
+  plans.forEach(p => { if (p.scheduled_date) { const k = String(p.scheduled_date).slice(0, 10); (byDay[k] ||= []).push(p); } });
+  const unscheduled = plans.filter(p => !p.scheduled_date);
+
+  const drop = (e, dateStr) => { e.preventDefault(); const id = e.dataTransfer.getData('text/plain'); if (id) onReschedule(id, dateStr); };
+
+  return (
+    <div className="flex-1 overflow-y-auto p-4">
+      {/* Month nav */}
+      <div className="flex items-center justify-center gap-3 mb-3">
+        <button onClick={onToday} className="text-[10px] font-semibold text-gray-500 border border-gray-200 rounded px-2 py-1 hover:border-gray-400">Today</button>
+        <button onClick={onPrev} className="w-7 h-7 rounded border border-gray-200 hover:border-gray-400 text-gray-500">‹</button>
+        <div className="text-sm font-bold text-[#1a1a1a] w-40 text-center">{month.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' })}</div>
+        <button onClick={onNext} className="w-7 h-7 rounded border border-gray-200 hover:border-gray-400 text-gray-500">›</button>
+        <span className="ml-3 text-[10px] text-gray-400">Drag cards to reschedule</span>
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div className="grid grid-cols-7 border-b border-gray-200 bg-[#fafafa]">
+          {WEEKDAYS.map(d => <div key={d} className="px-2 py-1.5 text-[9px] font-bold text-gray-400 text-center">{d}</div>)}
+        </div>
+        <div className="grid grid-cols-7">
+          {cells.map((d, i) => {
+            const dateStr = d ? fmt(d) : null;
+            const items = d ? (byDay[dateStr] || []) : [];
+            const isToday = dateStr === todayStr;
+            return (
+              <div key={i}
+                onDragOver={d ? (e) => e.preventDefault() : undefined}
+                onDrop={d ? (e) => drop(e, dateStr) : undefined}
+                className={`min-h-[120px] border-b border-r border-gray-100 p-1.5 ${d ? '' : 'bg-gray-50/50'} ${isToday ? 'bg-[#F5C518]/5' : ''}`}>
+                {d && (
+                  <div className={`text-[10px] font-semibold mb-1 ${isToday ? 'text-[#1a1a1a]' : 'text-gray-400'}`}>
+                    <span className={isToday ? 'bg-[#F5C518] text-[#1a1a1a] rounded-full px-1.5 py-0.5' : ''}>{d}</span>
+                  </div>
+                )}
+                {items.map(it => <CalCard key={it.id} item={it} onClick={onCardClick} />)}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Unscheduled tray */}
+      <div className="mt-4 bg-white border border-gray-200 rounded-lg p-3"
+        onDragOver={e => e.preventDefault()} onDrop={e => drop(e, null)}>
+        <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Unscheduled ideas ({unscheduled.length}) — drag onto a day to schedule</div>
+        {unscheduled.length === 0 ? (
+          <div className="text-[11px] text-gray-300">Everything is scheduled 🎉</div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
+            {unscheduled.map(it => <CalCard key={it.id} item={it} onClick={onCardClick} />)}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Import Modal ──
 function ImportModal({ open, onClose, onImport, clients }) {
   const [text, setText] = useState('');
@@ -424,15 +536,23 @@ export default function ContentPlanner() {
   const [showImport, setShowImport] = useState(false);
   const [editItem, setEditItem] = useState(null);
 
+  const [calMonth, setCalMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
+
   const fetchPlans = useCallback(async () => {
     setLoading(true);
     let query = supabase.from('content_plans').select('*').order('created_at', { ascending: true });
-    if (quarterFilter) query = query.eq('quarter', quarterFilter);
+    // Calendar view is date-driven, so don't constrain by quarter there.
+    if (quarterFilter && view !== 'calendar') query = query.eq('quarter', quarterFilter);
     if (clientFilter) query = query.eq('client_name', clientFilter);
     const { data } = await query;
     setPlans(data || []);
     setLoading(false);
-  }, [quarterFilter, clientFilter]);
+  }, [quarterFilter, clientFilter, view]);
+
+  const handleReschedule = async (id, dateStr) => {
+    await supabase.from('content_plans').update({ scheduled_date: dateStr, updated_at: new Date().toISOString() }).eq('id', id);
+    setPlans(prev => prev.map(p => p.id === id ? { ...p, scheduled_date: dateStr } : p));
+  };
 
   useEffect(() => { fetchPlans(); }, [fetchPlans]);
 
@@ -613,6 +733,7 @@ export default function ContentPlanner() {
             {allClients.map(c => <option key={c}>{c}</option>)}
           </select>
           <div className="flex items-center gap-1 ml-2">
+            <button onClick={() => setView('calendar')} className={`px-2.5 py-1 rounded text-[10px] font-semibold border ${view === 'calendar' ? 'bg-[#F5C518] text-[#1a1a1a] border-[#F5C518]' : 'bg-white text-gray-500 border-gray-200'}`}>Calendar</button>
             <button onClick={() => setView('board')} className={`px-2.5 py-1 rounded text-[10px] font-semibold border ${view === 'board' ? 'bg-[#F5C518] text-[#1a1a1a] border-[#F5C518]' : 'bg-white text-gray-500 border-gray-200'}`}>Board</button>
             <button onClick={() => setView('table')} className={`px-2.5 py-1 rounded text-[10px] font-semibold border ${view === 'table' ? 'bg-[#F5C518] text-[#1a1a1a] border-[#F5C518]' : 'bg-white text-gray-500 border-gray-200'}`}>Table</button>
           </div>
@@ -630,6 +751,16 @@ export default function ContentPlanner() {
       {/* Content */}
       {loading ? (
         <div className="flex-1 flex items-center justify-center text-sm text-gray-400">Loading...</div>
+      ) : view === 'calendar' ? (
+        <CalendarView
+          plans={plans}
+          month={calMonth}
+          onPrev={() => setCalMonth(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
+          onNext={() => setCalMonth(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
+          onToday={() => { const d = new Date(); setCalMonth(new Date(d.getFullYear(), d.getMonth(), 1)); }}
+          onCardClick={(item) => { setEditItem(item); setShowAdd(true); }}
+          onReschedule={handleReschedule}
+        />
       ) : view === 'board' ? (
         <DragDropContext onDragEnd={handleDragEnd}>
           <div className="flex-1 overflow-x-auto p-4">
