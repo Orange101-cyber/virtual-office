@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { getClientContext, getClientActivity, getClientStats } from '../lib/clientContext';
+import toast from 'react-hot-toast';
 
 function StatCard({ label, value, sub, color = '#1a1a1a', link }) {
   const Wrap = link ? Link : 'div';
@@ -11,6 +12,71 @@ function StatCard({ label, value, sub, color = '#1a1a1a', link }) {
       <div className="text-2xl font-bold" style={{ color }}>{value}</div>
       {sub && <div className="text-[10px] text-gray-400 mt-0.5">{sub}</div>}
     </Wrap>
+  );
+}
+
+// Per-client blog design reference — upload PDFs of how the client's current
+// blog looks, stored so we have that "memory" for previews and layout matching.
+function BlogReference({ clientName }) {
+  const [files, setFiles] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const slug = clientName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+  const load = async () => {
+    const { data } = await supabase.from('client_blog_reference')
+      .select('*').eq('client_name', clientName).order('uploaded_at', { ascending: false });
+    setFiles(data || []);
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [clientName]);
+
+  const onUpload = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.type !== 'application/pdf') return toast.error('Please upload a PDF');
+    setBusy(true);
+    try {
+      const path = `${slug}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      const { error: upErr } = await supabase.storage.from('client-blogs').upload(path, file, { upsert: false });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from('client-blogs').getPublicUrl(path);
+      const { error: insErr } = await supabase.from('client_blog_reference').insert({
+        client_name: clientName, file_name: file.name, path, url: pub.publicUrl,
+      });
+      if (insErr) throw insErr;
+      toast.success('Blog reference uploaded');
+      load();
+    } catch (err) { toast.error('Upload failed: ' + err.message); }
+    setBusy(false);
+  };
+
+  const remove = async (f) => {
+    if (!confirm(`Remove "${f.file_name}"?`)) return;
+    await supabase.storage.from('client-blogs').remove([f.path]).catch(() => {});
+    await supabase.from('client_blog_reference').delete().eq('id', f.id);
+    load();
+  };
+
+  return (
+    <div>
+      <p className="text-[11px] text-gray-400 mb-2">Upload a PDF of how this client's blog currently looks, so we can match their style in previews.</p>
+      <div className="space-y-2 mb-3">
+        {files.length === 0 ? (
+          <div className="text-[11px] text-gray-300">No blog references yet.</div>
+        ) : files.map(f => (
+          <div key={f.id} className="flex items-center gap-2 p-2 bg-[#f8f8f6] rounded-lg">
+            <span className="text-[14px]">📄</span>
+            <a href={f.url} target="_blank" rel="noreferrer" className="text-[11px] text-blue-600 no-underline truncate flex-1">{f.file_name}</a>
+            <span className="text-[9px] text-gray-400">{f.uploaded_at ? new Date(f.uploaded_at).toLocaleDateString('en-AU') : ''}</span>
+            <button onClick={() => remove(f)} className="text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer text-[12px]">×</button>
+          </div>
+        ))}
+      </div>
+      <label className={`inline-block text-[11px] font-bold rounded px-3 py-1.5 cursor-pointer ${busy ? 'bg-gray-200 text-gray-400' : 'bg-[#F5C518] text-[#1a1a1a] hover:bg-[#e6b800]'}`}>
+        {busy ? 'Uploading…' : '⬆ Upload blog PDF'}
+        <input type="file" accept="application/pdf,.pdf" className="hidden" disabled={busy} onChange={onUpload} />
+      </label>
+    </div>
   );
 }
 
@@ -182,6 +248,11 @@ export default function ClientHub() {
                   )}
                 </div>
               )}
+            </Section>
+
+            {/* Blog design reference (PDFs) */}
+            <Section title="Blog Look & Feel">
+              <BlogReference clientName={clientName} />
             </Section>
 
             {/* Recent Content */}
