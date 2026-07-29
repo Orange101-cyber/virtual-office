@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 
 export function useClients() {
@@ -23,10 +23,12 @@ export function useClients() {
     fetchClients();
   }, [fetchClients]);
 
-  // Active clients (not archived) — treat undefined/null/false as active
-  const activeClients = clients.filter(c => c.archived !== true);
-  // Archived clients
-  const archivedClients = clients.filter(c => c.archived === true);
+  // Active/archived — MEMOIZED so the returned arrays keep a stable reference
+  // across renders. Without this, every consumer that lists these in a
+  // useEffect/useMemo dependency array re-runs on EVERY render (new array each
+  // time), causing re-fetch loops that glitch the screen and slow the browser.
+  const activeClients = useMemo(() => clients.filter(c => c.archived !== true), [clients]);
+  const archivedClients = useMemo(() => clients.filter(c => c.archived === true), [clients]);
 
   const addClient = async (name) => {
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
