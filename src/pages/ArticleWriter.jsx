@@ -2,7 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useClients } from '../hooks/useClients';
 import { getClientContext, formatContextForPrompt } from '../lib/clientContext';
+import * as imageGen from '../lib/imageGen';
 import toast from 'react-hot-toast';
+import BlogPreviewModal from '../components/BlogPreviewModal';
 
 export default function ArticleWriter() {
   const { clients: dbClients } = useClients();
@@ -12,6 +14,7 @@ export default function ArticleWriter() {
   const [selectedBrief, setSelectedBrief] = useState(null);
   const [clientArticles, setClientArticles] = useState([]);
   const [article, setArticle] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
@@ -394,6 +397,13 @@ FORMATTING RULES:
                   </div>
                   <div className="flex gap-2">
                     <button
+                      onClick={() => setShowPreview(true)}
+                      className="btn-primary text-[10px]"
+                      style={{ background: '#8b5cf6', borderColor: '#8b5cf6' }}
+                    >
+                      🎨 Preview as Blog
+                    </button>
+                    <button
                       onClick={() => { navigator.clipboard.writeText(article); toast.success('Article copied!'); }}
                       className="btn-secondary text-[10px]"
                     >
@@ -476,6 +486,14 @@ FORMATTING RULES:
         .btn-secondary { background: transparent; border: 1px solid #e5e7eb; color: #6b7280; border-radius: 5px; padding: 6px 14px; cursor: pointer; }
         .btn-secondary:hover { border-color: #F5C518; color: #1a1a1a; }
       `}</style>
+
+      <BlogPreviewModal
+        open={showPreview}
+        onClose={() => setShowPreview(false)}
+        article={article}
+        title={selectedBrief?.title}
+        client={selectedClient}
+      />
     </div>
   );
 }
