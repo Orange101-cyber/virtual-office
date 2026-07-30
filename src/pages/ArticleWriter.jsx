@@ -40,16 +40,27 @@ export default function ArticleWriter() {
     });
   }, [dbNames]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load briefs for selected client
+  // Load briefs for selected client — merges generated briefs (content_briefs)
+  // with planned items (content_plans) so anything you've briefed OR planned
+  // (incl. cards moved to "Briefed") shows up. Client match is case-insensitive.
   useEffect(() => {
     if (!selectedClient) { setBriefs([]); return; }
-    supabase.from('content_briefs')
-      .select('*')
-      .eq('client_name', selectedClient)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => {
-        setBriefs(data || []);
-      });
+    let cancelled = false;
+    (async () => {
+      const [briefRes, planRes] = await Promise.all([
+        supabase.from('content_briefs').select('*').ilike('client_name', selectedClient).order('created_at', { ascending: false }),
+        supabase.from('content_plans').select('*').ilike('client_name', selectedClient).order('created_at', { ascending: false }),
+      ]);
+      if (cancelled) return;
+      const briefRows = briefRes.data || [];
+      const briefedPlanIds = new Set(briefRows.map(b => b.plan_id).filter(Boolean));
+      const briefTitles = new Set(briefRows.map(b => (b.title || '').toLowerCase().trim()));
+      const planItems = (planRes.data || [])
+        .filter(p => !briefedPlanIds.has(p.id) && !briefTitles.has((p.title || '').toLowerCase().trim()))
+        .map(p => ({ id: `plan-${p.id}`, title: p.title, focus_keyword: p.focus_keyword, created_at: p.created_at, brief_json: null, _plan: true, _status: p.status }));
+      setBriefs([...briefRows, ...planItems]);
+    })();
+    return () => { cancelled = true; };
   }, [selectedClient]);
 
   // Load past articles for writing style
@@ -74,9 +85,9 @@ export default function ArticleWriter() {
     }
   }, [selectedBrief?.id]);
 
-  // Auto-save draft with debounce
+  // Auto-save draft with debounce (only real briefs persist a draft)
   const saveDraft = async (text) => {
-    if (!selectedBrief?.id || !text) return;
+    if (!selectedBrief?.id || selectedBrief._plan || !text) return;
     setSaving(true);
     await supabase.from('content_briefs')
       .update({ draft_article: text })
@@ -99,7 +110,7 @@ export default function ArticleWriter() {
     const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
     if (!apiKey) { toast.error('API key not set'); setGenerating(false); return; }
 
-    const brief = selectedBrief.brief_json;
+    const brief = selectedBrief.brief_json || {};
 
     // Build writing style samples
     let styleSamples = '';
@@ -200,8 +211,8 @@ FORMATTING RULES:
       const msg = await res.json();
       const generatedText = msg.content[0].text;
       setArticle(generatedText);
-      // Auto-save to brief record
-      if (selectedBrief?.id) {
+      // Auto-save to brief record (plan-only items have no content_briefs row)
+      if (selectedBrief?.id && !selectedBrief._plan) {
         await supabase.from('content_briefs')
           .update({ draft_article: generatedText })
           .eq('id', selectedBrief.id);
@@ -246,7 +257,7 @@ FORMATTING RULES:
                   <Label>Brief to write from</Label>
                   {briefs.length === 0 ? (
                     <div className="text-[11px] text-gray-400 bg-[#f8f8f6] rounded-lg p-3">
-                      No briefs found for {selectedClient}. Generate one in the Brief Generator first.
+                      Nothing found for {selectedClient} yet. Generate a brief in the Brief Generator, or add a content item in the Content Planner — both show up here.
                     </div>
                   ) : (
                     <div className="space-y-1.5 max-h-48 overflow-y-auto">
@@ -262,6 +273,9 @@ FORMATTING RULES:
                         >
                           <div className="flex items-center gap-1.5">
                             <div className="text-[11px] font-medium text-[#1a1a1a] truncate flex-1">{b.title}</div>
+                            {b._plan
+                              ? <span className="text-[8px] font-bold uppercase bg-blue-50 text-blue-600 px-1.5 py-0 rounded-full shrink-0">{b._status || 'Planned'}</span>
+                              : <span className="text-[8px] font-bold uppercase bg-[#F5C518]/20 text-[#1a1a1a] px-1.5 py-0 rounded-full shrink-0">Brief</span>}
                             {b.draft_article && (
                               <span className="text-[8px] font-bold uppercase bg-green-50 text-green-600 px-1.5 py-0 rounded-full shrink-0">Draft</span>
                             )}
