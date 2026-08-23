@@ -38,6 +38,7 @@ import AIVisibility from './pages/AIVisibility';
 import RankTracker from './pages/RankTracker';
 import SiteAuditor from './pages/SiteAuditor';
 import GscReporting from './pages/GscReporting';
+import CRM from './pages/CRM';
 import Login from './pages/Login';
 import { Toaster } from 'react-hot-toast';
 import './index.css';
@@ -88,6 +89,7 @@ function Root() {
           <Route path="/seo-tools" element={<SEOTools />} />
           <Route path="/ads-hub" element={<AdsHub />} />
           <Route path="/clients" element={<ClientsIndex />} />
+          <Route path="/crm" element={<CRM />} />
           <Route path="/client/:clientName" element={<ClientHub />} />
           <Route path="/ad-inspiration" element={<AdInspiration />} />
           <Route path="/ad-copy-library" element={<AdCopyLibrary />} />

@@ -36,6 +36,7 @@ const VIDEO_TOOLS = [
 ];
 
 const CLIENT_TOOLS = [
+  { path: '/crm', label: 'CRM (Leads & Clients)', icon: '📇' },
   { path: '/clients', label: 'All Clients', icon: '👥' },
   { path: '/brand-voice', label: 'Brand Voice', icon: '🎤' },
   { path: '/client-map', label: 'Client Map', icon: '🗺️' },
