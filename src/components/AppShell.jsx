@@ -7,6 +7,7 @@ const SEO_TOOLS = [
   { path: '/seo-tools', label: 'SEO Dashboard', icon: '📊' },
   { path: '/seo-chat', label: 'SEO Assistant', icon: '🤖' },
   { path: '/keyword-research', label: 'Keyword Research', icon: '🔑' },
+  { path: '/keyword-export', label: 'Keyword Export', icon: '📤' },
   { path: '/brief-generator', label: 'Brief Generator', icon: '📝' },
   { path: '/content-planner', label: 'Content Planner', icon: '📅' },
   { path: '/article-writer', label: 'Article Writer', icon: '✍️' },

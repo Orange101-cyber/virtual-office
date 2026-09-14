@@ -39,6 +39,7 @@ import RankTracker from './pages/RankTracker';
 import SiteAuditor from './pages/SiteAuditor';
 import GscReporting from './pages/GscReporting';
 import CRM from './pages/CRM';
+import KeywordExport from './pages/KeywordExport';
 import Login from './pages/Login';
 import { Toaster } from 'react-hot-toast';
 import './index.css';
@@ -90,6 +91,7 @@ function Root() {
           <Route path="/ads-hub" element={<AdsHub />} />
           <Route path="/clients" element={<ClientsIndex />} />
           <Route path="/crm" element={<CRM />} />
+          <Route path="/keyword-export" element={<KeywordExport />} />
           <Route path="/client/:clientName" element={<ClientHub />} />
           <Route path="/ad-inspiration" element={<AdInspiration />} />
           <Route path="/ad-copy-library" element={<AdCopyLibrary />} />
