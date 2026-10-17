@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
+import { fetchAll } from '../lib/fetchAll';
 import toast from 'react-hot-toast';
 
 // Pulls every client's keywords from the three places they live:
@@ -37,26 +38,26 @@ export default function KeywordExport() {
 
       // 1. Tracked keywords
       try {
-        const { data } = await supabase.from('rank_tracker_keywords').select('client_name, keyword');
+        const { data } = await fetchAll(() => supabase.from('rank_tracker_keywords').select('id, client_name, keyword').order('id'));
         (data || []).forEach(r => add(r.client_name, r.keyword, { source: 'tracked' }));
-      } catch (e) { /* table may not exist yet */ }
+      } catch { /* table may not exist yet */ }
 
       // 2. Bucket-list focus keywords
       try {
-        const { data } = await supabase.from('client_pages').select('client_name, focus_keyword, search_volume');
+        const { data } = await fetchAll(() => supabase.from('client_pages').select('id, client_name, focus_keyword, search_volume').order('id'));
         (data || []).forEach(r => add(r.client_name, r.focus_keyword, { volume: r.search_volume ?? null, source: 'bucket-list' }));
-      } catch (e) { /* ignore */ }
+      } catch { /* ignore */ }
 
       // 3. Keyword research results
       try {
-        const { data } = await supabase.from('keyword_research').select('client_name, results_json');
+        const { data } = await fetchAll(() => supabase.from('keyword_research').select('id, client_name, results_json').order('id'), { parallel: 1 });
         (data || []).forEach(r => {
           const list = r.results_json?.keywords || [];
           list.forEach(k => add(r.client_name, k.keyword, {
             volume: k.search_volume ?? null, kd: k.kd ?? null, source: 'research',
           }));
         });
-      } catch (e) { /* ignore */ }
+      } catch { /* ignore */ }
 
       // Finalise: arrays sorted by volume desc then alpha
       const out = {};

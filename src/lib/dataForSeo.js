@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { parseSerp } from './rankParse';
 
 const LOGIN = import.meta.env.VITE_DATAFORSEO_LOGIN;
 const PASSWORD = import.meta.env.VITE_DATAFORSEO_PASSWORD;
@@ -239,72 +240,28 @@ export async function getSerpResults(keyword) {
   return null;
 }
 
-// ── Rank Tracker: position + SERP features for a keyword (one SERP call) ──
+// ── Rank Tracker: position + SERP features + competitors (one SERP call) ──
 // Not cached — rank tracking needs a fresh position on every refresh.
-// Returns { position, url, features } where features flags AI Overview (and
-// whether we're cited in it), People Also Ask, Local Pack, Discussions &
-// Forums, and Images.
-export async function getKeywordRank(keyword, domain, { device = 'desktop' } = {}) {
-  const clean = (domain || '').replace(/^https?:\/\//, '').replace(/\/$/, '').replace(/^www\./, '');
+// Parsing lives in rankParse.js so the daily job produces identical rows.
+export async function getKeywordRank(keyword, domain, { device = 'desktop', competitors = [] } = {}) {
   const data = await callEndpoint('/serp/google/organic/live/advanced', {
     keyword, location_code: LOCATION_AU, language_code: LANGUAGE, device, depth: 100,
   });
-  const result = data.tasks?.[0]?.result?.[0] || null;
-  const allItems = result?.items || [];
-  const typeOf = (i) => i.type || i.item_type;
+  return parseSerp(data.tasks?.[0]?.result?.[0] || null, domain, competitors);
+}
 
-  // Best organic position.
-  let best = null;
-  for (const it of allItems.filter(i => typeOf(i) === 'organic')) {
-    const d = (it.domain || '').replace(/^www\./, '');
-    if (d === clean || d.endsWith('.' + clean) || d.endsWith(clean)) {
-      if (!best || (it.rank_absolute || 999) < best.position) best = { position: it.rank_absolute, url: it.url, title: it.title };
-    }
-  }
-
-  const domainFrom = (u = '') => { try { return new URL(u.startsWith('http') ? u : `https://${u}`).hostname.replace(/^www\./, ''); } catch { return ''; } };
-
-  // AI Overview: presence + whether we're cited + our position + the references.
-  const ai = allItems.find(i => typeOf(i) === 'ai_overview');
-  let aiCited = false, aiPos = null;
-  const aiSources = [];
-  if (ai) {
-    (ai.references || ai.items || []).forEach((r, idx) => {
-      const url = r.url || r.link || '';
-      const dom = (r.domain || r.source || domainFrom(url)).replace(/^www\./, '');
-      if (url || r.title) aiSources.push({ title: r.title || r.source || dom, url, domain: dom });
-      if (!aiCited && dom && (dom === clean || dom.endsWith(clean))) { aiCited = true; aiPos = idx + 1; }
+// ── Rank Tracker: search volumes as a map (lower-cased keyword → volume|null) ──
+// Chunked at 1,000 (the API limit). null = Google has no volume data.
+export async function getSearchVolumeMap(keywords) {
+  const map = {};
+  const list = [...new Set((keywords || []).map(k => k.trim()).filter(Boolean))];
+  for (let i = 0; i < list.length; i += 1000) {
+    const data = await callEndpoint('/keywords_data/google_ads/search_volume/live', {
+      keywords: list.slice(i, i + 1000), location_code: LOCATION_AU, language_code: LANGUAGE,
     });
+    (data.tasks?.[0]?.result || []).forEach(r => { map[(r.keyword || '').toLowerCase().trim()] = r.search_volume ?? null; });
   }
-
-  // Collect sub-results for a feature type into {title,url,domain} entries.
-  const collect = (types, max = 8) => {
-    const out = [];
-    allItems.filter(i => types.includes(typeOf(i))).forEach(el => {
-      const subs = (Array.isArray(el.items) && el.items.length) ? el.items : [el];
-      subs.forEach(s => {
-        const url = s.url || s.link || s.source_url || s.expanded_element?.[0]?.url || '';
-        const dom = (s.domain || s.source || s.expanded_element?.[0]?.domain || domainFrom(url)).replace(/^www\./, '');
-        const title = s.title || s.question || s.alt || s.text || s.expanded_element?.[0]?.title || dom;
-        if (url || title) out.push({ title, url, domain: dom });
-      });
-    });
-    return out.slice(0, max);
-  };
-
-  const paa = collect(['people_also_ask']);
-  const local = collect(['local_pack', 'map']);
-  const forums = collect(['discussions_and_forums']);
-  const images = collect(['images', 'image_pack']);
-
-  const features = {
-    ai_overview: !!ai, ai_overview_cited: aiCited, ai_overview_position: aiPos, ai_overview_sources: aiSources.slice(0, 10),
-    people_also_ask: paa.length > 0, paa,
-    local_pack: local.length > 0, local,
-    discussions_forums: forums.length > 0, forums,
-    images: images.length > 0, image_sources: images,
-  };
-  return { position: best?.position ?? null, url: best?.url || '', title: best?.title || '', features };
+  return map;
 }
 
 // ── Check if a domain ranks for a keyword ──
