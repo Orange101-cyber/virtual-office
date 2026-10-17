@@ -1,4 +1,4 @@
--- Rank Tracker v2 — DRAFT, NOT YET RUN. Needs approval before running.
+-- Rank Tracker v2 — applied 2026-10-17 (migrations rank_tracker_v2 + rank_tracker_v2_position_type_default).
 -- Safe to re-run (everything is "if not exists" / "or replace").
 -- Adds: one-snapshot-per-day rule, competitor tracking, organic-rank column,
 -- live updates, and a server-side overview so the page loads fast.
@@ -24,7 +24,9 @@ alter table rank_tracker_snapshots
   add column if not exists competitors jsonb;
 update rank_tracker_snapshots set position_type = 'absolute', rank_absolute = coalesce(rank_absolute, position)
   where position_type is null;
-alter table rank_tracker_snapshots alter column position_type set default 'organic';
+-- Default 'absolute' so rows written by older app versions are labelled correctly;
+-- the current app and daily job always set position_type = 'organic' explicitly.
+alter table rank_tracker_snapshots alter column position_type set default 'absolute';
 
 -- 3. Competitors to track, per client.
 create table if not exists rank_tracker_competitors (
