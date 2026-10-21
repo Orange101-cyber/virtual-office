@@ -1,10 +1,55 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { useClients } from '../hooks/useClients';
 import { getClientContext, formatContextForPrompt } from '../lib/clientContext';
-import * as imageGen from '../lib/imageGen';
+import {
+  parseBriefRules, describeRange, analyseArticle, applyMechanicalFixes, revisionPrompt,
+  seoFieldChecks, toSlug,
+} from '../lib/articleRules';
 import toast from 'react-hot-toast';
 import BlogPreviewModal from '../components/BlogPreviewModal';
+
+const MAX_PARAGRAPH_WORDS = 70;
+
+async function callClaude(prompt, { maxTokens = 8192, system } = {}) {
+  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error('API key not set');
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-5',
+      max_tokens: maxTokens,
+      ...(system ? { system } : {}),
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  const msg = await res.json();
+  return (msg.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+}
+
+// Everything the brief + settings say the article must meet, in one place so
+// the prompt, the auto-revision and the on-screen checklist all agree.
+function articleSpec(selectedBrief, { wordTarget, customInstructions }) {
+  const brief = selectedBrief?.brief_json || {};
+  const target = Math.max(300, Number(wordTarget) || 1100);
+  const focusKeyword = selectedBrief?.focus_keyword || '';
+  return {
+    title: (selectedBrief?.title || '').trim(),
+    focusKeyword,
+    secondaryKeywords: brief.secondary_keywords || [],
+    h2s: (brief.h2_structure || []).map(h => h.h2).filter(Boolean),
+    wordTarget: target,
+    rules: parseBriefRules({ brief, focusKeyword, extra: customInstructions, wordTarget: target }),
+    maxParagraphWords: MAX_PARAGRAPH_WORDS,
+  };
+}
 
 export default function ArticleWriter() {
   const { clients: dbClients } = useClients();
@@ -22,6 +67,10 @@ export default function ArticleWriter() {
   const [contentType, setContentType] = useState('Blog Post');
   const [readingLevel, setReadingLevel] = useState('grade-7');
   const [customInstructions, setCustomInstructions] = useState('');
+  const [step, setStep] = useState('');
+  const [seo, setSeo] = useState({ seoTitle: '', metaDescription: '', slug: '' });
+  const [seoBusy, setSeoBusy] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const saveTimerRef = useRef(null);
 
   // Stable derived keys so the effects below don't re-run every render
@@ -75,25 +124,26 @@ export default function ArticleWriter() {
   }, [selectedClient, dbClientId]);
 
   // Load saved draft when selecting a brief
-  useEffect(() => {
-    if (selectedBrief?.draft_article) {
-      setArticle(selectedBrief.draft_article);
-      setLastSaved(new Date());
-    } else {
-      setArticle('');
-      setLastSaved(null);
-    }
-  }, [selectedBrief?.id]);
+  const selectBrief = (b) => {
+    setSelectedBrief(b);
+    setArticle(b?.draft_article || '');
+    setLastSaved(b?.draft_article ? new Date() : null);
+    setSeo({ seoTitle: '', metaDescription: '', slug: '' });
+    setSaveError('');
+  };
 
   // Auto-save draft with debounce (only real briefs persist a draft)
   const saveDraft = async (text) => {
-    if (!selectedBrief?.id || selectedBrief._plan || !text) return;
+    if (!selectedBrief?.id || selectedBrief._plan || !text) return false;
     setSaving(true);
-    await supabase.from('content_briefs')
+    const { error } = await supabase.from('content_briefs')
       .update({ draft_article: text })
       .eq('id', selectedBrief.id);
     setSaving(false);
+    if (error) { setSaveError(error.message); return false; }
+    setSaveError('');
     setLastSaved(new Date());
+    return true;
   };
 
   const handleArticleChange = (newText) => {
@@ -102,15 +152,51 @@ export default function ArticleWriter() {
     saveTimerRef.current = setTimeout(() => saveDraft(newText), 2000);
   };
 
+  const spec = useMemo(
+    () => articleSpec(selectedBrief, { wordTarget, customInstructions }),
+    [selectedBrief, wordTarget, customInstructions],
+  );
+  const analysis = useMemo(() => (article ? analyseArticle(article, spec) : null), [article, spec]);
+  const seoChecks = useMemo(() => seoFieldChecks(seo, spec.focusKeyword), [seo, spec.focusKeyword]);
+
+  const generateSeo = async (text) => {
+    const brief = selectedBrief?.brief_json || {};
+    const raw = await callClaude(`Write the SEO fields for this ${contentType === 'SEO Page' ? 'page' : 'blog article'}.
+
+Client: ${selectedClient}
+Focus keyword: ${spec.focusKeyword}
+${brief.seo_title ? `Brief's suggested SEO title (improve on it if needed): ${brief.seo_title}\n` : ''}${brief.meta_description ? `Brief's suggested meta description: ${brief.meta_description}\n` : ''}${brief.suggested_slug ? `Brief's suggested URL: ${brief.suggested_slug}\n` : ''}
+Rules:
+- seo_title: 50–60 characters, focus keyword near the start, end with " | ${selectedClient}" if it fits within 60.
+- meta_description: 140–155 characters, includes the focus keyword, summarises the article and ends with a reason to click. Australian English.
+- slug: lowercase, hyphenated, 3–6 words, contains the focus keyword, no stop words, no dates, no domain or slashes.
+
+Return ONLY JSON: {"seo_title":"","meta_description":"","slug":""}
+
+ARTICLE:
+${text.slice(0, 12000)}`, { maxTokens: 400 });
+    const j = JSON.parse(raw.replace(/```json|```/g, '').trim());
+    return { seoTitle: (j.seo_title || '').trim(), metaDescription: (j.meta_description || '').trim(), slug: toSlug(j.slug || '') };
+  };
+
+  const regenerateSeo = async () => {
+    if (!article) return;
+    setSeoBusy(true);
+    try { setSeo(await generateSeo(article)); }
+    catch (e) { toast.error('SEO fields failed: ' + e.message); }
+    setSeoBusy(false);
+  };
+
   const handleGenerate = async () => {
     if (!selectedBrief) return toast.error('Select a brief first.');
+    if (!import.meta.env.VITE_ANTHROPIC_API_KEY) return toast.error('API key not set');
     setGenerating(true);
     setArticle('');
-
-    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-    if (!apiKey) { toast.error('API key not set'); setGenerating(false); return; }
+    setSeo({ seoTitle: '', metaDescription: '', slug: '' });
 
     const brief = selectedBrief.brief_json || {};
+    const { title, focusKeyword, secondaryKeywords, h2s, wordTarget: target, rules } = spec;
+    const lo = Math.round(target * 0.9), hi = Math.round(target * 1.1);
 
     // Build writing style samples
     let styleSamples = '';
@@ -131,104 +217,110 @@ export default function ArticleWriter() {
       'grade-12': 'Write at a Grade 12 reading level. Use expert-level language with technical terminology. Complex sentence structures are acceptable. Assume the reader has domain knowledge. Detailed paragraphs of 3-5 sentences.',
     };
 
-    // Load full client context
-    const clientCtx = await getClientContext(selectedClient);
-    const clientContextText = formatContextForPrompt(clientCtx);
+    // Word budget per part, so the model lands near the target instead of over-writing.
+    const faqCount = brief.faq_section?.length || 4;
+    const faqBudget = faqCount * 45;
+    const sectionBudget = Math.max(80, Math.round((target - faqBudget - 170) / Math.max(1, h2s.length || 5)));
+    const checklist = Array.isArray(brief.seo_checklist) ? brief.seo_checklist : [];
 
-    const prompt = `You are an expert SEO content writer for an Australian digital marketing agency.
-Write a complete, publish-ready ${contentType === 'SEO Page' ? 'SEO landing page' : 'blog article'} based on the brief below.
+    try {
+      setStep('Writing article…');
+      const clientCtx = await getClientContext(selectedClient);
+      const clientContextText = formatContextForPrompt(clientCtx);
+
+      const prompt = `You are an expert SEO content writer for an Australian digital marketing agency.
+Write a complete, publish-ready ${contentType === 'SEO Page' ? 'SEO landing page' : 'blog article'} based on the brief below. Follow the brief exactly — the numbered requirements are checked automatically after you write.
 
 ${clientContextText ? `CLIENT CONTEXT (use this to inform the article):
 ${clientContextText}
 
 ` : ''}CLIENT: ${selectedClient}
 CONTENT TYPE: ${contentType}
-TARGET WORD COUNT: ${wordTarget} words
+${brief.overview ? `\nARTICLE GOAL: ${brief.overview}\n` : ''}
+REQUIREMENTS:
+1. TITLE: the first line is the H1 and must be exactly, word for word: ${title}
+2. LENGTH: ${lo}–${hi} words in TOTAL, including the FAQ (target ${target}). Budget: intro ~90 words, each H2 section ~${sectionBudget} words, FAQ ~${faqBudget} words (answers of 2–3 sentences), closing ~80 words. Do not go over ${hi}.
+3. FOCUS KEYWORD "${focusKeyword}": use it ${describeRange(rules.fk)} times in the body text (headings don't count). Include it in the first sentence. Count as you write.
+${secondaryKeywords.length ? `4. SECONDARY KEYWORDS — use EACH one ${describeRange(rules.secondary)} times in total, never more:\n${secondaryKeywords.map(k => `   - ${k}`).join('\n')}` : '4. No secondary keywords.'}
+5. SCANNABLE: no paragraph longer than 3 sentences or ${MAX_PARAGRAPH_WORDS} words. Wherever a section covers several factors, tips, costs, options or steps, use a list instead of a paragraph. Use at least 3 lists across the article.
+6. LISTS: bullets start with "• " (the bullet character). Steps or ranked items use "1. ", "2. ", "3. ". Never start a line with a dash (-).
 
-BRIEF:
-Title: ${selectedBrief.title}
-Focus Keyword: ${selectedBrief.focus_keyword}
-${brief.seo_title ? `SEO Title: ${brief.seo_title}` : ''}
-${brief.secondary_keywords?.length ? `Secondary Keywords: ${brief.secondary_keywords.join(', ')}` : ''}
-${brief.meta_description ? `Meta Description: ${brief.meta_description}` : ''}
-${brief.suggested_h1 ? `H1: ${brief.suggested_h1}` : ''}
-
-H2 STRUCTURE:
+H2 STRUCTURE (use these headings, in this order):
 ${brief.h2_structure?.map(h => `${h.h2}\n  Cover: ${h.description}`).join('\n') || 'Use appropriate H2s'}
 
-FAQ SECTION (include with full answers):
-${brief.faq_section?.map(f => `Q: ${f.question}\n  Guidance: ${f.guidance}`).join('\n') || 'Include 3-5 relevant FAQs'}
+FAQ SECTION — heading "Frequently Asked Questions", then each as a "Q:" line followed by an "A:" line:
+${brief.faq_section?.map(f => `Q: ${f.question}\n  Guidance: ${f.guidance}`).join('\n') || 'Include 3-4 relevant FAQs'}
 
 CTA: ${brief.cta_recommendation || 'Include CTA buttons at top and bottom'}
 CTA LINK: ${brief.cta_links?.[0] || ''}
 
 INTERNAL LINKS TO INCLUDE:
 ${brief.internal_links?.map(l => `- ${l.page}${l.url ? ` (${l.url})` : ''}`).join('\n') || 'Include 2-3 internal links'}
-
+${checklist.length ? `
+BRIEF CHECKLIST (follow every item that applies to the article text; ignore items about images, schema or publishing):
+${checklist.map(c => `- ${c}`).join('\n')}
+` : ''}${brief.keyword_notes ? `\nKEYWORD NOTES FROM THE BRIEF: ${brief.keyword_notes}\n` : ''}
 ${styleSamples ? `
-WRITING STYLE REFERENCE — Match this client's writing style closely (tone, sentence structure, vocabulary, paragraph length):
+WRITING STYLE REFERENCE — Match this client's writing style closely (tone, sentence structure, vocabulary). The formatting requirements above still apply.
 
 ${styleSamples}
 
 END OF STYLE REFERENCE
 ` : ''}
-
-${customInstructions ? `ADDITIONAL INSTRUCTIONS:\n${customInstructions}\n` : ''}
-
-FORMATTING RULES:
-- Write the full article in plain text (no markdown)
-- Start with the H1 heading on its own line
-- Include "Table of Contents" section after intro
-- Each H2 heading on its own line, followed by 2-4 paragraphs
+${customInstructions ? `ADDITIONAL INSTRUCTIONS FROM THE WRITER (these take priority over everything above):\n${customInstructions}\n` : ''}
+FORMATTING:
+- Plain text: no markdown, no **bold**, no # symbols
+- First line: the H1 (requirement 1). Then the intro.
+- "Table of Contents" heading after the intro, listing the H2s, one per line
+- Each heading on its own line, with a blank line between every heading, paragraph and list
 - Include [CTA Button: Book an Appraisal | Link: ${brief.cta_links?.[0] || ''}] after the intro and at the end
 - Include internal links as [Internal Link: Page Name | URL]
 - Include at least 1 external authority link (ABS, government source, or industry body)
-- Include the FAQ section with Q: and A: format
-- Focus keyword density of 1-2%
-- Use all secondary keywords naturally throughout
 - ${readingInstructions[readingLevel] || readingInstructions['grade-7']}
-- Short paragraphs (2-4 sentences max)
-- ${wordTarget}+ words total
-- DO NOT include any meta information, just the article body content`;
+- DO NOT include any meta information (SEO title, meta description, slug, notes) — just the article`;
 
-    try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-5',
-          max_tokens: 8192,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      });
+      let text = applyMechanicalFixes(await callClaude(prompt), { title });
+      let result = analyseArticle(text, spec);
 
-      if (!res.ok) throw new Error(`API error ${res.status}`);
-      const msg = await res.json();
-      const generatedText = msg.content[0].text;
-      setArticle(generatedText);
-      // Auto-save to brief record (plan-only items have no content_briefs row)
-      if (selectedBrief?.id && !selectedBrief._plan) {
-        await supabase.from('content_briefs')
-          .update({ draft_article: generatedText })
-          .eq('id', selectedBrief.id);
-        setLastSaved(new Date());
-        // Update local state so brief shows it has a draft
-        setBriefs(prev => prev.map(b => b.id === selectedBrief.id ? { ...b, draft_article: generatedText } : b));
+      // One targeted revision pass for anything the model missed.
+      const failed = result.checks.filter(c => !c.ok);
+      if (failed.length) {
+        setStep(`Fixing ${failed.length} brief issue${failed.length > 1 ? 's' : ''} (word count, keywords, lists)…`);
+        try {
+          const revised = applyMechanicalFixes(await callClaude(revisionPrompt(text, failed)), { title });
+          const r2 = analyseArticle(revised, spec);
+          const score = (r) => r.checks.filter(c => c.ok).length;
+          if (score(r2) >= score(result)) { text = revised; result = r2; }
+        } catch (e) { console.warn('Revision pass failed:', e); }
       }
-      toast.success('Article generated and saved!');
+      setArticle(text);
+
+      setStep('Writing SEO title, meta description & slug…');
+      try { setSeo(await generateSeo(text)); }
+      catch (e) { toast.error('SEO fields failed: ' + e.message); }
+
+      // Auto-save to brief record (plan-only items have no content_briefs row)
+      let saved = false;
+      if (selectedBrief?.id && !selectedBrief._plan) {
+        saved = await saveDraft(text);
+        if (saved) setBriefs(prev => prev.map(b => b.id === selectedBrief.id ? { ...b, draft_article: text } : b));
+      }
+      const misses = result.checks.filter(c => !c.ok).length;
+      toast.success(`Article generated${saved ? ' and saved' : ''}${misses ? ` — ${misses} brief check${misses > 1 ? 's' : ''} still need a manual touch` : ' — meets every brief check'}`);
     } catch (err) {
       toast.error('Error: ' + err.message);
     }
+    setStep('');
     setGenerating(false);
   };
 
-  const wordCount = article ? article.split(/\s+/).length : 0;
+  const wordCount = analysis?.totalWords ?? 0;
+  const lo = Math.round(spec.wordTarget * 0.9), hi = Math.round(spec.wordTarget * 1.1);
+  const wordsOk = wordCount >= lo && wordCount <= hi;
   const styleCount = clientArticles.filter(a => a.article_content?.length > 100).length;
+  const seoBlock = seo.seoTitle || seo.metaDescription || seo.slug
+    ? `SEO Title: ${seo.seoTitle}\nMeta Description: ${seo.metaDescription}\nURL Slug: ${seo.slug}\n\n---\n\n`
+    : '';
 
   return (
     <div className="h-full overflow-y-auto">
@@ -248,7 +340,7 @@ FORMATTING RULES:
               <div className="space-y-3">
                 <div>
                   <Label>Client</Label>
-                  <select value={selectedClient} onChange={e => { setSelectedClient(e.target.value); setSelectedBrief(null); setArticle(''); }} className="input-field">
+                  <select value={selectedClient} onChange={e => { setSelectedClient(e.target.value); selectBrief(null); }} className="input-field">
                     {clients.map(c => <option key={c}>{c}</option>)}
                   </select>
                 </div>
@@ -264,7 +356,7 @@ FORMATTING RULES:
                       {briefs.map(b => (
                         <div
                           key={b.id}
-                          onClick={() => setSelectedBrief(b)}
+                          onClick={() => selectBrief(b)}
                           className={`rounded-lg p-2.5 cursor-pointer border transition-colors ${
                             selectedBrief?.id === b.id
                               ? 'border-[#F5C518] bg-[#F5C518]/5'
@@ -351,7 +443,7 @@ FORMATTING RULES:
                   disabled={generating || !selectedBrief}
                   className="btn-primary w-full py-3 text-sm"
                 >
-                  {generating ? 'Writing article...' : 'Write Article'}
+                  {generating ? (step || 'Writing article…') : 'Write Article'}
                 </button>
               </div>
             </div>
@@ -361,9 +453,12 @@ FORMATTING RULES:
               <div className="bg-white border border-gray-200 rounded-xl p-4">
                 <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Brief Preview</h3>
                 <div className="text-[11px] text-gray-700 space-y-1.5">
-                  {selectedBrief.brief_json.suggested_h1 && (
-                    <div><span className="text-gray-400">H1:</span> {selectedBrief.brief_json.suggested_h1}</div>
-                  )}
+                  <div><span className="text-gray-400">H1 (brief title):</span> {selectedBrief.title}</div>
+                  <div className="text-[10px] text-gray-500">
+                    <span className="text-gray-400">Keywords:</span> “{spec.focusKeyword}” {describeRange(spec.rules.fk)}×
+                    {spec.secondaryKeywords.length > 0 && <> · secondary {describeRange(spec.rules.secondary)}× each</>}
+                    {' · '}{lo.toLocaleString()}–{hi.toLocaleString()} words
+                  </div>
                   {selectedBrief.brief_json.secondary_keywords?.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1">
                       {selectedBrief.brief_json.secondary_keywords.map((kw, i) => (
@@ -396,8 +491,8 @@ FORMATTING RULES:
             ) : generating ? (
               <div className="flex flex-col items-center justify-center h-80 text-gray-500">
                 <div className="w-8 h-8 border-2 border-gray-200 border-t-[#F5C518] rounded-full animate-spin mb-4" />
-                <p className="text-sm font-medium">Writing article...</p>
-                <p className="text-[11px] text-gray-400 mt-1">This may take 30-90 seconds for a full article</p>
+                <p className="text-sm font-medium">{step || 'Writing article…'}</p>
+                <p className="text-[11px] text-gray-400 mt-1">Usually 1–3 minutes: write, check against the brief, fix, then SEO fields</p>
               </div>
             ) : (
               <>
@@ -405,7 +500,7 @@ FORMATTING RULES:
                   <div>
                     <h2 className="text-sm font-semibold text-[#1a1a1a]">{selectedBrief?.title}</h2>
                     <div className="text-[10px] text-gray-400 mt-0.5">
-                      {wordCount.toLocaleString()} words · {selectedClient}
+                      {wordCount.toLocaleString()} words ({(wordCount - (analysis?.faqWords || 0)).toLocaleString()} excl. FAQ) · {selectedClient}
                       {styleCount > 0 && ' · Style matched'}
                     </div>
                   </div>
@@ -425,7 +520,7 @@ FORMATTING RULES:
                     </button>
                     <button
                       onClick={() => {
-                        const blob = new Blob([article], { type: 'text/plain' });
+                        const blob = new Blob([seoBlock + article], { type: 'text/plain' });
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = url;
@@ -438,7 +533,7 @@ FORMATTING RULES:
                       Download .txt
                     </button>
                     <button
-                      onClick={() => { saveDraft(article); toast.success('Draft saved!'); }}
+                      onClick={async () => { if (await saveDraft(article)) toast.success('Draft saved!'); else toast.error('Draft not saved — see the note under the article'); }}
                       disabled={saving}
                       className="btn-secondary text-[10px]"
                     >
@@ -457,20 +552,75 @@ FORMATTING RULES:
                 {/* Word count bar */}
                 <div className="mb-4">
                   <div className="flex justify-between text-[10px] mb-1">
-                    <span className="text-gray-400">Word Count</span>
-                    <span className={wordCount >= wordTarget ? 'text-green-600 font-semibold' : 'text-orange-500 font-semibold'}>
-                      {wordCount.toLocaleString()} / {Number(wordTarget).toLocaleString()}
+                    <span className="text-gray-400">Word Count (incl. FAQ) · target {lo.toLocaleString()}–{hi.toLocaleString()}</span>
+                    <span className={wordsOk ? 'text-green-600 font-semibold' : 'text-orange-500 font-semibold'}>
+                      {wordCount.toLocaleString()} / {spec.wordTarget.toLocaleString()}
                     </span>
                   </div>
                   <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all"
                       style={{
-                        width: `${Math.min((wordCount / wordTarget) * 100, 100)}%`,
-                        backgroundColor: wordCount >= wordTarget ? '#27ae60' : '#e67e22',
+                        width: `${Math.min((wordCount / spec.wordTarget) * 100, 100)}%`,
+                        backgroundColor: wordsOk ? '#27ae60' : '#e67e22',
                       }}
                     />
                   </div>
+                </div>
+
+                {/* Brief compliance — re-checks live as you edit */}
+                {analysis && (
+                  <div className="mb-4 border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="px-3 py-2 bg-[#fafafa] border-b border-gray-200 flex items-center gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 flex-1">Brief Checks</span>
+                      <span className={`text-[10px] font-semibold ${analysis.passed ? 'text-green-600' : 'text-orange-500'}`}>
+                        {analysis.checks.filter(c => c.ok).length}/{analysis.checks.length} passed
+                      </span>
+                    </div>
+                    <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 p-3">
+                      {analysis.checks.map(c => (
+                        <li key={c.id} className="text-[11px] flex gap-1.5 min-w-0" title={c.ok ? '' : c.fix}>
+                          <span className={c.ok ? 'text-green-600' : 'text-orange-500'}>{c.ok ? '✓' : '✗'}</span>
+                          <span className="text-gray-700 shrink-0">{c.label}</span>
+                          <span className="text-gray-400 truncate">· {c.detail}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {(spec.rules.fkSource === 'default' || spec.rules.secondarySource === 'default') && (
+                      <div className="px-3 pb-2 text-[9px] text-gray-400">
+                        {spec.rules.fkSource === 'default' && 'No focus-keyword count in the brief — using ~0.5–1% of the word target. '}
+                        {spec.rules.secondarySource === 'default' && 'No secondary-keyword limit in the brief — using up to 3× each. '}
+                        Add e.g. “focus keyword 7x, secondary keywords 2x max” to the brief or Additional Instructions to change this.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* SEO fields */}
+                <div className="mb-4 border border-gray-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 flex-1">SEO Title · Meta Description · URL Slug</span>
+                    <button onClick={() => { navigator.clipboard.writeText(seoBlock.replace(/\n\n---\n\n$/, '')); toast.success('SEO fields copied!'); }}
+                      disabled={!seoBlock} className="btn-secondary text-[10px] !py-1">Copy</button>
+                    <button onClick={regenerateSeo} disabled={seoBusy || generating} className="btn-secondary text-[10px] !py-1">
+                      {seoBusy ? 'Writing…' : seoBlock ? '↻ Regenerate' : 'Generate'}
+                    </button>
+                  </div>
+                  {[
+                    { key: 'seoTitle', label: 'SEO Title', rows: 1 },
+                    { key: 'metaDescription', label: 'Meta Description', rows: 2 },
+                    { key: 'slug', label: 'URL Slug', rows: 1 },
+                  ].map(f => (
+                    <div key={f.key} className="mb-1.5 last:mb-0">
+                      <div className="flex justify-between text-[9px] mb-0.5">
+                        <span className="font-bold uppercase tracking-wider text-gray-400">{f.label}</span>
+                        {seo[f.key] && <span className={seoChecks[f.key].ok ? 'text-green-600' : 'text-orange-500'}>{seoChecks[f.key].note}</span>}
+                      </div>
+                      <textarea rows={f.rows} value={seo[f.key]} placeholder={seoBusy ? 'Writing…' : 'Generated with the article'}
+                        onChange={e => setSeo(s => ({ ...s, [f.key]: f.key === 'slug' ? e.target.value.toLowerCase().replace(/\s+/g, '-') : e.target.value }))}
+                        className="input-field resize-none" />
+                    </div>
+                  ))}
                 </div>
 
                 {/* Article content — editable */}
@@ -485,6 +635,11 @@ FORMATTING RULES:
                     {saving ? 'Saving...' : lastSaved ? `Auto-saved ${lastSaved.toLocaleTimeString()}` : ''}
                   </div>
                 </div>
+                {saveError && (
+                  <div className="mt-1 text-[10px] text-orange-600">
+                    Draft not saved to the database ({saveError}). Copy or download the article before leaving this page.
+                  </div>
+                )}
               </>
             )}
           </div>

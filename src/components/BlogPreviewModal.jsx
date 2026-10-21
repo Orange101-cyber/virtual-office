@@ -10,41 +10,61 @@ import toast from 'react-hot-toast';
 const STYLE = 'clean modern editorial photography, bright natural light, professional, high detail, no text, no watermark, no words';
 
 function parseArticle(text = '', fallbackTitle = '') {
+  // Each block keeps its lines so bullet / numbered lists survive.
   const blocks = [];
   let cur = [];
   for (const ln of text.split(/\n/)) {
-    if (ln.trim() === '') { if (cur.length) { blocks.push(cur.join(' ').trim()); cur = []; } }
+    if (ln.trim() === '') { if (cur.length) { blocks.push(cur); cur = []; } }
     else cur.push(ln.trim());
   }
-  if (cur.length) blocks.push(cur.join(' ').trim());
+  if (cur.length) blocks.push(cur);
+  const joined = (b) => b.join(' ').trim();
 
   let title = fallbackTitle || '';
   let start = 0;
-  if (blocks[0] && /^#\s/.test(blocks[0])) { title = blocks[0].replace(/^#+\s*/, ''); start = 1; }
-  else if (!title && blocks[0] && blocks[0].length <= 90) { title = blocks[0]; start = 1; }
+  if (blocks[0] && /^#\s/.test(joined(blocks[0]))) { title = joined(blocks[0]).replace(/^#+\s*/, ''); start = 1; }
+  else if (blocks[0] && joined(blocks[0]).length <= 90) { title = title || joined(blocks[0]); start = 1; }
 
-  const isHeading = (b) => /^#{1,3}\s/.test(b) || (b.length <= 70 && !/[.!?:,]$/.test(b) && b.split(' ').length <= 11 && !/^[a-z]/.test(b));
+  const isListLine = (l) => /^(•|-|\*|\d{1,2}[.)])\s+/.test(l);
+  const isHeading = (b) => b.length === 1 && !isListLine(b[0]) && !/^(Q|A):/i.test(b[0])
+    && (/^#{1,3}\s/.test(b[0]) || (b[0].length <= 70 && !/[.!?:,]$/.test(b[0]) && b[0].split(' ').length <= 11 && !/^[a-z]/.test(b[0])));
 
   const intro = [];
   const sections = [];
   let currentSection = null;
   for (let i = start; i < blocks.length; i++) {
     const b = blocks[i];
-    if (isHeading(b)) { currentSection = { heading: b.replace(/^#+\s*/, ''), body: [] }; sections.push(currentSection); }
+    if (isHeading(b)) { currentSection = { heading: b[0].replace(/^#+\s*/, ''), body: [] }; sections.push(currentSection); }
     else if (currentSection) currentSection.body.push(b);
     else intro.push(b);
   }
   return { title: title || 'Untitled Article', intro, sections };
 }
 
-// Minimal inline markdown → JSX (bold only) for body paragraphs.
-function RichText({ text }) {
+// Minimal inline markdown → JSX (bold only).
+function Inline({ text }) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
-  return <p className="text-[15px] text-gray-700 leading-[1.75] mb-4">
-    {parts.map((p, i) => p.startsWith('**') && p.endsWith('**')
-      ? <strong key={i} className="text-[#1a1a1a]">{p.slice(2, -2)}</strong>
-      : <span key={i}>{p}</span>)}
-  </p>;
+  return parts.map((p, i) => p.startsWith('**') && p.endsWith('**')
+    ? <strong key={i} className="text-[#1a1a1a]">{p.slice(2, -2)}</strong>
+    : <span key={i}>{p}</span>);
+}
+
+// A paragraph, or a bulleted / numbered list when its lines are list items.
+function Block({ lines }) {
+  const bullet = /^(•|-|\*)\s+/, numbered = /^\d{1,2}[.)]\s+/;
+  const items = lines.filter(l => bullet.test(l) || numbered.test(l));
+  if (items.length >= 2 && items.length >= lines.length - 1) {
+    const lead = lines.length > items.length ? lines[0] : null;
+    const ordered = items.every(l => numbered.test(l));
+    const List = ordered ? 'ol' : 'ul';
+    return <>
+      {lead && <p className="text-[15px] text-gray-700 leading-[1.75] mb-2"><Inline text={lead} /></p>}
+      <List className={`${ordered ? 'list-decimal' : 'list-disc'} pl-6 mb-4 space-y-1 text-[15px] text-gray-700 leading-[1.6]`}>
+        {items.map((l, i) => <li key={i}><Inline text={l.replace(bullet, '').replace(numbered, '')} /></li>)}
+      </List>
+    </>;
+  }
+  return <p className="text-[15px] text-gray-700 leading-[1.75] mb-4"><Inline text={lines.join(' ')} /></p>;
 }
 
 export default function BlogPreviewModal({ open, onClose, article, title, client }) {
@@ -114,7 +134,7 @@ export default function BlogPreviewModal({ open, onClose, article, title, client
             {client && <div className="text-[11px] font-semibold uppercase tracking-wider text-[#8b5cf6] mb-2">{client} · Blog</div>}
             <h1 className="text-[30px] font-bold text-[#1a1a1a] leading-tight mb-4">{parsed.title}</h1>
 
-            {parsed.intro.map((p, i) => <RichText key={i} text={p} />)}
+            {parsed.intro.map((b, i) => <Block key={i} lines={b} />)}
 
             {parsed.sections.map((s, i) => (
               <section key={i} className="mt-8">
@@ -125,7 +145,7 @@ export default function BlogPreviewModal({ open, onClose, article, title, client
                       : <div className="text-[10px] text-gray-300">{busy ? 'generating…' : 'image'}</div>}
                   </div>
                 )}
-                {s.body.map((p, j) => <RichText key={j} text={p} />)}
+                {s.body.map((b, j) => <Block key={j} lines={b} />)}
               </section>
             ))}
 
