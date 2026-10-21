@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useClients } from '../hooks/useClients';
 import * as dfs from '../lib/dataForSeo';
 import toast from 'react-hot-toast';
+import { normalisePageUrl } from '../lib/bucketSync';
 
 const CATEGORIES = [
   { id: 'general', label: 'General Pages', icon: '🏠' },
@@ -101,7 +102,7 @@ export default function ClientBucketList() {
     Promise.all([
       supabase.from('client_pages').select('*').eq('client_name', selectedClient).order('updated_at', { ascending: false }),
       selectedClientId
-        ? supabase.from('reports').select('id, url, focus_keyphrase, checklist_state').eq('client_id', selectedClientId)
+        ? supabase.from('reports').select('id, url, focus_keyphrase, checklist_state, updated_at').eq('client_id', selectedClientId).order('updated_at', { ascending: false })
         : Promise.resolve({ data: [] }),
       supabase.from('client_brand_voice').select('services').eq('client_name', selectedClient).single(),
       supabase.from('site_health').select('url, mobile_performance, mobile_accessibility, mobile_seo').eq('client_name', selectedClient),
@@ -116,18 +117,22 @@ export default function ClientBucketList() {
   }, [selectedClient, selectedClientId]);
 
   // Match SEO score from reports by URL
+  // (same page regardless of http/https, www or trailing slash; newest report wins)
+  const reportForUrl = (url) => {
+    const key = normalisePageUrl(url);
+    if (!key) return null;
+    return reports.find(r => normalisePageUrl(r.url) === key) || null;
+  };
+
   const scoreForUrl = (url) => {
     if (!url) return null;
-    const clean = url.toLowerCase().trim().replace(/\/$/, '');
-    const match = reports.find(r => (r.url || '').toLowerCase().trim().replace(/\/$/, '') === clean);
+    const match = reportForUrl(url);
     return match ? scoreFromChecklist(match.checklist_state) : null;
   };
 
   const reportIdForUrl = (url) => {
     if (!url) return null;
-    const clean = url.toLowerCase().trim().replace(/\/$/, '');
-    const match = reports.find(r => (r.url || '').toLowerCase().trim().replace(/\/$/, '') === clean);
-    return match?.id || null;
+    return reportForUrl(url)?.id || null;
   };
 
   const healthForUrl = (url) => {
@@ -366,7 +371,7 @@ export default function ClientBucketList() {
             <Link to="/seo-tools" className="text-[10px] text-gray-400 hover:text-[#F5C518] no-underline">← SEO Tools</Link>
             <h1 className="text-lg font-bold text-[#1a1a1a] leading-tight mt-1">📋 Client Bucket List</h1>
             <p className="text-[11px] text-gray-400">
-              Track every page + keyword per client. Syncs with cannibalization checker + SEO Checker scores.
+              Track every page + keyword per client. Saving a report in the SEO Checker updates this list automatically.
             </p>
           </div>
           <div className="flex items-center gap-2">

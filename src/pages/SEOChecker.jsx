@@ -9,6 +9,9 @@ import { useClients } from '../hooks/useClients';
 import { useReport } from '../hooks/useReport';
 import { useAnalysis } from '../hooks/useAnalysis';
 import { MONTHS } from '../data/checklist';
+import { supabase } from '../lib/supabase';
+import { syncReportToBucketList } from '../lib/bucketSync';
+import toast from 'react-hot-toast';
 
 export default function SEOChecker() {
   const { clients, addClient, deleteClient } = useClients();
@@ -118,6 +121,16 @@ export default function SEOChecker() {
 
   const handleSave = async (params) => {
     await saveReport(params);
+    // Keep the Client Bucket List in step so nobody has to update it by hand.
+    const clientName = clients.find((c) => c.id === params.clientId)?.name;
+    if (!fields.url?.trim() || !clientName) return;
+    try {
+      const { action } = await syncReportToBucketList(supabase, { clientId: params.clientId, clientName, fields });
+      if (action === 'created') toast.success(`Added to ${clientName}'s Bucket List`);
+      else if (action === 'updated') toast.success(`${clientName}'s Bucket List updated`);
+    } catch (err) {
+      toast.error('Report saved, but the Bucket List could not be updated: ' + err.message);
+    }
   };
 
   const handleAnalyze = async () => {
