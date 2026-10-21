@@ -13,8 +13,12 @@ function authHeader() {
   return 'Basic ' + btoa(`${LOGIN}:${PASSWORD}`);
 }
 
+// payload undefined = GET (e.g. /on_page/summary/{id})
 async function callEndpoint(path, payload) {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetch(`${BASE_URL}${path}`, payload === undefined ? {
+    method: 'GET',
+    headers: { 'Authorization': authHeader() },
+  } : {
     method: 'POST',
     headers: {
       'Authorization': authHeader(),
@@ -740,6 +744,11 @@ export async function getAiTopDomains(keyword, { platform = 'google', limit = 15
   }));
   await setCached(cacheKey, result);
   return result;
+}
+
+// Raw OnPage API access for the Site Auditor's full-site crawl (src/lib/siteAudit.js).
+export function onPageRequest(path, payload) {
+  return callEndpoint(path, payload);
 }
 
 export function isConfigured() {
