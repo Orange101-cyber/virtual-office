@@ -1,28 +1,47 @@
 /**
  * Fetch a live URL and extract SEO-relevant fields.
- * Tries multiple CORS proxies as fallbacks.
+ *
+ * 1. Our own Supabase Edge Function `fetch-page` (server-side, browser-like
+ *    headers, works with Cloudflare-protected client sites).
+ * 2. Fallback: allorigins.win public CORS proxy.
+ * (corsproxy.io now requires a paid key and codetabs no longer responds, so
+ * both were removed.)
  */
+import { supabase } from './supabase';
 
-const PROXIES = [
-  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-  (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-];
+const looksLikeChallenge = (html) => /<title>\s*(just a moment|attention required|access denied)/i.test(html.slice(0, 5000));
+
+async function fetchViaEdgeFunction(url) {
+  const { data, error } = await supabase.functions.invoke('fetch-page', { body: { url } });
+  if (error) {
+    // Pull the function's own message out of the error response when there is one
+    let msg = error.message;
+    try { msg = (await error.context?.json())?.error || msg; } catch { /* keep generic message */ }
+    throw new Error(msg);
+  }
+  if (!data?.html) throw new Error(data?.error || 'Empty response');
+  return data.html;
+}
+
+async function fetchViaPublicProxy(url) {
+  const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(20000) });
+  if (!res.ok) throw new Error(`proxy returned HTTP ${res.status}`);
+  const html = await res.text();
+  if (!html || html.length < 100 || looksLikeChallenge(html)) throw new Error('proxy was blocked by the site');
+  return html;
+}
 
 async function fetchWithProxy(url) {
-  for (let i = 0; i < PROXIES.length; i++) {
-    const proxyUrl = PROXIES[i](url);
-    try {
-      const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) });
-      if (res.ok) {
-        const html = await res.text();
-        if (html && html.length > 100) return html;
-      }
-    } catch {
-      // Try next proxy
-    }
-  }
-  throw new Error('Could not fetch URL. All proxies failed. Try pasting the content manually.');
+  let firstError;
+  try {
+    const html = await fetchViaEdgeFunction(url);
+    if (!looksLikeChallenge(html)) return html;
+    firstError = new Error("the site's bot protection blocked the request");
+  } catch (e) { firstError = e; }
+  try {
+    return await fetchViaPublicProxy(url);
+  } catch { /* report the main error below */ }
+  throw new Error(`Could not fetch the page: ${firstError?.message || 'unknown error'}. Check the URL opens in your browser, or paste the content manually.`);
 }
 
 export async function fetchUrlContent(url) {
