@@ -55,7 +55,7 @@ function downloadCsv(filename, headers, rows) {
 async function callClaude(system, userText) {
   if (!ANTHROPIC_KEY) throw new Error('Anthropic API key not configured (VITE_ANTHROPIC_API_KEY)');
   const body = JSON.stringify({
-    model: 'claude-sonnet-4-5', max_tokens: 1500, temperature: 0, system,
+    model: 'claude-sonnet-5-5', output_config: { effort: 'low' }, fallbacks: 'default', max_tokens: 3000, system,
     messages: [{ role: 'user', content: userText }],
   });
   const RETRY = [429, 500, 502, 503, 529];
@@ -64,7 +64,7 @@ async function callClaude(system, userText) {
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+        headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01', 'anthropic-dangerous-direct-browser-access': 'true' },
         body,
       });
       if (res.ok) { const j = await res.json(); return j.content?.filter(b => b.type === 'text').map(b => b.text).join('\n') || ''; }

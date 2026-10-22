@@ -201,12 +201,12 @@ export default function BriefGenerator() {
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
+          'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01',
           'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-5',
-          max_tokens: 2500,
+          model: 'claude-sonnet-5-5', output_config: { effort: 'medium' }, fallbacks: 'default',
+          max_tokens: 5000,
           system: 'You are an SEO content strategist. Return ONLY valid JSON with no markdown fences.',
           messages: [{ role: 'user', content: BRIEF_PROMPT({ ...form, styleSamples, serpData, clientContextText }) }],
         }),
@@ -214,7 +214,7 @@ export default function BriefGenerator() {
 
       if (!res.ok) throw new Error(`API error ${res.status}`);
       const msg = await res.json();
-      let rawText = msg.content[0].text;
+      let rawText = (msg.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
       rawText = rawText.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
       const parsed = JSON.parse(rawText);
       setBrief(parsed);
@@ -337,19 +337,19 @@ RULES:
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
+          'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01',
           'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-5',
-          max_tokens: 4096,
+          model: 'claude-sonnet-5-5', output_config: { effort: 'medium' }, fallbacks: 'default',
+          max_tokens: 10000,
           messages: [{ role: 'user', content: draftPrompt }],
         }),
       });
 
       if (!res.ok) throw new Error(`API error ${res.status}`);
       const msg = await res.json();
-      setDraftArticle(msg.content[0].text);
+      setDraftArticle((msg.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n'));
       toast.success('Draft article generated!');
     } catch (err) {
       toast.error('Error generating draft: ' + err.message);

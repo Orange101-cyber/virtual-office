@@ -337,12 +337,12 @@ export default function KeywordResearch() {
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
+          'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01',
           'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-5',
-          max_tokens: 3000,
+          model: 'claude-sonnet-5-5', output_config: { effort: 'medium' }, fallbacks: 'default',
+          max_tokens: 5000,
           system: 'You are an SEO keyword research analyst. Return ONLY valid JSON, no markdown fences.',
           messages: [{ role: 'user', content: prompt }],
         }),
@@ -569,17 +569,17 @@ Return ONLY valid JSON:
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
+          'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01',
           'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-5',
-          max_tokens: 3000,
+          model: 'claude-sonnet-5-5', output_config: { effort: 'medium' }, fallbacks: 'default',
+          max_tokens: 5000,
           messages: [{ role: 'user', content: prompt }],
         }),
       });
       const msg = await res.json();
-      let text = msg.content?.[0]?.text || '';
+      let text = (msg.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
       text = text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
       const plan = JSON.parse(text);
 
@@ -635,12 +635,12 @@ Return ONLY valid JSON:
             headers: {
               'Content-Type': 'application/json',
               'x-api-key': apiKey,
-              'anthropic-version': '2023-06-01',
+              'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01',
               'anthropic-dangerous-direct-browser-access': 'true',
             },
             body: JSON.stringify({
-              model: 'claude-sonnet-4-5',
-              max_tokens: 1500,
+              model: 'claude-sonnet-5-5', output_config: { effort: 'low' }, fallbacks: 'default',
+              max_tokens: 3000,
               messages: [{ role: 'user', content: `Name each keyword cluster (2-5 words) and suggest one page/article title for an Australian audience. Do not change the clusters.
 
 ${built.map((c, i) => `${i + 1}. primary "${c.primary_keyword}" · ${c.page_type} · also: ${c.secondary_keywords.slice(0, 6).join(', ') || '—'}`).join('\n')}

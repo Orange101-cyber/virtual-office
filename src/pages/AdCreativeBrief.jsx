@@ -113,17 +113,17 @@ Return ONLY valid JSON:
         method: 'POST',
         headers: {
           'Content-Type': 'application/json', 'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true',
+          'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01', 'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-5', max_tokens: 2500,
+          model: 'claude-sonnet-5-5', output_config: { effort: 'medium' }, fallbacks: 'default', max_tokens: 5000,
           system: 'You are a creative director. Return ONLY valid JSON, no markdown fences.',
           messages: [{ role: 'user', content: prompt }],
         }),
       });
       if (!res.ok) throw new Error(`API error ${res.status}`);
       const msg = await res.json();
-      let raw = msg.content[0].text;
+      let raw = (msg.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
       raw = raw.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
       setBrief(JSON.parse(raw));
       toast.success('Creative brief generated!');

@@ -409,8 +409,8 @@ export default function SEOChat() {
     if (!ANTHROPIC_KEY) throw new Error('Anthropic API key not configured — ask your admin to set VITE_ANTHROPIC_API_KEY in Netlify environment variables');
 
     const body = JSON.stringify({
-      model: 'claude-sonnet-4-5',
-      max_tokens: 2000,
+      model: 'claude-sonnet-5-5', output_config: { effort: 'medium' }, fallbacks: 'default',
+      max_tokens: 4000,
       system: SYSTEM_PROMPT(clientContext),
       tools: dfs.isConfigured() ? TOOLS : [],
       messages: apiMessages,
@@ -431,7 +431,7 @@ export default function SEOChat() {
           headers: {
             'Content-Type': 'application/json',
             'x-api-key': ANTHROPIC_KEY,
-            'anthropic-version': '2023-06-01',
+            'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01',
             'anthropic-dangerous-direct-browser-access': 'true',
           },
           body,

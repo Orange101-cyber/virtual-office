@@ -53,9 +53,9 @@ const today = () => new Date().toISOString().slice(0, 10);
 async function askClaude(client, site, stats, issues) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01' },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-5', max_tokens: 1500, temperature: 0, system: AI_SYSTEM(CURRENT_PRIORITIES),
+      model: 'claude-sonnet-5-5', output_config: { effort: 'low' }, fallbacks: 'default', max_tokens: 3000, system: AI_SYSTEM(CURRENT_PRIORITIES),
       messages: [{ role: 'user', content: `Site: ${site}\nClient: ${client}\nPages crawled: ${stats.pages_crawled} (${stats.html_pages} live HTML pages)\n\nVerified findings (JSON):\n${JSON.stringify(issuesForPrompt(issues), null, 2)}` }],
     }),
   });

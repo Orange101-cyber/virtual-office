@@ -82,12 +82,12 @@ export async function fixSeoIssues({ fields, failedItemIds, clientContextText })
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
+      'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01',
       'anthropic-dangerous-direct-browser-access': 'true',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-5',
-      max_tokens: 8192,
+      model: 'claude-sonnet-5-5', output_config: { effort: 'medium' }, fallbacks: 'default',
+      max_tokens: 16000,
       system: 'You are an SEO editor. Return ONLY valid JSON, no markdown fences.',
       messages: [{ role: 'user', content: prompt }],
     }),
@@ -99,7 +99,7 @@ export async function fixSeoIssues({ fields, failedItemIds, clientContextText })
   }
 
   const msg = await res.json();
-  let raw = msg.content[0].text;
+  let raw = (msg.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
   raw = raw.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
   return JSON.parse(raw);
 }
@@ -161,12 +161,12 @@ Or if it cannot be auto-fixed:
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
+      'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01',
       'anthropic-dangerous-direct-browser-access': 'true',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-5',
-      max_tokens: 8192,
+      model: 'claude-sonnet-5-5', output_config: { effort: 'medium' }, fallbacks: 'default',
+      max_tokens: 16000,
       system: 'You are an SEO editor. Return ONLY valid JSON, no markdown fences.',
       messages: [{ role: 'user', content: prompt }],
     }),
@@ -178,7 +178,7 @@ Or if it cannot be auto-fixed:
   }
 
   const msg = await res.json();
-  let raw = msg.content[0].text;
+  let raw = (msg.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
   raw = raw.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
   return JSON.parse(raw);
 }

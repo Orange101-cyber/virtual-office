@@ -145,10 +145,10 @@ Return ONLY valid JSON with this exact structure:
 
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01', 'anthropic-dangerous-direct-browser-access': 'true' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-5',
-          max_tokens: 1500,
+          model: 'claude-sonnet-5-5', output_config: { effort: 'medium' }, fallbacks: 'default',
+          max_tokens: 4000,
           system: 'You are a business analyst. Return ONLY valid JSON, no markdown fences. Only use information from the provided website content — never make up or guess details.',
           messages: [{ role: 'user', content: prompt }],
         }),
@@ -156,7 +156,7 @@ Return ONLY valid JSON with this exact structure:
       if (!res.ok) throw new Error(`API error ${res.status}`);
 
       const msg = await res.json();
-      let raw = msg.content[0].text;
+      let raw = (msg.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
       raw = raw.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
       const data = JSON.parse(raw);
 

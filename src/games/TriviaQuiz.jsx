@@ -25,16 +25,16 @@ export default function TriviaQuiz({ onComplete }) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json', 'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true',
+          'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01', 'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-5', max_tokens: 1500,
+          model: 'claude-sonnet-5-5', output_config: { effort: 'low' }, fallbacks: 'default', max_tokens: 3000,
           system: 'You are a trivia question generator. Return ONLY valid JSON, no markdown fences.',
           messages: [{ role: 'user', content: `Generate 10 trivia questions for the category: ${cat}.\nReturn a JSON array where each object has:\n- "question": string\n- "options": array of exactly 4 strings\n- "correct_index": number between 0 and 3\n- "explanation": string (one sentence max)` }],
         }),
       });
       const msg = await res.json();
-      let raw = msg.content[0].text;
+      let raw = (msg.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
       raw = raw.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
       setQuestions(JSON.parse(raw));
     } catch (err) {

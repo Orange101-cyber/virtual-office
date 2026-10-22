@@ -11,7 +11,7 @@ import BlogPreviewModal from '../components/BlogPreviewModal';
 
 const MAX_PARAGRAPH_WORDS = 70;
 
-async function callClaude(prompt, { maxTokens = 8192, system } = {}) {
+async function callClaude(prompt, { maxTokens = 16000, effort = 'medium', system } = {}) {
   const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('API key not set');
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -19,12 +19,14 @@ async function callClaude(prompt, { maxTokens = 8192, system } = {}) {
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
+      'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01',
       'anthropic-dangerous-direct-browser-access': 'true',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-5',
+      model: 'claude-sonnet-5-5',
       max_tokens: maxTokens,
+      output_config: { effort },
+      fallbacks: 'default',
       ...(system ? { system } : {}),
       messages: [{ role: 'user', content: prompt }],
     }),
@@ -174,7 +176,7 @@ Rules:
 Return ONLY JSON: {"seo_title":"","meta_description":"","slug":""}
 
 ARTICLE:
-${text.slice(0, 12000)}`, { maxTokens: 400 });
+${text.slice(0, 12000)}`, { maxTokens: 2000, effort: 'low' });
     const j = JSON.parse(raw.replace(/```json|```/g, '').trim());
     return { seoTitle: (j.seo_title || '').trim(), metaDescription: (j.meta_description || '').trim(), slug: toSlug(j.slug || '') };
   };

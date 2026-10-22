@@ -128,18 +128,18 @@ Return ONLY valid JSON:
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': ANTHROPIC_KEY,
-          'anthropic-version': '2023-06-01',
+          'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01',
           'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-5',
-          max_tokens: 1500,
+          model: 'claude-sonnet-5-5', output_config: { effort: 'low' }, fallbacks: 'default',
+          max_tokens: 3000,
           messages: [{ role: 'user', content: prompt }],
         }),
       });
 
       const data = await res.json();
-      const text = data.content?.[0]?.text || '';
+      const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);

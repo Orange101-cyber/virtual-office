@@ -32,13 +32,12 @@ export async function analyzeArticle({ content, focusKw, secKws, url, title, met
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
+        'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01',
         'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 4096,
-        temperature: 0,
+        model: 'claude-sonnet-5-5', output_config: { effort: 'low' }, fallbacks: 'default',
+        max_tokens: 6000,
         system: 'You are an SEO audit assistant. Return ONLY valid JSON with no markdown fences.',
         messages: [{ role: 'user', content: SEO_PROMPT_TEMPLATE(content, focusKw, secKws, url, title, meta) }],
       }),
