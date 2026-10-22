@@ -1,8 +1,27 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useClients } from '../hooks/useClients';
 import * as dfs from '../lib/dataForSeo';
+import { resolveClientSite } from '../lib/siteAudit';
+import {
+  variantKey, dedupeKeywords, buildContext, annotateKeyword, scoreKeyword, explainScore,
+  quickWinReasons, isQuickWin, recommendActions, matchPage, indexGsc, gscTrend, expectedCtr,
+  clusterKeywords, describeCluster, detectCannibalisation,
+} from '../lib/keywordInsights';
 import toast from 'react-hot-toast';
+
+// "Missing" must stay missing: DataForSEO returns no difficulty for some
+// keywords, and older cached rows stored that as 0.
+const cleanKd = (k) => (k.kd_known === false || (k.kd === 0 && k.kd_known === undefined) ? null : k.kd ?? null);
+const fmtCompetition = (c, level) => {
+  if (level) return level.charAt(0) + level.slice(1).toLowerCase();
+  if (typeof c === 'string' && c) return c.charAt(0) + c.slice(1).toLowerCase();
+  if (typeof c === 'number' && c > 0) return c < 0.34 ? 'Low' : c < 0.67 ? 'Medium' : 'High';
+  return null;
+};
+const SCORE_COLOR = { 'Very High': 'bg-green-100 text-green-700', High: 'bg-green-50 text-green-600', Medium: 'bg-orange-50 text-orange-600', Low: 'bg-gray-100 text-gray-500', 'Very Low': 'bg-gray-50 text-gray-400' };
+const SEVERITY_COLOR = { High: 'bg-red-100 text-red-700', Medium: 'bg-orange-100 text-orange-700', Low: 'bg-gray-100 text-gray-500', 'Insufficient Data': 'bg-gray-50 text-gray-400 border border-gray-200' };
 
 const SORT_PROMPT = ({ client, niche, seedTopic, contentGoal, preference, keywords, pastKeywords, plannedKeywords }) => `You are an SEO keyword research analyst for an Australian digital marketing agency.
 
@@ -22,10 +41,11 @@ ${plannedKeywords?.length ? `ALREADY PLANNED KEYWORDS (skip these — already in
 ${plannedKeywords.join(', ')}
 ` : ''}
 
-REAL KEYWORDS WITH DATA (sorted by search volume):
-${keywords.slice(0, 100).map(k => `- "${k.keyword}" (SV: ${k.search_volume}, KD: ${k.kd}, CPC: $${k.cpc?.toFixed(2) || 0})`).join('\n')}
+REAL KEYWORDS WITH DATA (relevance-weighted shortlist; intent is from DataForSEO where available):
+${keywords.slice(0, 100).map(k => `- "${k.keyword}" (SV: ${k.search_volume ?? 'n/a'}, KD: ${k.kd ?? 'n/a'}, CPC: $${Number(k.cpc || 0).toFixed(2)}, intent: ${k.intent}${k.is_question ? ', question' : ''}${k.local_terms?.length ? `, local: ${k.local_terms.join('/')}` : ''}, relevance: ${k.relevance})`).join('\n')}
 
 Return ONLY valid JSON with this exact structure. Pick the 15-20 best keywords considering relevance to the client niche, search volume, keyword difficulty, and the preference setting (${preference}). Exclude keywords that are already planned or too similar to past keywords (unless useful as refresh candidates).
+Aim for a useful mix: commercial/local keywords suited to service pages, question and long-tail keywords suited to blogs (weighted by the content goal: ${contentGoal}). Never pick two variants of the same keyword. Keep the intent given in the list.
 
 CRITICAL: You MUST only pick keywords from the REAL KEYWORDS list above. Do NOT invent or suggest keywords that are not in the list — they will be filtered out. Every keyword must have real search volume > 0.
 
@@ -134,6 +154,19 @@ export default function KeywordResearch() {
   const [competitorKeywords, setCompetitorKeywords] = useState(null);
   const [loadingCompetitor, setLoadingCompetitor] = useState(false);
   const [brandVoice, setBrandVoice] = useState(null);
+  // Per-client signals used for scoring, quick wins and cannibalisation
+  const [clientPages, setClientPages] = useState([]);
+  const [gsc, setGsc] = useState({ queries: [], pages: [], prevQueries: [], importedOn: null, prevOn: null });
+  const [clientSite, setClientSite] = useState('');
+  const [ranked, setRanked] = useState({ status: 'idle', rows: null, error: '' });
+  const rankedFor = useRef('');
+  const [view, setView] = useState({ sort: 'score', intent: 'all', questions: false, local: false, quickWins: false });
+  const [showAllIssues, setShowAllIssues] = useState(false);
+  const [clusterSel, setClusterSel] = useState(null);   // { cluster: index, keyword }
+  const kwCtx = useMemo(() => buildContext({
+    seedTopic: form.seedTopic, niche: form.niche, services: brandVoice?.services,
+    locations: brandVoice?.locations_served, contentGoal: form.contentGoal,
+  }), [form.seedTopic, form.niche, form.contentGoal, brandVoice]);
 
   useEffect(() => {
     const fromDb = dbClients.map(c => c.name);
@@ -164,6 +197,56 @@ export default function KeywordResearch() {
         .catch(() => setBrandVoice(null));
     }
   }, [form.client]);
+
+  // Load the client's pages, Search Console imports and website (once per client).
+  useEffect(() => {
+    let cancelled = false;
+    setClientPages([]); setGsc({ queries: [], pages: [], prevQueries: [], importedOn: null, prevOn: null });
+    setClientSite(''); setRanked({ status: 'idle', rows: null, error: '' }); rankedFor.current = '';
+    if (!form.client) return;
+    (async () => {
+      const [pagesRes, gscRes, bvRes, rtRes, auditRes] = await Promise.all([
+        supabase.from('client_pages').select('url, title, focus_keyword, new_focus_keyword, page_category').eq('client_name', form.client),
+        supabase.from('gsc_metrics').select('kind, term, clicks, impressions, ctr, position, imported_on').eq('client_name', form.client),
+        supabase.from('client_brand_voice').select('website_url').eq('client_name', form.client),
+        supabase.from('rank_tracker_keywords').select('target_domain').eq('client_name', form.client).limit(200),
+        supabase.from('site_audits').select('url').eq('client_name', form.client).order('audited_on', { ascending: false }).limit(1),
+      ]);
+      if (cancelled) return;
+      const pages = pagesRes.data || [];
+      setClientPages(pages);
+      // GSC: latest import of each kind, plus the previous query import for trends
+      // Skip junk rows (e.g. a Filters.csv imported by mistake has no impressions)
+      const rows = (gscRes.data || []).filter(r => r.term && (r.impressions > 0 || r.clicks > 0));
+      const dates = (kind) => [...new Set(rows.filter(r => r.kind === kind).map(r => r.imported_on))].sort().reverse();
+      const [qLatest, qPrev] = dates('query');
+      const [pLatest] = dates('page');
+      setGsc({
+        queries: rows.filter(r => r.kind === 'query' && r.imported_on === qLatest),
+        prevQueries: qPrev ? rows.filter(r => r.kind === 'query' && r.imported_on === qPrev) : [],
+        pages: rows.filter(r => r.kind === 'page' && r.imported_on === pLatest),
+        importedOn: qLatest || pLatest || null, prevOn: qPrev || null,
+      });
+      setClientSite(resolveClientSite({
+        lastAuditUrl: auditRes.data?.[0]?.url,
+        brandVoiceUrls: (bvRes.data || []).map(r => r.website_url),
+        rankDomains: (rtRes.data || []).map(r => r.target_domain),
+        pageUrls: pages.map(p => p.url),
+      }));
+    })().catch(() => {});
+    return () => { cancelled = true; };
+  }, [form.client]);
+
+  // Which URLs of the client's site rank for which keywords (DataForSEO, cached
+  // 7 days) — fetched once per client, only after there are results to analyse.
+  useEffect(() => {
+    if (!results?.keywords?.length || !clientSite || !dfs.isConfigured() || rankedFor.current === clientSite) return;
+    rankedFor.current = clientSite;
+    setRanked({ status: 'loading', rows: null, error: '' });
+    dfs.getRankedKeywordsForDomain(clientSite.replace(/^https?:\/\/(www\.)?/, ''), 1000)
+      .then(rows => setRanked({ status: 'ok', rows, error: '' }))
+      .catch(err => setRanked({ status: 'error', rows: null, error: err.message }));
+  }, [results, clientSite]);
 
   const [genStep, setGenStep] = useState('');
 
@@ -197,36 +280,41 @@ export default function KeywordResearch() {
         .map(p => p.focus_keyword?.toLowerCase().trim())
         .filter(Boolean);
 
-      // ── STEP 3: Pull real keywords from DataForSEO (3 sources) ──
+      // ── STEP 3: Pull real keywords from DataForSEO (3 sources + questions + local) ──
       setGenStep('Fetching real keywords from DataForSEO...');
-      const [related, suggestions, ideas] = await Promise.all([
+      const seedLower = form.seedTopic.toLowerCase();
+      const localSeed = (brandVoice?.locations_served || '').split(/\n|,|;/).map(s => s.trim()).filter(Boolean)
+        .find(l => !seedLower.includes(l.toLowerCase()));
+      const [related, suggestions, ideas, questions, localKws] = await Promise.all([
         dfs.getRelatedKeywords(form.seedTopic, 50).catch(() => []),
         dfs.getKeywordSuggestions(form.seedTopic, 50).catch(() => []),
         dfs.getKeywordIdeas([form.seedTopic, form.niche], 50).catch(() => []),
+        dfs.getQuestionKeywords(form.seedTopic, 40).catch(() => []),
+        localSeed ? dfs.getKeywordSuggestions(`${form.seedTopic} ${localSeed}`, 30).then(r => r.map(k => ({ ...k, source: 'local' }))).catch(() => []) : Promise.resolve([]),
       ]);
 
-      // ── STEP 4: Merge, dedupe, filter ──
+      // ── STEP 4: Merge variants, drop planned, classify ──
       setGenStep('Filtering and deduping...');
-      const allKeywordsMap = new Map();
-      [...related, ...suggestions, ...ideas].forEach(kw => {
-        if (!kw.keyword) return;
-        const key = kw.keyword.toLowerCase().trim();
-        const existing = allKeywordsMap.get(key);
-        if (!existing || (kw.search_volume > existing.search_volume)) {
-          allKeywordsMap.set(key, kw);
-        }
-      });
+      const ctx = buildContext({ seedTopic: form.seedTopic, niche: form.niche, services: brandVoice?.services, locations: brandVoice?.locations_served, contentGoal: form.contentGoal });
+      const raw = [...related, ...suggestions, ...ideas, ...questions, ...localKws].filter(kw => kw.keyword);
+      const merged = dedupeKeywords(raw.map(k => ({ ...k, kd: cleanKd(k) })));
+      const plannedKeys = new Set(plannedKeywords.map(variantKey));
+      let filtered = merged
+        .filter(kw => !plannedKeys.has(variantKey(kw.keyword)))
+        .map(kw => annotateKeyword(kw, ctx));
 
-      // Filter out already-planned keywords
-      const filtered = Array.from(allKeywordsMap.values())
-        .filter(kw => {
-          const lower = kw.keyword.toLowerCase();
-          // Skip if exact match in planned keywords
-          if (plannedKeywords.includes(lower)) return false;
-          return true;
-        })
-        // Sort by SV descending
-        .sort((a, b) => (b.search_volume || 0) - (a.search_volume || 0));
+      // Real search intent from DataForSEO for the shortlist (falls back to patterns)
+      const demand = (k) => (k.search_volume ? Math.min(1, Math.log10(k.search_volume + 1) / 3.7) : 0);
+      filtered.sort((a, b) => (b.relevance * 0.6 + demand(b) * 0.4) - (a.relevance * 0.6 + demand(a) * 0.4));
+      try {
+        const intents = await dfs.getSearchIntent(filtered.slice(0, 150).map(k => k.keyword));
+        const byKw = Object.fromEntries(intents.map(i => [i.keyword.toLowerCase(), i.main_intent]));
+        filtered = filtered.map(k => (byKw[k.keyword.toLowerCase()] ? annotateKeyword(k, ctx, byKw[k.keyword.toLowerCase()]) : k));
+      } catch { /* intent stays pattern-based */ }
+
+      // Shortlist for the AI: relevance-weighted, with room for questions and local terms
+      const quota = (pred, n) => filtered.filter(pred).slice(0, n);
+      const shortlist = [...new Set([...filtered.slice(0, 70), ...quota(k => k.is_question, 15), ...quota(k => k.local_terms.length, 15)])];
 
       if (filtered.length === 0) {
         toast.error('No keywords found. Try a different seed topic.');
@@ -239,7 +327,7 @@ export default function KeywordResearch() {
       setGenStep(`Analysing ${filtered.length} keywords with AI...`);
       const prompt = SORT_PROMPT({
         ...form,
-        keywords: filtered,
+        keywords: shortlist,
         pastKeywords,
         plannedKeywords,
       });
@@ -262,23 +350,25 @@ export default function KeywordResearch() {
 
       if (!res.ok) throw new Error(`Claude API error ${res.status}`);
       const msg = await res.json();
-      let rawText = msg.content[0].text;
-      rawText = rawText.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
-      const parsed = JSON.parse(rawText);
+      const rawText = (msg.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').replace(/```(?:json)?/gi, '');
+      const parsed = JSON.parse(rawText.slice(rawText.indexOf('{'), rawText.lastIndexOf('}') + 1));
 
       // Enrich the Claude results with the real metrics we already have
       setGenStep('Validating keywords with real metrics...');
       const metricsMap = {};
       filtered.forEach(k => { metricsMap[k.keyword.toLowerCase()] = k; });
-      let enriched = (parsed.keywords || []).map(k => {
+      const seen = new Set();
+      let enriched = (parsed.keywords || []).filter(k => {
+        // AI occasionally picks two variants of one keyword — keep the first
+        const key = variantKey(k.keyword || '');
+        if (!key || seen.has(key)) return false;
+        seen.add(key); return true;
+      }).map(k => {
         const m = metricsMap[k.keyword.toLowerCase()];
-        return m ? {
-          ...k,
-          search_volume: m.search_volume,
-          kd: m.kd,
-          cpc: m.cpc,
-          real_data: true,
-        } : k;
+        // Data-backed fields (metrics, intent, flags) come from DataForSEO;
+        // the AI contributes the title and the reason.
+        return m ? { ...m, ...k, intent: m.intent, intent_source: m.intent_source, search_volume: m.search_volume, kd: m.kd, cpc: m.cpc, real_data: true }
+          : annotateKeyword(k, ctx);
       });
 
       // Validate any keywords Claude invented (not in our DataForSEO pool)
@@ -291,7 +381,7 @@ export default function KeywordResearch() {
           enriched = enriched.map(k => {
             if (k.real_data) return k;
             const m = extraMap[k.keyword.toLowerCase()];
-            return m ? { ...k, search_volume: m.search_volume, kd: m.kd, cpc: m.cpc, real_data: true } : k;
+            return m ? { ...k, search_volume: m.search_volume, kd: m.kd ?? null, cpc: m.cpc, competition: m.competition, real_data: true } : k;
           });
         } catch { /* non-critical */ }
       }
@@ -308,6 +398,11 @@ export default function KeywordResearch() {
           related: related.length,
           suggestions: suggestions.length,
           ideas: ideas.length,
+          questions: questions.length,
+          local: localKws.length,
+          local_seed: localSeed || null,
+          variants_merged: raw.length - merged.length,
+          intent_from_data: filtered.filter(k => k.intent_source === 'DataForSEO').length,
           total_unique: filtered.length,
           past_filtered: pastKeywords.length,
           planned_filtered: plannedKeywords.length,
@@ -346,7 +441,8 @@ export default function KeywordResearch() {
           ...k,
           search_volume: m.search_volume,
           cpc: m.cpc,
-          kd: m.kd,
+          kd: m.kd ?? null,
+          competition: m.competition,
           real_data: true,
         } : k;
       });
@@ -364,20 +460,24 @@ export default function KeywordResearch() {
     setExpanding(true);
     try {
       const related = await dfs.getRelatedKeywords(form.seedTopic, 30);
-      const newKeywords = related.map(r => ({
-        keyword: r.keyword,
-        intent: 'Informational',
-        content_type: 'Blog',
-        suggested_title: r.keyword.charAt(0).toUpperCase() + r.keyword.slice(1),
-        search_volume: r.search_volume,
-        cpc: r.cpc,
-        kd: r.kd,
-        real_data: true,
-      }));
+      const newKeywords = related.map(r => {
+        const k = annotateKeyword({
+          keyword: r.keyword,
+          suggested_title: r.keyword.charAt(0).toUpperCase() + r.keyword.slice(1),
+          search_volume: r.search_volume,
+          cpc: r.cpc,
+          kd: cleanKd(r),
+          competition: r.competition,
+          competition_level: r.competition_level,
+          real_data: true,
+        }, kwCtx);
+        return { ...k, content_type: k.intent === 'Commercial' || k.intent === 'Transactional' ? 'SEO Page' : 'Blog' };
+      });
       const existing = results?.keywords || [];
-      const existingKws = new Set(existing.map(k => k.keyword.toLowerCase()));
-      const unique = newKeywords.filter(k => !existingKws.has(k.keyword.toLowerCase()));
+      const existingKws = new Set(existing.map(k => variantKey(k.keyword)));
+      const unique = dedupeKeywords(newKeywords).filter(k => !existingKws.has(variantKey(k.keyword)));
       setResults({
+        ...results,
         keywords: [...existing, ...unique],
         quick_wins: results?.quick_wins || [],
         cannibalization_risks: results?.cannibalization_risks || '',
@@ -506,61 +606,89 @@ Return ONLY valid JSON:
   };
 
   // ── Keyword Clustering ──
+  // Membership is decided by code (topic words + intent, and Google SERP
+  // overlap when available) so the same keywords always cluster the same way;
+  // the AI only names the clusters and suggests titles.
   const handleCluster = async () => {
     if (!results?.keywords?.length) return toast.error('Run a research first');
-    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-    if (!apiKey) return toast.error('Anthropic API key not set');
-
     setClustering(true);
     setClusters(null);
+    setClusterSel(null);
     try {
-      const kwList = results.keywords.map(k =>
-        `"${k.keyword}" (SV:${k.search_volume || 0}, KD:${k.kd || 0})`
-      ).join('\n');
+      const kws = annotated;
+      const serps = {};
+      if (dfs.isConfigured()) {
+        const top = [...kws].sort((a, b) => (b.search_volume || 0) - (a.search_volume || 0)).slice(0, 25);
+        for (let i = 0; i < top.length; i += 5) {
+          await Promise.all(top.slice(i, i + 5).map(k => dfs.getSerpResults(k.keyword)
+            .then(r => { if (r?.items?.length) serps[k.keyword.toLowerCase()] = r.items.map(x => x.url); })
+            .catch(() => {})));
+        }
+      }
+      let built = clusterKeywords(kws, { serps, pages: clientPages }).map(c => ({ ...c, serp_checked: c.keywords.filter(k => serps[k.toLowerCase()]).length }));
 
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-5',
-          max_tokens: 2000,
-          messages: [{ role: 'user', content: `Group these keywords into topic clusters. Each cluster should represent one article/page theme. Pick the best primary keyword for each cluster.
+      const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+      if (apiKey) {
+        try {
+          const res = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': apiKey,
+              'anthropic-version': '2023-06-01',
+              'anthropic-dangerous-direct-browser-access': 'true',
+            },
+            body: JSON.stringify({
+              model: 'claude-sonnet-4-5',
+              max_tokens: 1500,
+              messages: [{ role: 'user', content: `Name each keyword cluster (2-5 words) and suggest one page/article title for an Australian audience. Do not change the clusters.
 
-KEYWORDS:
-${kwList}
+${built.map((c, i) => `${i + 1}. primary "${c.primary_keyword}" · ${c.page_type} · also: ${c.secondary_keywords.slice(0, 6).join(', ') || '—'}`).join('\n')}
 
-Return ONLY valid JSON:
-{
-  "clusters": [
-    {
-      "name": "Topic Cluster Name",
-      "primary_keyword": "best keyword for this cluster",
-      "keywords": ["kw1", "kw2", "kw3"],
-      "total_sv": 1234,
-      "avg_kd": 25,
-      "suggested_title": "Article title suggestion",
-      "intent": "Informational | Commercial | Transactional"
-    }
-  ]
-}` }],
-        }),
-      });
-      const msg = await res.json();
-      let text = msg.content?.[0]?.text || '';
-      text = text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
-      const parsed = JSON.parse(text);
-      setClusters(parsed.clusters || []);
-      toast.success(`Grouped into ${(parsed.clusters || []).length} clusters`);
+Return ONLY JSON: {"clusters":[{"n":1,"name":"","title":""}]}` }],
+            }),
+          });
+          if (res.ok) {
+            const msg = await res.json();
+            const text = (msg.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').replace(/```(?:json)?/gi, '');
+            const named = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)).clusters || [];
+            built = built.map((c, i) => {
+              const n = named.find(x => Number(x.n) === i + 1);
+              return n ? { ...c, name: n.name || c.name, suggested_title: n.title || null } : c;
+            });
+          }
+        } catch { /* names fall back to the primary keyword */ }
+      }
+      setClusters(built);
+      const checked = Object.keys(serps).length;
+      toast.success(`Grouped into ${built.length} clusters${checked ? ` (SERP overlap checked for ${checked} keywords)` : ''}`);
     } catch (err) {
       toast.error('Clustering error: ' + err.message);
     }
     setClustering(false);
   };
+
+  // Manual adjustments: move a keyword to another (or a new) cluster, or make it primary.
+  const editClusters = (fn) => {
+    const byKw = new Map(annotated.map(k => [k.keyword, k]));
+    setClusters(prev => {
+      const next = fn(prev.map(c => ({ ...c, keywords: [...c.keywords] }))).filter(c => c.keywords.length);
+      return next.map(c => {
+        const members = c.keywords.map(k => byKw.get(k)).filter(Boolean);
+        const primary = c.keywords.includes(c.primary_keyword) ? c.primary_keyword : members.sort((a, b) => (b.search_volume || 0) - (a.search_volume || 0))[0]?.keyword;
+        return { ...describeCluster(primary, members, clientPages, { name: c.name, suggested_title: c.suggested_title }), serp_checked: c.serp_checked, edited: c.edited };
+      });
+    });
+    setClusterSel(null);
+  };
+  const moveKeyword = (from, kw, to) => editClusters(cs => {
+    cs[from].keywords = cs[from].keywords.filter(k => k !== kw);
+    cs[from].edited = true;
+    if (to === 'new') cs.push({ name: kw.replace(/\b\w/g, c => c.toUpperCase()), primary_keyword: kw, keywords: [kw], edited: true });
+    else { cs[to].keywords.push(kw); cs[to].edited = true; }
+    return cs;
+  });
+  const makePrimary = (ci, kw) => editClusters(cs => { cs[ci].primary_keyword = kw; cs[ci].edited = true; return cs; });
 
   // ── Competitor Gap Finder ──
   const handleCompetitorGap = async () => {
@@ -611,6 +739,73 @@ Return ONLY valid JSON:
 
   // Competitor list from brand voice
   const brandCompetitors = (brandVoice?.competitors || '').split('\n').map(c => c.trim()).filter(Boolean);
+
+  // ── Derived keyword analysis (recomputed from stored results, so older
+  //    saved sessions get scores too) ──
+  const gscLoaded = gsc.queries.length > 0;
+  const rankLoaded = ranked.status === 'ok';
+  const gscIdx = useMemo(() => indexGsc(gsc.queries), [gsc.queries]);
+  const gscPrevIdx = useMemo(() => indexGsc(gsc.prevQueries), [gsc.prevQueries]);
+  const rankIdx = useMemo(() => {
+    const m = new Map();
+    for (const r of ranked.rows || []) {
+      const k = variantKey(r.keyword);
+      if (!m.has(k) || (r.rank ?? 999) < (m.get(k).rank ?? 999)) m.set(k, r);
+    }
+    return m;
+  }, [ranked.rows]);
+  const annotated = useMemo(() => (results?.keywords || []).map(k =>
+    (k.relevance != null ? { ...k, kd: k.kd ?? null } : annotateKeyword({ ...k, kd: cleanKd(k) }, kwCtx))), [results, kwCtx]);
+  const issues = useMemo(() => (annotated.length
+    ? detectCannibalisation({ keywords: annotated, pages: clientPages, ranked: rankLoaded ? ranked.rows : null, gscPages: gsc.pages })
+    : []), [annotated, clientPages, rankLoaded, ranked.rows, gsc.pages]);
+  const issueByKey = useMemo(() => {
+    const m = new Map();
+    for (const i of issues) for (const kw of [i.keyword, ...i.related_keywords]) if (!m.has(variantKey(kw))) m.set(variantKey(kw), i);
+    return m;
+  }, [issues]);
+  const rows = useMemo(() => annotated.map(k => {
+    const key = variantKey(k.keyword);
+    const g = gscIdx.get(key) || null;
+    const trend = g ? gscTrend(g, gscPrevIdx.get(key)) : null;
+    const r = rankIdx.get(key) || null;
+    const page = matchPage(k.keyword, clientPages)?.page || null;
+    const cannibal = issueByKey.get(key) || null;
+    const score = scoreKeyword(k, kwCtx, { gsc: g, gscLoaded, rank: r?.rank ?? null, rankLoaded });
+    const reasons = quickWinReasons(k, { gsc: g, trend, rank: r?.rank ?? null, page });
+    return {
+      ...k, _gsc: g, _trend: trend, _rank: r?.rank ?? null, _rankUrl: r?.url || null, _page: page, _cannibal: cannibal,
+      _score: score, _reasons: reasons, _quickWin: isQuickWin(reasons),
+      _actions: recommendActions(k, { gsc: g, rank: r?.rank ?? null, page, trend, cannibal }),
+    };
+  }), [annotated, gscIdx, gscPrevIdx, rankIdx, clientPages, issueByKey, kwCtx, gscLoaded, rankLoaded]);
+  const visibleRows = useMemo(() => {
+    let r = rows;
+    if (view.intent !== 'all') r = r.filter(k => k.intent === view.intent);
+    if (view.questions) r = r.filter(k => k.is_question);
+    if (view.local) r = r.filter(k => k.local_terms?.length);
+    if (view.quickWins) r = r.filter(k => k._quickWin);
+    const by = {
+      score: k => k._score.score ?? -1, sv: k => k.search_volume ?? -1, kd: k => -(k.kd ?? 101),
+      cpc: k => k.cpc ?? -1, relevance: k => k.relevance ?? -1,
+    }[view.sort];
+    return by ? [...r].sort((a, b) => by(b) - by(a)) : r;
+  }, [rows, view]);
+  // Search Console queries that aren't in the research yet
+  const gscOpps = useMemo(() => {
+    if (!gscLoaded) return null;
+    const have = new Set(rows.map(r => variantKey(r.keyword)));
+    const q = gsc.queries.filter(x => !have.has(variantKey(x.term)));
+    const byImpr = (a, b) => (b.impressions || 0) - (a.impressions || 0);
+    return {
+      striking: q.filter(x => x.position >= 4 && x.position <= 20 && x.impressions >= 20).sort(byImpr).slice(0, 5),
+      lowCtr: q.filter(x => x.impressions >= 100 && x.position <= 20 && x.ctr < (expectedCtr(x.position) || 0) * 0.6).sort(byImpr).slice(0, 5),
+      declining: gsc.prevQueries.length
+        ? q.map(x => ({ ...x, trend: gscTrend(x, gscPrevIdx.get(variantKey(x.term))) })).filter(x => x.trend?.declining).sort(byImpr).slice(0, 5)
+        : [],
+    };
+  }, [gscLoaded, rows, gsc.queries, gsc.prevQueries, gscPrevIdx]);
+  const dataQuickWins = rows.filter(k => k._quickWin).sort((a, b) => (b._score.score ?? 0) - (a._score.score ?? 0)).slice(0, 8);
 
   const intentColors = {
     Informational: 'bg-blue-50 text-blue-600',
@@ -756,6 +951,10 @@ Return ONLY valid JSON:
                       <span>Related: <b>{results.data_sources.related}</b></span>
                       <span>Suggestions: <b>{results.data_sources.suggestions}</b></span>
                       <span>Ideas: <b>{results.data_sources.ideas}</b></span>
+                      {results.data_sources.questions > 0 && <span>Questions: <b>{results.data_sources.questions}</b></span>}
+                      {results.data_sources.local > 0 && <span>Local ({results.data_sources.local_seed}): <b>{results.data_sources.local}</b></span>}
+                      {results.data_sources.variants_merged > 0 && <span className="text-gray-500">Variants merged: <b>{results.data_sources.variants_merged}</b></span>}
+                      {results.data_sources.intent_from_data > 0 && <span className="text-gray-500">Intent from DataForSEO: <b>{results.data_sources.intent_from_data}</b></span>}
                       <span className="text-green-800">Total unique: <b>{results.data_sources.total_unique}</b></span>
                       {results.data_sources.past_filtered > 0 && (
                         <span className="text-gray-500">Past keywords checked: <b>{results.data_sources.past_filtered}</b></span>
@@ -795,8 +994,33 @@ Return ONLY valid JSON:
                   </span>
                 </div>
 
+                {/* Sort + filters */}
+                <div className="flex items-center gap-2 mb-2 flex-wrap text-[10px] text-gray-500">
+                  <label className="flex items-center gap-1">Sort
+                    <select value={view.sort} onChange={e => setView(v => ({ ...v, sort: e.target.value }))} className="border border-gray-200 rounded px-1.5 py-0.5 text-[10px] bg-white">
+                      <option value="score">Opportunity</option><option value="sv">Search volume</option><option value="kd">Easiest (KD)</option>
+                      <option value="cpc">CPC</option><option value="relevance">Relevance</option><option value="ai">AI pick order</option>
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-1">Intent
+                    <select value={view.intent} onChange={e => setView(v => ({ ...v, intent: e.target.value }))} className="border border-gray-200 rounded px-1.5 py-0.5 text-[10px] bg-white">
+                      <option value="all">All</option><option>Informational</option><option>Commercial</option><option>Transactional</option><option>Navigational</option>
+                    </select>
+                  </label>
+                  {[['questions', 'Questions'], ['local', 'Local'], ['quickWins', 'Quick wins']].map(([key, label]) => (
+                    <label key={key} className="flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" checked={view[key]} onChange={e => setView(v => ({ ...v, [key]: e.target.checked }))} className="accent-[#F5C518]" />{label}
+                    </label>
+                  ))}
+                  <span className="ml-auto text-gray-400">
+                    {visibleRows.length !== rows.length && `${visibleRows.length} of ${rows.length} · `}
+                    GSC: {gscLoaded ? `imported ${gsc.importedOn}` : <Link to="/gsc-reporting" className="text-gray-400 underline">not imported</Link>}
+                    {' · '}Rankings: {ranked.status === 'ok' ? `${ranked.rows.length} keywords` : ranked.status === 'loading' ? 'loading…' : ranked.status === 'error' ? 'unavailable' : clientSite ? '—' : 'no website on file'}
+                  </span>
+                </div>
+
                 {/* Keyword table */}
-                <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-4">
+                <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto mb-4">
                   <table className="w-full text-[11px]">
                     <thead>
                       <tr className="bg-[#f8f8f6] border-b border-gray-200">
@@ -804,17 +1028,33 @@ Return ONLY valid JSON:
                         <th className="text-right px-2 py-2 font-semibold text-gray-500">SV</th>
                         <th className="text-right px-2 py-2 font-semibold text-gray-500">KD</th>
                         <th className="text-right px-2 py-2 font-semibold text-gray-500">CPC</th>
+                        <th className="text-left px-2 py-2 font-semibold text-gray-500" title="Google Ads competition">Comp.</th>
                         <th className="text-left px-2 py-2 font-semibold text-gray-500">Intent</th>
+                        <th className="text-center px-2 py-2 font-semibold text-gray-500" title="Opportunity score 0–100 (hover a score for the breakdown)">Score</th>
+                        {gscLoaded && <th className="text-right px-2 py-2 font-semibold text-gray-500" title={`Google Search Console, imported ${gsc.importedOn}`}>GSC</th>}
                         <th className="text-left px-3 py-2 font-semibold text-gray-500">Suggested Title</th>
                         <th className="px-3 py-2"></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {results.keywords?.map((kw, i) => (
+                      {visibleRows.map((kw, i) => (
                         <tr key={i} className="border-b border-gray-100 hover:bg-[#f8f8f6]">
-                          <td className="px-3 py-2.5 font-medium text-[#1a1a1a]">
+                          <td className="px-3 py-2.5 font-medium text-[#1a1a1a] min-w-[160px]">
                             {kw.keyword}
                             {kw.real_data && <span className="ml-1 text-[8px] text-green-600" title="Real DataForSEO data">●</span>}
+                            {kw.is_question && <span className="ml-1 text-[8px] font-bold text-blue-500" title="Question keyword">?</span>}
+                            {kw.local_terms?.length > 0 && <span className="ml-1 text-[9px]" title={`Local: ${kw.local_terms.join(', ')}`}>📍</span>}
+                            {kw.variants?.length > 0 && <span className="ml-1 text-[8px] text-gray-400" title={`Variants merged: ${kw.variants.join(', ')}`}>+{kw.variants.length}</span>}
+                            {(kw._page || kw._rankUrl) && (
+                              <div className="text-[9px] font-normal text-gray-400 truncate max-w-[220px]" title={kw._page ? `Bucket List page targeting this: ${kw._page.url}` : `Ranking URL (#${kw._rank}): ${kw._rankUrl}`}>
+                                → {kw._page ? (kw._page.title || kw._page.url) : `#${kw._rank} ${kw._rankUrl.replace(/^https?:\/\/(www\.)?[^/]+/, '') || '/'}`}
+                              </div>
+                            )}
+                            {kw._actions?.length > 0 && (
+                              <div className={`text-[9px] font-normal truncate max-w-[220px] ${kw._cannibal && kw._cannibal.severity !== 'Low' && kw._cannibal.severity !== 'Insufficient Data' ? 'text-orange-500' : 'text-gray-500'}`} title={kw._actions.join('\n')}>
+                                ▸ {kw._actions[0]}
+                              </div>
+                            )}
                           </td>
                           <td className="px-2 py-2.5 text-right text-gray-700 font-semibold">
                             {kw.search_volume != null ? kw.search_volume.toLocaleString() : '—'}
@@ -829,11 +1069,25 @@ Return ONLY valid JSON:
                           <td className="px-2 py-2.5 text-right text-gray-500">
                             {kw.cpc != null && kw.cpc > 0 ? `$${Number(kw.cpc).toFixed(2)}` : '—'}
                           </td>
+                          <td className="px-2 py-2.5 text-gray-500">{fmtCompetition(kw.competition, kw.competition_level) || '—'}</td>
                           <td className="px-2 py-2.5">
-                            <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${intentColors[kw.intent] || 'bg-gray-100 text-gray-500'}`}>
+                            <span title={kw.intent_source ? `Intent source: ${kw.intent_source}` : ''} className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${intentColors[kw.intent] || 'bg-gray-100 text-gray-500'}`}>
                               {kw.intent}
                             </span>
                           </td>
+                          <td className="px-2 py-2.5 text-center whitespace-nowrap" title={explainScore(kw._score)}>
+                            {kw._score?.score != null ? (
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${SCORE_COLOR[kw._score.category]}`}>
+                                {kw._score.score}{kw._score.status === 'provisional' && <span className="font-normal opacity-60">*</span>}
+                              </span>
+                            ) : <span className="text-[9px] text-gray-400">n/a</span>}
+                            {kw._quickWin && <div className="text-[8px] font-bold text-green-600 mt-0.5" title={kw._reasons.join('\n')}>QUICK WIN</div>}
+                          </td>
+                          {gscLoaded && (
+                            <td className="px-2 py-2.5 text-right text-gray-500 whitespace-nowrap" title={kw._gsc ? `${kw._gsc.clicks} clicks · ${kw._gsc.impressions} impressions · ${kw._gsc.ctr}% CTR · avg position ${kw._gsc.position}${kw._trend?.posDelta != null ? ` · position change ${kw._trend.posDelta > 0 ? '+' : ''}${kw._trend.posDelta} since ${gsc.prevOn}` : ''}` : 'Not in Search Console data'}>
+                              {kw._gsc ? <>#{Math.round(kw._gsc.position)} · {kw._gsc.impressions.toLocaleString()}{kw._trend?.declining && <span className="text-red-500"> ↓</span>}</> : '—'}
+                            </td>
+                          )}
                           <td className="px-3 py-2.5 text-gray-600 max-w-[250px]">
                             <div className="truncate" title={kw.suggested_title}>{kw.suggested_title}</div>
                             {kw.opportunity_reason && (
@@ -855,21 +1109,83 @@ Return ONLY valid JSON:
 
                 {/* Quick wins + Cannibalization */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {results.quick_wins?.length > 0 && (
+                  {(results.quick_wins?.length > 0 || dataQuickWins.length > 0 || gscOpps) && (
                     <div className="bg-white border border-gray-200 rounded-xl p-4">
                       <h3 className="text-[10px] font-bold uppercase tracking-wider text-green-600 mb-2">Quick Wins</h3>
-                      {results.quick_wins.map((w, i) => (
+                      {dataQuickWins.map((k, i) => (
+                        <div key={`d${i}`} className="flex items-start gap-2 mb-1.5 text-[11px]">
+                          <span className="text-green-600 shrink-0">★</span>
+                          <span className="text-gray-700"><b>{k.keyword}</b> — {k._reasons.join(' · ')}
+                            <span className="block text-[9px] text-gray-400">▸ {k._actions.join(' · ')}</span></span>
+                        </div>
+                      ))}
+                      {results.quick_wins?.map((w, i) => (
                         <div key={i} className="flex items-start gap-2 mb-1.5 text-[11px]">
                           <span className="text-green-600 shrink-0">★</span>
                           <span className="text-gray-700">{w}</span>
                         </div>
                       ))}
+                      {gscOpps && (gscOpps.striking.length > 0 || gscOpps.lowCtr.length > 0 || gscOpps.declining.length > 0) && (
+                        <div className="mt-2 pt-2 border-t border-gray-100">
+                          <div className="text-[9px] font-bold uppercase text-gray-400 mb-1">From Search Console (imported {gsc.importedOn}) — not in this research</div>
+                          {[['Positions 4–20', gscOpps.striking, 'Optimise the ranking page · improve internal linking'],
+                            ['High impressions, low CTR', gscOpps.lowCtr, 'Improve title & meta description'],
+                            [`Declining since ${gsc.prevOn}`, gscOpps.declining, 'Refresh the ranking page']].filter(([, list]) => list.length).map(([label, list, action]) => (
+                            <div key={label} className="mb-1.5">
+                              <div className="text-[10px] font-semibold text-gray-600">{label} <span className="font-normal text-gray-400">· {action}</span></div>
+                              {list.map(q => (
+                                <div key={q.term} className="text-[10px] text-gray-600 flex gap-1.5">
+                                  <span className="truncate flex-1">{q.term}</span>
+                                  <span className="text-gray-400 shrink-0">#{Math.round(q.position)} · {q.impressions.toLocaleString()} impr · {q.ctr}%{q.trend?.posDelta ? ` · ${q.trend.posDelta > 0 ? '+' : ''}${q.trend.posDelta} pos` : ''}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {gscOpps && !gsc.prevOn && (
+                        <div className="text-[9px] text-gray-400 mt-1">Import Search Console again later to detect declining keywords (earlier imports are now kept).</div>
+                      )}
                     </div>
                   )}
-                  {results.cannibalization_risks && (
+                  {(results.cannibalization_risks || issues.length > 0 || clientPages.length > 0) && (
                     <div className="bg-white border border-gray-200 rounded-xl p-4">
                       <h3 className="text-[10px] font-bold uppercase tracking-wider text-orange-500 mb-2">Cannibalization Risks</h3>
-                      <p className="text-[11px] text-gray-700 leading-relaxed">{results.cannibalization_risks}</p>
+                      {results.cannibalization_risks && <p className="text-[11px] text-gray-700 leading-relaxed mb-2">{results.cannibalization_risks}</p>}
+                      <div className="text-[9px] text-gray-400 mb-2">
+                        Checked {clientPages.length} Bucket List pages
+                        {ranked.status === 'ok' ? ` and ${ranked.rows.length} keywords ${clientSite.replace(/^https?:\/\//, '')} ranks for` : ranked.status === 'loading' ? ' · loading rankings…' : ranked.status === 'error' ? ` · rankings unavailable (${ranked.error})` : !clientSite ? ' · no client website on file, so ranking overlap isn’t checked' : ''}
+                        {gscLoaded && ' · GSC page clicks included (GSC CSV exports have no query→page pairs)'}
+                      </div>
+                      {issues.length === 0 ? (
+                        <div className="text-[11px] text-green-700">✓ No competing URLs found{ranked.status === 'ok' ? '' : ' in the Bucket List'}.</div>
+                      ) : (showAllIssues ? issues : issues.slice(0, 5)).map((iss, i) => (
+                        <div key={i} className="mb-2 pb-2 border-b border-gray-100 last:border-0 text-[11px]">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded ${SEVERITY_COLOR[iss.severity]}`}>{iss.severity}</span>
+                            <b className="text-[#1a1a1a]">{iss.keyword}</b>
+                            {iss.related_keywords.length > 0 && <span className="text-[9px] text-gray-400">+ {iss.related_keywords.join(', ')}</span>}
+                          </div>
+                          {iss.evidence.length > 0 && <div className="text-[9px] text-gray-400 mt-0.5">{iss.evidence.join(' · ')}</div>}
+                          {iss.competing.map(c => (
+                            <div key={c.url} className="text-[10px] text-gray-600 flex gap-1.5 mt-0.5">
+                              <span className={`truncate flex-1 ${c.url === iss.preferred_url ? 'font-semibold text-[#1a1a1a]' : ''}`} title={c.url}>
+                                {c.url === iss.preferred_url && '★ '}{c.url.replace(/^https?:\/\/(www\.)?[^/]+/, '') || '/'}
+                              </span>
+                              <span className="text-gray-400 shrink-0">
+                                {[c.rank != null && `#${c.rank}`, c.clicks != null && `${c.clicks} clicks`, c.targets && 'targets it', c.category].filter(Boolean).join(' · ')}
+                              </span>
+                            </div>
+                          ))}
+                          <div className="text-[10px] text-gray-700 mt-1">▸ {iss.actions.join(' ▸ ')}</div>
+                        </div>
+                      ))}
+                      {issues.length > 5 && (
+                        <button onClick={() => setShowAllIssues(v => !v)} className="text-[10px] text-gray-500 bg-transparent border-none cursor-pointer p-0 hover:text-[#1a1a1a]">
+                          {showAllIssues ? 'Show fewer' : `Show all ${issues.length}`}
+                        </button>
+                      )}
+                      {issues.length > 0 && <div className="text-[9px] text-gray-400 mt-1">★ = preferred URL. Recommendations only — nothing on the website is changed.</div>}
                     </div>
                   )}
                 </div>
@@ -877,7 +1193,9 @@ Return ONLY valid JSON:
                 {/* Keyword Clusters */}
                 {clusters && clusters.length > 0 && (
                   <div className="bg-white border border-purple-200 rounded-xl p-4 mb-4">
-                    <div className="text-[10px] font-bold uppercase text-purple-600 mb-3">🗂 Topic Clusters ({clusters.length})</div>
+                    <div className="text-[10px] font-bold uppercase text-purple-600 mb-3">🗂 Topic Clusters ({clusters.length})
+                      {clusters.some(c => c.page_type) && <span className="ml-2 normal-case font-normal text-gray-400">grouped by topic + intent{clusters.some(c => c.serp_checked) ? ' + Google SERP overlap' : ''} · click a keyword to move it or make it primary</span>}
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {clusters.map((cl, i) => (
                         <div key={i} className="bg-purple-50/50 border border-purple-100 rounded-lg p-3">
@@ -887,20 +1205,49 @@ Return ONLY valid JSON:
                               <div className="text-[10px] text-purple-600 font-semibold">Primary: {cl.primary_keyword}</div>
                             </div>
                             <div className="flex gap-2 text-[9px] text-gray-500 shrink-0">
-                              <span>SV: <b>{cl.total_sv?.toLocaleString()}</b></span>
-                              <span>KD: <b>{cl.avg_kd}</b></span>
+                              <span>SV: <b>{cl.total_sv != null ? cl.total_sv.toLocaleString() : '—'}</b></span>
+                              <span>KD: <b>{cl.avg_kd ?? '—'}</b></span>
                             </div>
                           </div>
+                          {cl.page_type && (
+                            <div className="text-[9px] text-gray-500 mb-1">
+                              {cl.intent} · <b>{cl.page_type}</b>
+                              {cl.target_page
+                                ? <> · target: <span className="text-[#1a1a1a]" title={cl.target_page.url}>existing page “{cl.target_page.title || cl.target_page.url}”</span></>
+                                : ' · new page'}
+                            </div>
+                          )}
                           {cl.suggested_title && (
                             <div className="text-[10px] text-gray-600 mb-1.5 italic">"{cl.suggested_title}"</div>
                           )}
                           <div className="flex flex-wrap gap-1">
-                            {cl.keywords.map((kw, j) => (
-                              <span key={j} className="text-[9px] bg-white border border-purple-200 text-gray-700 px-1.5 py-0.5 rounded">{kw}</span>
-                            ))}
+                            {cl.keywords.map((kw, j) => {
+                              const selected = clusterSel?.cluster === i && clusterSel.keyword === kw;
+                              const isPrimary = kw === cl.primary_keyword;
+                              return (
+                                <button key={j} onClick={() => setClusterSel(selected ? null : { cluster: i, keyword: kw })}
+                                  title={cl.page_type ? (isPrimary ? 'Primary keyword' : cl.variants?.includes(kw) ? 'Variant of the primary keyword' : 'Secondary keyword') + ' — click to move or make primary' : ''}
+                                  className={`text-[9px] border px-1.5 py-0.5 rounded cursor-pointer ${selected ? 'bg-purple-600 text-white border-purple-600' : isPrimary && cl.page_type ? 'bg-purple-100 border-purple-300 text-purple-800 font-semibold' : 'bg-white border-purple-200 text-gray-700'}`}>
+                                  {kw}{cl.variants?.includes(kw) && ' ≈'}
+                                </button>
+                              );
+                            })}
                           </div>
+                          {clusterSel?.cluster === i && cl.page_type && (
+                            <div className="flex items-center gap-1.5 mt-1.5 text-[9px] flex-wrap">
+                              {clusterSel.keyword !== cl.primary_keyword && (
+                                <button onClick={() => makePrimary(i, clusterSel.keyword)} className="bg-white border border-purple-300 text-purple-700 rounded px-1.5 py-0.5 cursor-pointer">★ Make primary</button>
+                              )}
+                              <select value="" onChange={e => e.target.value !== '' && moveKeyword(i, clusterSel.keyword, e.target.value === 'new' ? 'new' : Number(e.target.value))}
+                                className="border border-purple-300 rounded px-1 py-0.5 text-[9px] bg-white">
+                                <option value="">Move to…</option>
+                                {clusters.map((c, k) => k !== i && <option key={k} value={k}>{c.name}</option>)}
+                                <option value="new">New cluster</option>
+                              </select>
+                            </div>
+                          )}
                           <button
-                            onClick={() => setAddKw({ keyword: cl.primary_keyword, suggested_title: cl.suggested_title, content_type: 'Blog', search_volume: cl.total_sv, kd: cl.avg_kd })}
+                            onClick={() => setAddKw({ keyword: cl.primary_keyword, suggested_title: cl.suggested_title || cl.name, content_type: cl.page_type && !/^Blog/.test(cl.page_type) ? 'SEO Page' : 'Blog', search_volume: cl.total_sv, kd: cl.avg_kd })}
                             className="mt-2 text-[10px] text-[#F5C518] font-semibold bg-transparent border border-[#F5C518] rounded px-2 py-0.5 cursor-pointer hover:bg-[#F5C518] hover:text-[#1a1a1a]"
                           >
                             + Plan this cluster
@@ -914,6 +1261,7 @@ Return ONLY valid JSON:
                 {/* Disclaimer */}
                 <div className="mt-4 p-3 bg-[#f8f8f6] rounded-lg text-[10px] text-gray-500 leading-relaxed">
                   These keyword ideas are AI-generated starting points. Always verify SV and KD in Wincher or Ahrefs before adding to the content plan.
+                  Metrics come from DataForSEO (Australia); “—” means no data, never zero. Scores marked * are provisional — some factors had no data and were left out rather than guessed (hover a score for the breakdown).
                 </div>
               </>
             )}

@@ -142,6 +142,8 @@ export async function getRelatedKeywords(seed, limit = 30) {
       cpc: info.cpc || 0,
       competition: info.competition || 0,
       kd: item.keyword_data?.keyword_properties?.keyword_difficulty || 0,
+      kd_known: item.keyword_data?.keyword_properties?.keyword_difficulty != null,
+      competition_level: info.competition_level || null,
       source: 'related',
     };
   });
@@ -171,7 +173,44 @@ export async function getKeywordSuggestions(seed, limit = 50) {
       cpc: info.cpc || 0,
       competition: info.competition || 0,
       kd: item.keyword_properties?.keyword_difficulty || 0,
+      kd_known: item.keyword_properties?.keyword_difficulty != null,
+      competition_level: info.competition_level || null,
       source: 'suggestion',
+    };
+  });
+  await setCached(cacheKey, result);
+  return result;
+}
+
+// ── Question keywords containing the seed (how / what / why …) ──
+export async function getQuestionKeywords(seed, limit = 50) {
+  const cacheKey = `questions:${seed.toLowerCase().trim()}:${limit}`;
+  const cached = await getCached(cacheKey);
+  if (cached) return cached;
+
+  const words = ['how', 'what', 'why', 'when', 'where', 'which', 'can', 'is'];
+  const filters = words.flatMap((w, i) => (i ? ['or', ['keyword', 'like', `${w} %`]] : [['keyword', 'like', `${w} %`]]));
+  const data = await callEndpoint('/dataforseo_labs/google/keyword_suggestions/live', {
+    keyword: seed,
+    location_code: LOCATION_AU,
+    language_code: LANGUAGE,
+    include_seed_keyword: false,
+    filters,
+    order_by: ['keyword_info.search_volume,desc'],
+    limit,
+  });
+  const items = data.tasks?.[0]?.result?.[0]?.items || [];
+  const result = items.map(item => {
+    const info = item.keyword_info || {};
+    return {
+      keyword: item.keyword || '',
+      search_volume: info.search_volume || 0,
+      cpc: info.cpc || 0,
+      competition: info.competition || 0,
+      competition_level: info.competition_level || null,
+      kd: item.keyword_properties?.keyword_difficulty || 0,
+      kd_known: item.keyword_properties?.keyword_difficulty != null,
+      source: 'question',
     };
   });
   await setCached(cacheKey, result);
@@ -200,6 +239,8 @@ export async function getKeywordIdeas(seeds, limit = 50) {
       cpc: info.cpc || 0,
       competition: info.competition || 0,
       kd: item.keyword_properties?.keyword_difficulty || 0,
+      kd_known: item.keyword_properties?.keyword_difficulty != null,
+      competition_level: info.competition_level || null,
       source: 'idea',
     };
   });

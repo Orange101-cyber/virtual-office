@@ -41,9 +41,13 @@ export default function GscReporting() {
     if (!name) { setQueries([]); setPages([]); setImportedOn(null); return; }
     const { data } = await supabase.from('gsc_metrics').select('*').eq('client_name', name);
     const rows = data || [];
-    setQueries(rows.filter(r => r.kind === 'query'));
-    setPages(rows.filter(r => r.kind === 'page'));
-    setImportedOn(rows[0]?.imported_on || null);
+    // Earlier imports are kept for history (Keyword Research compares them);
+    // this page shows the latest import of each kind.
+    const latest = (kind) => rows.filter(r => r.kind === kind).reduce((d, r) => (r.imported_on > d ? r.imported_on : d), '');
+    const lq = latest('query'), lp = latest('page');
+    setQueries(rows.filter(r => r.kind === 'query' && r.imported_on === lq));
+    setPages(rows.filter(r => r.kind === 'page' && r.imported_on === lp));
+    setImportedOn((lq > lp ? lq : lp) || null);
   }, []);
 
   useEffect(() => { load(client); }, [client, load]);
@@ -57,13 +61,20 @@ export default function GscReporting() {
       const rows = parseCSV(await file.text());
       if (rows.length < 2) throw new Error('CSV looks empty');
       const header = rows[0].map(h => h.toLowerCase());
-      const kind = (header[0] || '').includes('page') ? 'page' : 'query';
+      const first = header[0] || '';
+      const kind = first.includes('page') ? 'page' : 'query';
       const ci = header.findIndex(h => h.includes('click'));
       const ii = header.findIndex(h => h.includes('impress'));
       const ti = header.findIndex(h => h.includes('ctr'));
       const pi = header.findIndex(h => h.includes('position'));
+      // GSC's export zip also holds Filters.csv, Dates.csv, Countries.csv … — only
+      // the Queries and Pages files belong here.
+      if (!/quer|page/.test(first) || ci < 0 || ii < 0) {
+        throw new Error(`“${file.name}” isn’t a Queries or Pages export (first column: “${rows[0][0] || 'empty'}”). In the GSC export zip, import Queries.csv and Pages.csv.`);
+      }
+      const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD, local date
       const data = rows.slice(1).map(r => ({
-        client_name: client, kind, term: r[0],
+        client_name: client, kind, term: r[0], imported_on: today,
         clicks: ci >= 0 ? num(r[ci]) : 0,
         impressions: ii >= 0 ? num(r[ii]) : 0,
         ctr: ti >= 0 ? dec(r[ti]) : 0,
@@ -71,7 +82,8 @@ export default function GscReporting() {
       })).filter(d => d.term);
       if (!data.length) throw new Error('No rows found — is this a GSC Performance export?');
 
-      await supabase.from('gsc_metrics').delete().eq('client_name', client).eq('kind', kind);
+      // Replace only today's import of this kind; earlier imports stay as history.
+      await supabase.from('gsc_metrics').delete().eq('client_name', client).eq('kind', kind).eq('imported_on', today);
       for (let i = 0; i < data.length; i += 500) {
         const { error } = await supabase.from('gsc_metrics').insert(data.slice(i, i + 500));
         if (error) throw error;
